@@ -3,6 +3,7 @@ package com.musheng.business.fbashipment.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.fbashipment.entity.FbaShipmentDetail;
 import com.musheng.business.fbashipment.service.FbaShipmentDetailService;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,6 +54,7 @@ public class FbaShipmentDetailController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "FBA货件明细", operation = "导入FBA货件明细")
     @Operation(summary = "导入FBA货件明细", description = "从文件导入FBA货件明细，自动识别GBK编码")
     @PostMapping("/import")
     public Result<Map<String, Object>> importData(
@@ -61,6 +63,7 @@ public class FbaShipmentDetailController {
         return Result.success(importResult);
     }
 
+    @OperationLog(module = "FBA货件明细", operation = "新增FBA货件明细")
     @Operation(summary = "新增FBA货件明细", description = "新增FBA货件明细记录")
     @PostMapping
     public Result<Long> add(
@@ -69,6 +72,7 @@ public class FbaShipmentDetailController {
         return Result.success(id);
     }
 
+    @OperationLog(module = "FBA货件明细", operation = "更新FBA货件明细")
     @Operation(summary = "更新FBA货件明细", description = "更新FBA货件明细记录")
     @PutMapping("/{id}")
     public Result<Void> update(
@@ -79,6 +83,7 @@ public class FbaShipmentDetailController {
         return Result.success();
     }
 
+    @OperationLog(module = "FBA货件明细", operation = "删除FBA货件明细")
     @Operation(summary = "删除FBA货件明细", description = "根据ID删除FBA货件明细")
     @DeleteMapping("/{id}")
     public Result<Void> delete(
@@ -87,6 +92,7 @@ public class FbaShipmentDetailController {
         return Result.success();
     }
 
+    @OperationLog(module = "FBA货件明细", operation = "批量删除FBA货件明细")
     @Operation(summary = "批量删除FBA货件明细", description = "根据ID列表批量删除FBA货件明细")
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(

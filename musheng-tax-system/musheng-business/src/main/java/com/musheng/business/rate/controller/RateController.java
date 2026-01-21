@@ -8,6 +8,7 @@ import com.musheng.business.rate.dto.RateSyncResultDTO;
 import com.musheng.business.rate.entity.ExchangeRate;
 import com.musheng.business.rate.service.RateService;
 import com.musheng.business.rate.service.RateSyncService;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -63,6 +64,7 @@ public class RateController {
         return Result.success(rate);
     }
 
+    @OperationLog(module = "汇率管理", operation = "新增汇率")
     @Operation(summary = "新增汇率", description = "手动录入汇率数据")
     @PostMapping
     public Result<ExchangeRate> create(@Valid @RequestBody RateRequest request) {
@@ -70,6 +72,7 @@ public class RateController {
         return Result.success(rate);
     }
 
+    @OperationLog(module = "汇率管理", operation = "修改汇率")
     @Operation(summary = "修改汇率", description = "修改已有汇率数据")
     @PutMapping("/{id}")
     public Result<ExchangeRate> update(
@@ -79,6 +82,7 @@ public class RateController {
         return Result.success(rate);
     }
 
+    @OperationLog(module = "汇率管理", operation = "删除汇率")
     @Operation(summary = "删除汇率", description = "删除指定汇率")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "汇率ID") @PathVariable Long id) {
@@ -86,6 +90,7 @@ public class RateController {
         return Result.success();
     }
 
+    @OperationLog(module = "汇率管理", operation = "批量删除汇率")
     @Operation(summary = "批量删除汇率", description = "批量删除多个汇率")
     @DeleteMapping
     public Result<Void> batchDelete(@RequestBody List<Long> ids) {
@@ -109,6 +114,7 @@ public class RateController {
         return Result.success(result);
     }
 
+    @OperationLog(module = "汇率管理", operation = "导入汇率")
     @Operation(summary = "导入汇率", description = "从文件导入汇率数据（建议使用同步功能）",  deprecated = true)
     @PostMapping("/import")
     public Result<Map<String, Object>> importData(
@@ -117,6 +123,7 @@ public class RateController {
         return Result.success(importResult);
     }
 
+    @OperationLog(module = "汇率管理", operation = "同步汇率")
     @Operation(summary = "同步汇率", description = "从中国外汇交易中心同步汇率数据（仅同步已启用的货币）")
     @PostMapping("/sync")
     public Result<RateSyncResultDTO> syncRates(

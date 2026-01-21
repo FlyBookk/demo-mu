@@ -1,6 +1,7 @@
 package com.musheng.config.mapping.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.config.mapping.dto.FieldMappingTemplateQueryRequest;
@@ -25,6 +26,7 @@ public class FieldMappingTemplateController {
 
     private final FieldMappingTemplateService fieldMappingTemplateService;
 
+    @OperationLog(module = "字段映射模板", operation = "创建模板")
     @Operation(summary = "创建模板", description = "创建字段映射模板")
     @PostMapping
     public Result<FieldMappingTemplate> create(@Valid @RequestBody FieldMappingTemplateRequest request) {
@@ -32,6 +34,7 @@ public class FieldMappingTemplateController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "字段映射模板", operation = "更新模板")
     @Operation(summary = "更新模板", description = "更新字段映射模板")
     @PutMapping("/{id}")
     public Result<FieldMappingTemplate> update(
@@ -41,6 +44,7 @@ public class FieldMappingTemplateController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "字段映射模板", operation = "删除模板")
     @Operation(summary = "删除模板", description = "删除字段映射模板")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "模板ID") @PathVariable Long id) {
@@ -83,6 +87,7 @@ public class FieldMappingTemplateController {
         return Result.success(result);
     }
 
+    @OperationLog(module = "字段映射模板", operation = "复制模板")
     @Operation(summary = "复制模板", description = "复制字段映射模板并设置新名称")
     @PostMapping("/{id}/copy")
     public Result<FieldMappingTemplate> copy(

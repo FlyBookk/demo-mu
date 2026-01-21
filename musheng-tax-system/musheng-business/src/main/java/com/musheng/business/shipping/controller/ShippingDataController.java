@@ -3,6 +3,7 @@ package com.musheng.business.shipping.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.shipping.entity.ShippingData;
 import com.musheng.business.shipping.service.ShippingDataService;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,6 +54,7 @@ public class ShippingDataController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "配送数据", operation = "导入配送数据")
     @Operation(summary = "导入配送数据", description = "从文件导入配送数据，自动识别销售渠道并分配站点")
     @PostMapping("/import")
     public Result<Map<String, Object>> importData(
@@ -61,6 +63,7 @@ public class ShippingDataController {
         return Result.success(importResult);
     }
 
+    @OperationLog(module = "配送数据", operation = "删除配送数据")
     @Operation(summary = "删除配送数据", description = "根据ID删除配送数据")
     @DeleteMapping("/{id}")
     public Result<Void> delete(
@@ -69,6 +72,7 @@ public class ShippingDataController {
         return Result.success();
     }
 
+    @OperationLog(module = "配送数据", operation = "批量删除配送数据")
     @Operation(summary = "批量删除配送数据", description = "根据ID列表批量删除配送数据")
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(

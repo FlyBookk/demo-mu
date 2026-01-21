@@ -1,6 +1,7 @@
 package com.musheng.config.marketplace.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.config.marketplace.dto.MarketplaceQueryRequest;
@@ -25,6 +26,7 @@ public class MarketplaceController {
 
     private final MarketplaceService marketplaceService;
 
+    @OperationLog(module = "站点管理", operation = "创建站点")
     @Operation(summary = "创建站点", description = "创建新站点")
     @PostMapping
     public Result<Marketplace> create(@Valid @RequestBody MarketplaceRequest request) {
@@ -32,6 +34,7 @@ public class MarketplaceController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "站点管理", operation = "更新站点")
     @Operation(summary = "更新站点", description = "更新站点信息")
     @PutMapping("/{id}")
     public Result<Marketplace> update(
@@ -41,6 +44,7 @@ public class MarketplaceController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "站点管理", operation = "删除站点")
     @Operation(summary = "删除站点", description = "删除站点")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "站点ID") @PathVariable Long id) {

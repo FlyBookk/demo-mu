@@ -1,6 +1,7 @@
 package com.musheng.system.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.system.dto.RoleCreateRequest;
@@ -62,6 +63,7 @@ public class RoleController {
         return Result.success(role);
     }
 
+    @OperationLog(module = "角色管理", operation = "创建角色")
     @Operation(summary = "创建角色", description = "创建新角色")
     @PostMapping
     public Result<Role> create(
@@ -70,6 +72,7 @@ public class RoleController {
         return Result.success(role);
     }
 
+    @OperationLog(module = "角色管理", operation = "更新角色")
     @Operation(summary = "更新角色", description = "更新角色信息")
     @PutMapping("/{id}")
     public Result<Role> update(
@@ -79,6 +82,7 @@ public class RoleController {
         return Result.success(role);
     }
 
+    @OperationLog(module = "角色管理", operation = "删除角色")
     @Operation(summary = "删除角色", description = "根据ID删除角色")
     @DeleteMapping("/{id}")
     public Result<Void> delete(
@@ -87,6 +91,7 @@ public class RoleController {
         return Result.success();
     }
 
+    @OperationLog(module = "角色管理", operation = "分配权限")
     @Operation(summary = "分配权限", description = "为角色分配权限")
     @PostMapping("/{id}/permissions")
     public Result<Void> assignPermissions(

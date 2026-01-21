@@ -1,5 +1,6 @@
 package com.musheng.system.controller;
 
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.Result;
 import com.musheng.system.dto.ChangePasswordRequest;
 import com.musheng.system.dto.LoginRequest;
@@ -23,6 +24,7 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @OperationLog(module = "认证管理", operation = "用户登录")
     @Operation(summary = "用户登录", description = "使用用户名和密码登录")
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request,
@@ -32,6 +34,7 @@ public class AuthController {
         return Result.success(response);
     }
 
+    @OperationLog(module = "认证管理", operation = "用户登出")
     @Operation(summary = "用户登出", description = "退出当前登录")
     @PostMapping("/logout")
     public Result<Void> logout() {
@@ -46,6 +49,7 @@ public class AuthController {
         return Result.success(response);
     }
 
+    @OperationLog(module = "认证管理", operation = "修改密码")
     @Operation(summary = "修改密码", description = "修改当前用户密码")
     @PostMapping("/change-password")
     public Result<Void> changePassword(@RequestBody ChangePasswordRequest request) {

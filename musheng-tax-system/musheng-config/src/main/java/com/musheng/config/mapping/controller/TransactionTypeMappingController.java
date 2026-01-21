@@ -1,6 +1,7 @@
 package com.musheng.config.mapping.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.config.mapping.dto.TransactionTypeMappingQueryRequest;
@@ -25,6 +26,7 @@ public class TransactionTypeMappingController {
 
     private final TransactionTypeMappingService transactionTypeMappingService;
 
+    @OperationLog(module = "交易类型映射", operation = "创建映射")
     @Operation(summary = "创建映射", description = "创建交易类型映射")
     @PostMapping
     public Result<TransactionTypeMapping> create(@Valid @RequestBody TransactionTypeMappingRequest request) {
@@ -32,6 +34,7 @@ public class TransactionTypeMappingController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "交易类型映射", operation = "更新映射")
     @Operation(summary = "更新映射", description = "更新交易类型映射")
     @PutMapping("/{id}")
     public Result<TransactionTypeMapping> update(
@@ -41,6 +44,7 @@ public class TransactionTypeMappingController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "交易类型映射", operation = "删除映射")
     @Operation(summary = "删除映射", description = "删除交易类型映射")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "映射ID") @PathVariable Long id) {

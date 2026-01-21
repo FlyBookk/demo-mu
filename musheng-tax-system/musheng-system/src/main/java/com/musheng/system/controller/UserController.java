@@ -1,6 +1,7 @@
 package com.musheng.system.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.system.dto.UserCreateRequest;
@@ -53,6 +54,7 @@ public class UserController {
         return Result.success(user);
     }
 
+    @OperationLog(module = "用户管理", operation = "创建用户")
     @Operation(summary = "创建用户", description = "创建新用户")
     @PostMapping
     public Result<User> create(
@@ -61,6 +63,7 @@ public class UserController {
         return Result.success(user);
     }
 
+    @OperationLog(module = "用户管理", operation = "更新用户")
     @Operation(summary = "更新用户", description = "更新用户信息")
     @PutMapping("/{id}")
     public Result<User> update(
@@ -70,6 +73,7 @@ public class UserController {
         return Result.success(user);
     }
 
+    @OperationLog(module = "用户管理", operation = "删除用户")
     @Operation(summary = "删除用户", description = "根据ID删除用户")
     @DeleteMapping("/{id}")
     public Result<Void> delete(
@@ -78,6 +82,7 @@ public class UserController {
         return Result.success();
     }
 
+    @OperationLog(module = "用户管理", operation = "重置密码")
     @Operation(summary = "重置密码", description = "重置用户密码为默认密码")
     @PostMapping("/{id}/reset-password")
     public Result<Void> resetPassword(
@@ -86,6 +91,7 @@ public class UserController {
         return Result.success();
     }
 
+    @OperationLog(module = "用户管理", operation = "切换状态")
     @Operation(summary = "切换状态", description = "启用或禁用用户")
     @PostMapping("/{id}/toggle-status")
     public Result<Void> toggleStatus(
@@ -94,6 +100,7 @@ public class UserController {
         return Result.success();
     }
 
+    @OperationLog(module = "用户管理", operation = "启用用户")
     @Operation(summary = "启用用户", description = "启用用户")
     @PostMapping("/{id}/enable")
     public Result<Void> enable(
@@ -102,6 +109,7 @@ public class UserController {
         return Result.success();
     }
 
+    @OperationLog(module = "用户管理", operation = "禁用用户")
     @Operation(summary = "禁用用户", description = "禁用用户")
     @PostMapping("/{id}/disable")
     public Result<Void> disable(

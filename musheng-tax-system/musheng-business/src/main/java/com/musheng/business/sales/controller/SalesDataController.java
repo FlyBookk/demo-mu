@@ -3,6 +3,7 @@ package com.musheng.business.sales.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.service.SalesDataService;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -54,6 +55,7 @@ public class SalesDataController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "销售数据", operation = "导入销售数据")
     @Operation(summary = "导入销售数据", description = "从文件导入销售数据")
     @PostMapping("/import")
     public Result<Map<String, Object>> importData(
@@ -63,6 +65,7 @@ public class SalesDataController {
         return Result.success(importResult);
     }
 
+    @OperationLog(module = "销售数据", operation = "删除销售数据")
     @Operation(summary = "删除销售数据", description = "根据ID删除销售数据")
     @DeleteMapping("/{id}")
     public Result<Void> delete(
@@ -71,6 +74,7 @@ public class SalesDataController {
         return Result.success();
     }
 
+    @OperationLog(module = "销售数据", operation = "批量删除销售数据")
     @Operation(summary = "批量删除销售数据", description = "根据ID列表批量删除销售数据")
     @PostMapping("/batch-delete")
     public Result<Void> batchDelete(

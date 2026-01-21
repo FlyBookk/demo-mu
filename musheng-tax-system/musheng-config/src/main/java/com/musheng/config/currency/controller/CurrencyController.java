@@ -1,6 +1,7 @@
 package com.musheng.config.currency.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.config.currency.dto.CurrencyQueryRequest;
@@ -25,6 +26,7 @@ public class CurrencyController {
 
     private final CurrencyService currencyService;
 
+    @OperationLog(module = "货币管理", operation = "创建货币")
     @Operation(summary = "创建货币", description = "创建新货币")
     @PostMapping
     public Result<Currency> create(@Valid @RequestBody CurrencyRequest request) {
@@ -32,6 +34,7 @@ public class CurrencyController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "货币管理", operation = "更新货币")
     @Operation(summary = "更新货币", description = "更新货币信息")
     @PutMapping("/{id}")
     public Result<Currency> update(
@@ -41,6 +44,7 @@ public class CurrencyController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "货币管理", operation = "删除货币")
     @Operation(summary = "删除货币", description = "删除货币")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "货币ID") @PathVariable("id") Long id) {

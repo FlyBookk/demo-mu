@@ -6,6 +6,7 @@ import com.musheng.business.advertising.dto.AdvertisingDataImportResponse;
 import com.musheng.business.advertising.dto.AdvertisingDataRequest;
 import com.musheng.business.advertising.entity.AdvertisingData;
 import com.musheng.business.advertising.service.AdvertisingDataService;
+import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,7 @@ public class AdvertisingDataController {
 
     private final AdvertisingDataService advertisingDataService;
 
+    @OperationLog(module = "广告数据", operation = "创建广告数据")
     @Operation(summary = "创建广告数据", description = "创建新的广告数据记录")
     @PostMapping
     public Result<AdvertisingData> create(@Valid @RequestBody AdvertisingDataRequest request) {
@@ -37,6 +39,7 @@ public class AdvertisingDataController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "广告数据", operation = "批量导入广告数据")
     @Operation(summary = "批量导入广告数据", description = "批量导入广告发票数据，支持发票编号去重、时间字段校验")
     @PostMapping("/import")
     public Result<AdvertisingDataImportResponse> importData(
@@ -45,6 +48,7 @@ public class AdvertisingDataController {
         return Result.success(result);
     }
 
+    @OperationLog(module = "广告数据", operation = "更新广告数据")
     @Operation(summary = "更新广告数据", description = "更新广告数据记录")
     @PutMapping("/{id}")
     public Result<AdvertisingData> update(
@@ -54,6 +58,7 @@ public class AdvertisingDataController {
         return Result.success(data);
     }
 
+    @OperationLog(module = "广告数据", operation = "删除广告数据")
     @Operation(summary = "删除广告数据", description = "删除广告数据记录")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "广告数据ID") @PathVariable Long id) {
