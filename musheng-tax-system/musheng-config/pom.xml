@@ -35,6 +35,12 @@
             <artifactId>commons-csv</artifactId>
         </dependency>
 
+        <!-- EasyExcel for Excel Parsing -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

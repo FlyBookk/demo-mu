@@ -58,7 +58,16 @@ public enum ErrorCode {
     UPLOAD_MERGE_ERROR(33005, "分片合并失败"),
 
     // ============== 数据导出错误 (34xxx) ==============
-    EXPORT_FAILED(34001, "导出失败");
+    EXPORT_FAILED(34001, "导出失败"),
+    
+    // ============== 文件处理错误 (35xxx) ==============
+    FILE_UPLOAD_ERROR(35001, "文件上传失败"),
+    FILE_NOT_FOUND(35002, "文件不存在或已过期"),
+    FILE_READ_ERROR(35003, "文件读取失败"),
+    
+    // ============== 导入执行错误 (36xxx) ==============
+    IMPORT_FAILED(36001, "导入执行失败"),
+    IMPORT_PARTIAL_FAILED(36002, "部分数据导入失败");
 
     /**
      * 错误代码

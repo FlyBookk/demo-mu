@@ -1,6 +1,7 @@
 package com.musheng.config.mapping.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.config.mapping.dto.FieldMappingTemplateOptionDTO;
 import com.musheng.config.mapping.dto.FieldMappingTemplateQueryRequest;
 import com.musheng.config.mapping.dto.FieldMappingTemplateRequest;
 import com.musheng.config.mapping.entity.FieldMappingTemplate;
@@ -66,4 +67,14 @@ public interface FieldMappingTemplateService {
      * @return 启用的模板列表
      */
     java.util.List<FieldMappingTemplate> getEnabled(String dataType);
+
+    /**
+     * 按类型获取模板选项列表
+     *
+     * @param dataType   数据类型
+     * @param sourceType 数据源类型(ORIGINAL/ERP)
+     * @param siteCode   站点编码
+     * @return 模板选项列表
+     */
+    java.util.List<FieldMappingTemplateOptionDTO> getByType(String dataType, String sourceType, String siteCode);
 }

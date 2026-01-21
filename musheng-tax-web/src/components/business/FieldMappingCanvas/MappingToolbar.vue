@@ -22,11 +22,23 @@
 
         <!-- 自动映射 -->
         <a-tooltip title="根据字段名自动匹配">
-          <a-button @click="handleAutoMap">
+          <a-button @click="handleAutoMap" :disabled="!hasSourceFields">
             <ThunderboltOutlined />
             智能映射
           </a-button>
         </a-tooltip>
+
+        <!-- 清空源字段 -->
+        <a-popconfirm
+          title="确定清空所有源字段吗？"
+          description="这将同时清除所有映射关系"
+          @confirm="handleClearSource"
+        >
+          <a-button :disabled="!hasSourceFields">
+            <ClearOutlined />
+            清空源字段
+          </a-button>
+        </a-popconfirm>
       </a-space>
     </div>
 
@@ -84,7 +96,8 @@ import { message } from 'ant-design-vue'
 import {
   ThunderboltOutlined,
   UndoOutlined,
-  SaveOutlined
+  SaveOutlined,
+  ClearOutlined
 } from '@ant-design/icons-vue'
 import type { MappingTemplate } from './types'
 
@@ -95,6 +108,7 @@ const props = defineProps<{
   unmappedRequiredCount: number
   templates?: MappingTemplate[]
   currentTemplateId?: number
+  hasSourceFields?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -102,6 +116,7 @@ const emit = defineEmits<{
   (e: 'load', templateId: number): void
   (e: 'reset'): void
   (e: 'auto-map'): void
+  (e: 'clear-source'): void
 }>()
 
 // 选中的模板ID
@@ -133,6 +148,11 @@ function handleAutoMap() {
 // 重置
 function handleReset() {
   emit('reset')
+}
+
+// 清空源字段
+function handleClearSource() {
+  emit('clear-source')
 }
 
 // 保存确认

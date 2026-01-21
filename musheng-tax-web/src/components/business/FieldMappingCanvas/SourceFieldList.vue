@@ -11,7 +11,7 @@
         :key="field.name"
         class="field-item"
         :class="{
-          'mapped': field.mapped,
+          'mapped': isMapped(field),
           'selected': selectedField?.name === field.name
         }"
         :data-source-field="field.name"
@@ -31,9 +31,18 @@
             {{ truncateSample(field.sample) }}
           </div>
         </div>
-        <div class="field-status">
-          <CheckCircleFilled v-if="field.mapped" class="status-icon mapped" />
+        <div class="field-actions">
+          <CheckCircleFilled v-if="isMapped(field)" class="status-icon mapped" />
           <MinusCircleOutlined v-else class="status-icon unmapped" />
+          <a-button
+            v-if="allowDelete && !readonly"
+            type="text"
+            size="small"
+            class="delete-btn"
+            @click.stop="handleDelete(field)"
+          >
+            <DeleteOutlined />
+          </a-button>
         </div>
       </div>
 
@@ -48,24 +57,34 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Empty } from 'ant-design-vue'
 import {
   CheckCircleFilled,
   MinusCircleOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  DeleteOutlined
 } from '@ant-design/icons-vue'
-import type { SourceField } from './types'
+import type { SourceField, MappingConfig } from './types'
 
 const props = defineProps<{
   fields: SourceField[]
   selectedField: SourceField | null
+  mappings?: MappingConfig[]
   readonly?: boolean
+  allowDelete?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'select', field: SourceField): void
   (e: 'drag-start', field: SourceField, event: MouseEvent): void
+  (e: 'delete', field: SourceField): void
 }>()
+
+// 计算字段是否已映射
+function isMapped(field: SourceField): boolean {
+  return props.mappings?.some((m) => m.source === field.name) ?? field.mapped ?? false
+}
 
 // 截断示例数据
 function truncateSample(sample: string): string {
@@ -92,6 +111,11 @@ function handleDragStart(field: SourceField, event: DragEvent) {
 function handleMouseDown(field: SourceField, event: MouseEvent) {
   if (props.readonly) return
   emit('drag-start', field, event)
+}
+
+// 删除字段
+function handleDelete(field: SourceField) {
+  emit('delete', field)
 }
 </script>
 
@@ -125,12 +149,12 @@ function handleMouseDown(field: SourceField, event: MouseEvent) {
 
   .list-content {
     flex: 1;
-    overflow-y: auto;
     padding: $spacing-sm;
 
     .field-item {
-      padding: $spacing-sm $spacing-md;
-      margin-bottom: $spacing-xs;
+      height: 52px; // 固定高度，确保连线对齐
+      margin-bottom: 4px; // 固定间距 = ROW_HEIGHT(56) - height(52)
+      padding: 0 $spacing-md;
       border: 1px solid $border-color-light;
       border-radius: $border-radius-md;
       cursor: pointer;
@@ -139,23 +163,48 @@ function handleMouseDown(field: SourceField, event: MouseEvent) {
       justify-content: space-between;
       transition: all 0.2s ease;
       user-select: none;
+      box-sizing: border-box;
 
       &:hover {
         border-color: $primary-color;
         background-color: rgba($primary-color, 0.05);
       }
 
+      // 普通选中状态 - 蓝色高亮
       &.selected {
         border-color: $primary-color;
-        background-color: rgba($primary-color, 0.1);
+        border-width: 2px;
+        background-color: rgba($primary-color, 0.15);
+        box-shadow: 0 0 0 3px rgba($primary-color, 0.2);
+
+        .field-name {
+          color: $primary-color;
+        }
       }
 
+      // 已映射状态 - 绿色
       &.mapped {
         border-color: $success-color;
         background-color: rgba($success-color, 0.05);
 
         &:hover {
           background-color: rgba($success-color, 0.1);
+        }
+      }
+
+      // 已映射+被选中 - 红色高亮（表示将解除映射）
+      &.mapped.selected {
+        border-color: $error-color;
+        border-width: 2px;
+        background-color: rgba($error-color, 0.15);
+        box-shadow: 0 0 0 3px rgba($error-color, 0.2);
+
+        .field-name {
+          color: $error-color;
+        }
+
+        .status-icon.mapped {
+          color: $error-color;
         }
       }
 
@@ -171,7 +220,9 @@ function handleMouseDown(field: SourceField, event: MouseEvent) {
           .field-name {
             font-weight: 500;
             color: $text-color;
-            @include text-ellipsis;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           .info-icon {
@@ -184,12 +235,17 @@ function handleMouseDown(field: SourceField, event: MouseEvent) {
           margin-top: 2px;
           font-size: $font-size-sm;
           color: $text-color-secondary;
-          @include text-ellipsis;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
       }
 
-      .field-status {
+      .field-actions {
         margin-left: $spacing-sm;
+        display: flex;
+        align-items: center;
+        gap: 4px;
 
         .status-icon {
           font-size: 16px;
@@ -202,6 +258,20 @@ function handleMouseDown(field: SourceField, event: MouseEvent) {
             color: $text-color-disabled;
           }
         }
+
+        .delete-btn {
+          opacity: 0;
+          color: $text-color-secondary;
+          transition: opacity 0.2s;
+
+          &:hover {
+            color: $error-color;
+          }
+        }
+      }
+
+      &:hover .delete-btn {
+        opacity: 1;
       }
     }
   }

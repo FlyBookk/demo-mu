@@ -13,6 +13,14 @@ import type {
   TargetFieldDefinition,
   FieldMappingDataType
 } from '@/types/fieldMapping'
+import type {
+  TargetFieldsResponse,
+  FilePreviewResponse,
+  ParseFieldsResponse,
+  AutoMatchRequest,
+  AutoMatchResponse,
+  SalesSubType
+} from '@/components/business/FieldMappingCanvas/types'
 
 const BASE_URL = '/api/v1/config/field-mapping-templates'
 
@@ -93,4 +101,57 @@ export function getEnabledTemplates(dataType: FieldMappingDataType) {
  */
 export function validateTemplateMapping(data: FieldMappingTemplateForm) {
   return request.post<{ valid: boolean; errors?: string[] }>(`${BASE_URL}/validate`, data)
+}
+
+// ==================== 画布相关接口 ====================
+
+/**
+ * 获取目标字段定义（增强版，支持数据源类型）
+ * @param dataType 数据类型
+ * @param sourceType 数据源类型（仅销售数据有效）：ORIGINAL/ERP
+ */
+export function getTargetFields(dataType: FieldMappingDataType, sourceType?: SalesSubType) {
+  return request.get<TargetFieldsResponse>(`${BASE_URL}/target-fields/${dataType}`, { sourceType })
+}
+
+/**
+ * 预览文件
+ * @param file 文件
+ * @param previewRows 预览行数
+ */
+export function previewFile(file: File, previewRows: number = 10) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('previewRows', String(previewRows))
+
+  return request.post<FilePreviewResponse>(`${BASE_URL}/preview-file`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/**
+ * 解析文件获取源字段
+ * @param file 文件
+ * @param headerRow 表头行号
+ * @param sheetName Sheet名称（Excel可选）
+ */
+export function parseFileFields(file: File, headerRow: number = 1, sheetName?: string) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('headerRow', String(headerRow))
+  if (sheetName) {
+    formData.append('sheetName', sheetName)
+  }
+
+  return request.post<ParseFieldsResponse>(`${BASE_URL}/parse-fields`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/**
+ * 智能匹配建议
+ * @param params 匹配请求参数
+ */
+export function autoMatchFields(params: AutoMatchRequest) {
+  return request.post<AutoMatchResponse>(`${BASE_URL}/auto-match`, params)
 }

@@ -1,54 +1,53 @@
 <template>
   <div class="mapping-lines" ref="containerRef">
-    <svg class="lines-svg" :viewBox="`0 0 ${svgWidth} ${svgHeight}`">
+    <svg 
+      class="lines-svg" 
+      :width="svgWidth" 
+      :height="svgHeight"
+      :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
+    >
       <!-- 已建立的映射连线 -->
       <g class="mapping-lines-group">
         <g
-          v-for="line in lines"
+          v-for="line in computedLines"
           :key="`${line.source}-${line.target}`"
           class="line-group"
-          :class="{ active: isLineActive(line) }"
           @click="handleLineClick(line)"
         >
           <!-- 连线路径 -->
           <path
             :d="line.path"
             class="mapping-line"
-            :class="{ active: isLineActive(line) }"
           />
-          <!-- 删除按钮 -->
-          <g
-            v-if="isLineActive(line)"
+          <!-- 悬停时显示删除按钮 -->
+          <circle
             class="delete-btn"
-            :transform="`translate(${getLineMidPoint(line).x - 10}, ${getLineMidPoint(line).y - 10})`"
+            :cx="getLineMidPoint(line).x"
+            :cy="getLineMidPoint(line).y"
+            r="8"
             @click.stop="handleDelete(line)"
-          >
-            <circle r="10" fill="#ff4d4f" />
-            <text x="0" y="4" text-anchor="middle" fill="white" font-size="12">x</text>
-          </g>
+          />
+          <text
+            class="delete-text"
+            :x="getLineMidPoint(line).x"
+            :y="getLineMidPoint(line).y + 3"
+            text-anchor="middle"
+            @click.stop="handleDelete(line)"
+          >×</text>
         </g>
       </g>
-
-      <!-- 拖拽时的临时连线 -->
-      <path
-        v-if="dragging && dragStart && dragEnd"
-        :d="getDragLinePath()"
-        class="drag-line"
-      />
     </svg>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { MappingLine, MappingConfig } from './types'
+import { ref, computed, onMounted } from 'vue'
+import type { MappingLine, MappingConfig, SourceField, TargetField } from './types'
 
 const props = defineProps<{
-  lines: MappingLine[]
-  activeLine: MappingLine | null
-  dragging?: boolean
-  dragStart?: { x: number; y: number }
-  dragEnd?: { x: number; y: number }
+  mappings: MappingConfig[]
+  sourceFields: SourceField[]
+  targetFields: TargetField[]
 }>()
 
 const emit = defineEmits<{
@@ -57,44 +56,59 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement>()
-const svgWidth = ref(200)
-const svgHeight = ref(600)
 
-// 判断连线是否激活
-function isLineActive(line: MappingLine): boolean {
-  if (!props.activeLine) return false
-  return (
-    props.activeLine.source === line.source &&
-    props.activeLine.target === line.target
-  )
-}
+// 固定配置 - 与 CSS 样式保持一致
+const ROW_HEIGHT = 56 // 每行高度（字段项高度 + 间距）
 
-// 获取连线中点
+// SVG 尺寸
+const svgWidth = ref(120)
+const svgHeight = computed(() => {
+  const maxRows = Math.max(props.sourceFields.length, props.targetFields.length)
+  return Math.max(400, maxRows * ROW_HEIGHT + 20)
+})
+
+// 基于索引计算连线
+const computedLines = computed(() => {
+  const lines: MappingLine[] = []
+  const width = svgWidth.value
+
+  for (const mapping of props.mappings) {
+    // 根据字段名找到索引
+    const sourceIndex = props.sourceFields.findIndex((f) => f.name === mapping.source)
+    const targetIndex = props.targetFields.findIndex((f) => f.field === mapping.target)
+
+    // 如果找不到对应字段，跳过
+    if (sourceIndex === -1 || targetIndex === -1) continue
+
+    // 基于索引计算 Y 坐标（每行固定高度，居中）
+    const sourceY = sourceIndex * ROW_HEIGHT + ROW_HEIGHT / 2
+    const targetY = targetIndex * ROW_HEIGHT + ROW_HEIGHT / 2
+
+    const sourcePoint = { x: 0, y: sourceY }
+    const targetPoint = { x: width, y: targetY }
+
+    // 贝塞尔曲线：水平方向的 S 形曲线
+    const midX = width / 2
+    const path = `M ${sourcePoint.x} ${sourcePoint.y} C ${midX} ${sourcePoint.y}, ${midX} ${targetPoint.y}, ${targetPoint.x} ${targetPoint.y}`
+
+    lines.push({
+      source: mapping.source,
+      target: mapping.target,
+      sourcePoint,
+      targetPoint,
+      path
+    })
+  }
+
+  return lines
+})
+
+// 获取连线中点（用于删除按钮位置）
 function getLineMidPoint(line: MappingLine): { x: number; y: number } {
   return {
     x: (line.sourcePoint.x + line.targetPoint.x) / 2,
     y: (line.sourcePoint.y + line.targetPoint.y) / 2
   }
-}
-
-// 计算拖拽连线路径
-function getDragLinePath(): string {
-  if (!props.dragStart || !props.dragEnd) return ''
-
-  const { x: x1, y: y1 } = props.dragStart
-  const { x: x2, y: y2 } = props.dragEnd
-
-  // 转换为SVG坐标
-  const containerRect = containerRef.value?.getBoundingClientRect()
-  if (!containerRect) return ''
-
-  const svgX1 = x1 - containerRect.left
-  const svgY1 = y1 - containerRect.top
-  const svgX2 = x2 - containerRect.left
-  const svgY2 = y2 - containerRect.top
-
-  const midX = (svgX1 + svgX2) / 2
-  return `M ${svgX1} ${svgY1} C ${midX} ${svgY1}, ${midX} ${svgY2}, ${svgX2} ${svgY2}`
 }
 
 // 点击连线
@@ -107,20 +121,19 @@ function handleDelete(line: MappingLine) {
   emit('line-delete', { source: line.source, target: line.target })
 }
 
-// 重新计算SVG尺寸
-function recalculate() {
+// 更新 SVG 宽度
+function updateWidth() {
   if (containerRef.value) {
-    const rect = containerRef.value.getBoundingClientRect()
-    svgWidth.value = rect.width
-    svgHeight.value = rect.height
+    svgWidth.value = containerRef.value.offsetWidth || 120
   }
 }
 
 // 监听容器尺寸变化
 onMounted(() => {
-  recalculate()
+  updateWidth()
+  
   const resizeObserver = new ResizeObserver(() => {
-    recalculate()
+    updateWidth()
   })
   if (containerRef.value) {
     resizeObserver.observe(containerRef.value)
@@ -129,7 +142,7 @@ onMounted(() => {
 
 // 暴露方法
 defineExpose({
-  recalculate
+  updateWidth
 })
 </script>
 
@@ -137,58 +150,57 @@ defineExpose({
 .mapping-lines {
   flex: 1;
   position: relative;
-  min-width: 100px;
+  min-width: 80px;
+  display: flex;
+  align-items: flex-start;
 
   .lines-svg {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-
-    .mapping-line {
-      fill: none;
-      stroke: $success-color;
-      stroke-width: 2;
-      transition: stroke 0.2s, stroke-width 0.2s;
-      cursor: pointer;
-
-      &:hover {
-        stroke: $primary-color;
-        stroke-width: 3;
-      }
-
-      &.active {
-        stroke: $primary-color;
-        stroke-width: 3;
-      }
-    }
-
-    .drag-line {
-      fill: none;
-      stroke: $primary-color;
-      stroke-width: 2;
-      stroke-dasharray: 5, 5;
-      opacity: 0.7;
-    }
-
-    .delete-btn {
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-
-      &:hover {
-        circle {
-          fill: #ff7875;
-        }
-      }
-    }
+    display: block;
 
     .line-group {
-      &.active .delete-btn {
-        opacity: 1;
+      cursor: pointer;
+
+      .mapping-line {
+        fill: none;
+        stroke: $success-color;
+        stroke-width: 2;
+        transition: stroke 0.2s, stroke-width 0.2s;
       }
 
-      &:hover .delete-btn {
-        opacity: 1;
+      .delete-btn {
+        fill: #ff4d4f;
+        opacity: 0;
+        transition: opacity 0.2s, fill 0.2s;
+        cursor: pointer;
+      }
+
+      .delete-text {
+        fill: white;
+        font-size: 12px;
+        font-weight: bold;
+        opacity: 0;
+        transition: opacity 0.2s;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      &:hover {
+        .mapping-line {
+          stroke: $primary-color;
+          stroke-width: 3;
+        }
+
+        .delete-btn {
+          opacity: 1;
+        }
+
+        .delete-text {
+          opacity: 1;
+        }
+      }
+
+      .delete-btn:hover {
+        fill: #ff7875;
       }
     }
   }

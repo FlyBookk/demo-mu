@@ -289,6 +289,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import type { FormInstance, TablePaginationConfig } from 'ant-design-vue'
 import type { TableRowSelection } from 'ant-design-vue/es/table/interface'
@@ -314,6 +315,8 @@ import {
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import type { FieldMappingTemplate, FieldMappingTemplateForm, FieldMappingDataType, FieldMappingItem } from '@/types/fieldMapping'
 import type { Marketplace } from '@/types/marketplace'
+
+const router = useRouter()
 
 // ============= 数据类型选项 =============
 const dataTypeOptions = [
@@ -510,16 +513,26 @@ function handleTableChange(pag: TablePaginationConfig) {
   fetchData()
 }
 
-// 新增
+// 新增 - 跳转到画布编辑页面
 function handleAdd() {
+  router.push('/config/field-mapping/add')
+}
+
+// 编辑 - 跳转到画布编辑页面
+function handleEdit(record: FieldMappingTemplate) {
+  router.push(`/config/field-mapping/edit/${record.id}`)
+}
+
+// 传统弹窗新增（保留备用）
+function handleAddLegacy() {
   isEdit.value = false
   editingId.value = null
   resetForm()
   modalVisible.value = true
 }
 
-// 编辑
-function handleEdit(record: FieldMappingTemplate) {
+// 传统弹窗编辑（保留备用）
+function handleEditLegacy(record: FieldMappingTemplate) {
   isEdit.value = true
   editingId.value = record.id
   Object.assign(formData, {

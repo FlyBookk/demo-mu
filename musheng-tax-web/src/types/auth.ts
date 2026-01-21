@@ -38,11 +38,8 @@ export interface UserInfo {
 // 用户角色
 export type UserRole = 'admin' | 'finance' | 'viewer' | 'ADMIN' | 'FINANCE' | 'OPERATOR'
 
-// 用户状态
-export enum UserStatus {
-  DISABLED = 0,
-  ENABLED = 1
-}
+// 用户状态 - 从 user.ts 导入使用，此处不再重复定义
+// export { UserStatus } from './user'
 
 // 修改密码参数
 export interface ChangePasswordParams {

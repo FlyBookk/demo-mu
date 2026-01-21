@@ -1,7 +1,9 @@
 package com.musheng.business.sales.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.business.sales.dto.*;
 import com.musheng.business.sales.entity.SalesData;
+import com.musheng.common.enums.SalesSourceType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -88,4 +90,43 @@ public interface SalesDataService {
      * @param response            HTTP响应
      */
     void exportData(String siteCode, String transactionCategory, String startDate, String endDate, HttpServletResponse response);
+    
+    // ========== 双格式导入相关方法 ==========
+    
+    /**
+     * 上传销售数据文件
+     * 解析文件表头，返回源字段列表和样例数据
+     *
+     * @param file       上传的文件
+     * @param sourceType 数据源类型
+     * @param siteCode   站点编码（ERP需要预选，ORIGINAL可自动识别）
+     * @return 上传结果
+     */
+    SalesUploadResult uploadFile(MultipartFile file, SalesSourceType sourceType, String siteCode);
+    
+    /**
+     * 预览导入数据
+     * 根据选择的模板解析数据，返回前N行预览
+     *
+     * @param request 预览请求
+     * @return 预览结果
+     */
+    SalesPreviewResult previewImport(SalesPreviewRequest request);
+    
+    /**
+     * 执行导入
+     * 根据模板配置解析并导入数据
+     *
+     * @param request 导入请求
+     * @return 导入结果
+     */
+    SalesImportResult executeImport(SalesImportRequest request);
+    
+    /**
+     * 获取导入进度
+     *
+     * @param batchNo 批次号
+     * @return 导入进度
+     */
+    SalesImportProgress getImportProgress(String batchNo);
 }

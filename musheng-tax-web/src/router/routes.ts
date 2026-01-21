@@ -85,6 +85,26 @@ export const routes: RouteRecordRaw[] = [
             }
           },
           {
+            path: 'field-mapping/add',
+            name: 'FieldMappingAdd',
+            component: () => import('@/views/config/fieldMapping/edit.vue'),
+            meta: {
+              title: '新增映射模板',
+              permission: 'config:fieldMapping',
+              hideInMenu: true
+            }
+          },
+          {
+            path: 'field-mapping/edit/:id',
+            name: 'FieldMappingEdit',
+            component: () => import('@/views/config/fieldMapping/edit.vue'),
+            meta: {
+              title: '编辑映射模板',
+              permission: 'config:fieldMapping',
+              hideInMenu: true
+            }
+          },
+          {
             path: 'import-record',
             name: 'ImportRecord',
             component: () => import('@/views/config/importRecord/index.vue'),

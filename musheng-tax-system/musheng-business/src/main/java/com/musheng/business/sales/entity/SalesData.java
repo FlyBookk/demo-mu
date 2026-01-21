@@ -21,6 +21,26 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
      * 导入批次ID
      */
     private Long importBatchId;
+    
+    /**
+     * 数据源类型(ORIGINAL-亚马逊原始数据, ERP-ERP结算数据)
+     */
+    private String sourceType;
+    
+    /**
+     * 店铺名称(ERP数据使用)
+     */
+    private String storeName;
+    
+    /**
+     * 结算状态(ERP数据使用)
+     */
+    private String settlementStatus;
+    
+    /**
+     * 转账状态(ERP数据使用)
+     */
+    private String transferStatus;
 
     /**
      * 交易日期时间

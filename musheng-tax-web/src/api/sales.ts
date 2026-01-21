@@ -5,7 +5,21 @@
 
 import { request } from '@/utils/request'
 import type { PageResult } from '@/types/api'
-import type { SalesData, SalesDataQuery, SalesImportParams, SalesSummary, SalesStatByType } from '@/types/sales'
+import type { 
+  SalesData, 
+  SalesDataQuery, 
+  SalesImportParams, 
+  SalesSummary, 
+  SalesStatByType,
+  SalesSourceType,
+  SalesUploadResult,
+  SalesPreviewParams,
+  SalesPreviewResult,
+  SalesDualImportParams,
+  SalesImportResult,
+  SalesImportProgress,
+  FieldMappingTemplateOption
+} from '@/types/sales'
 import type { ImportRecord } from '@/types/importRecord'
 
 const BASE_URL = '/api/v1/business/sales'
@@ -78,4 +92,56 @@ export function exportSalesData(params: SalesDataQuery) {
  */
 export function downloadSalesTemplate(marketplaceId?: number) {
   return request.download(`${BASE_URL}/template`, { marketplaceId })
+}
+
+// ========== 双格式导入相关接口 ==========
+
+/**
+ * 上传销售数据文件
+ * 解析文件表头，返回源字段列表和样例数据
+ */
+export function uploadSalesFile(file: File, sourceType: SalesSourceType, siteCode?: string) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('sourceType', sourceType)
+  if (siteCode) {
+    formData.append('siteCode', siteCode)
+  }
+  return request.post<SalesUploadResult>(`${BASE_URL}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/**
+ * 预览导入数据
+ * 根据选择的模板解析数据，返回前10行预览
+ */
+export function previewSalesImport(params: SalesPreviewParams) {
+  return request.post<SalesPreviewResult>(`${BASE_URL}/preview`, params)
+}
+
+/**
+ * 执行双格式导入
+ * 根据模板配置解析并导入数据
+ */
+export function executeSalesImport(params: SalesDualImportParams) {
+  return request.post<SalesImportResult>(`${BASE_URL}/import/execute`, params)
+}
+
+/**
+ * 获取导入进度
+ */
+export function getSalesImportProgress(batchNo: string) {
+  return request.get<SalesImportProgress>(`${BASE_URL}/import/progress/${batchNo}`)
+}
+
+/**
+ * 获取字段映射模板列表（按类型筛选）
+ */
+export function getTemplatesByType(dataType: string, sourceType?: string, siteCode?: string) {
+  return request.get<FieldMappingTemplateOption[]>('/api/v1/config/field-mapping-templates/by-type', {
+    dataType,
+    sourceType,
+    siteCode
+  })
 }

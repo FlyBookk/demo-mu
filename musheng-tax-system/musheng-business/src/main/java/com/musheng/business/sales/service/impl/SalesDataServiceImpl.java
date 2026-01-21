@@ -6,9 +6,16 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.musheng.business.common.service.csv.CsvHeaderResult;
 import com.musheng.business.common.service.csv.CsvParseServiceImpl;
+import com.musheng.business.sales.dto.*;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.mapper.SalesDataMapper;
+import com.musheng.business.sales.parser.ParseContext;
+import com.musheng.business.sales.parser.ParseResult;
+import com.musheng.business.sales.parser.SalesDataParser;
+import com.musheng.business.sales.parser.SalesDataParserFactory;
+import com.musheng.business.sales.parser.SiteCodeResolver;
 import com.musheng.business.sales.service.SalesDataService;
+import com.musheng.common.enums.SalesSourceType;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import com.musheng.config.importrecord.entity.ImportRecord;
@@ -35,6 +42,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sales Data Service Implementation
@@ -52,6 +60,36 @@ public class SalesDataServiceImpl implements SalesDataService {
     private final ImportRecordMapper importRecordMapper;
     private final CsvParseServiceImpl csvParseService;
     private final ObjectMapper objectMapper;
+    private final SalesDataParserFactory parserFactory;
+    
+    // 文件缓存（临时存储上传的文件信息）
+    private final Map<String, UploadedFileCache> uploadedFileCache = new ConcurrentHashMap<>();
+    // 导入进度缓存
+    private final Map<String, SalesImportProgress> importProgressCache = new ConcurrentHashMap<>();
+    
+    /**
+     * 上传文件缓存内部类
+     */
+    private static class UploadedFileCache {
+        String fileName;
+        long fileSize;
+        byte[] content;
+        List<String> sourceFields;
+        int headerRow;
+        String detectedSiteCode;
+        long uploadTime;
+        
+        UploadedFileCache(String fileName, long fileSize, byte[] content, 
+                         List<String> sourceFields, int headerRow, String detectedSiteCode) {
+            this.fileName = fileName;
+            this.fileSize = fileSize;
+            this.content = content;
+            this.sourceFields = sourceFields;
+            this.headerRow = headerRow;
+            this.detectedSiteCode = detectedSiteCode;
+            this.uploadTime = System.currentTimeMillis();
+        }
+    }
 
     @Override
     public Page<SalesData> list(String siteCode, String transactionCategory, String transactionType, String orderId, int page, int size) {
@@ -606,5 +644,740 @@ public class SalesDataServiceImpl implements SalesDataService {
             log.error("Failed to export sales data", e);
             throw new BusinessException(ErrorCode.EXPORT_FAILED, "导出失败: " + e.getMessage());
         }
+    }
+    
+    // ========== 双格式导入相关方法实现 ==========
+    
+    @Override
+    public SalesUploadResult uploadFile(MultipartFile file, SalesSourceType sourceType, String siteCode) {
+        log.info("上传销售数据文件: fileName={}, sourceType={}, siteCode={}", 
+                file.getOriginalFilename(), sourceType, siteCode);
+        
+        try {
+            byte[] content = file.getBytes();
+            String fileContent = new String(content, StandardCharsets.UTF_8);
+            
+            // 解析表头
+            List<String> sourceFields = new ArrayList<>();
+            int headerRow = 1;
+            String detectedSiteCode = siteCode;
+            int totalRows = 0;
+            
+            // 使用更健壮的换行符分割（兼容 Windows/Unix/Mac）
+            String[] lines = fileContent.split("\\r?\\n|\\r");
+            totalRows = lines.length;
+            
+            log.debug("文件共 {} 行", totalRows);
+            
+            if (sourceType == SalesSourceType.ORIGINAL) {
+                // 亚马逊原始数据：前7-8行是说明，需要找到真正的表头行
+                for (int i = 0; i < Math.min(15, lines.length); i++) {
+                    String line = lines[i].trim();
+                    String lineLower = line.toLowerCase();
+                    
+                    // 表头行的特征：
+                    // 1. 包含多个逗号分隔的字段（CSV格式）
+                    // 2. 包含特定的表头关键词组合
+                    // 排除说明性文本（通常以字母开头，不以引号开头）
+                    
+                    // 检查是否是 CSV 格式行（以引号开头，包含多个字段）
+                    boolean isCsvFormat = line.startsWith("\"") && line.contains("\",\"");
+                    
+                    if (!isCsvFormat) {
+                        continue; // 跳过非 CSV 格式的说明行
+                    }
+                    
+                    // 表头通常包含 "date/time" 或 "datum/uhrzeit" 等时间字段作为第一列
+                    // 同时包含 "sku" 或 "order id" 作为数据列
+                    boolean hasDateField = lineLower.contains("\"date/time\"") || 
+                        lineLower.contains("\"datum/uhrzeit\"");
+                    boolean hasDataFields = lineLower.contains("\"sku\"") || 
+                        lineLower.contains("\"order id\"") ||
+                        lineLower.contains("\"settlement id\"") ||
+                        lineLower.contains("\"abrechnungsnummer\"");
+                    
+                    if (hasDateField && hasDataFields) {
+                        headerRow = i + 1;
+                        sourceFields = parseCsvLine(line);
+                        log.info("检测到表头行: row={}, fieldsCount={}, firstFields={}", 
+                                headerRow, sourceFields.size(), 
+                                sourceFields.size() > 3 ? sourceFields.subList(0, 3) : sourceFields);
+                        break;
+                    }
+                }
+                
+                // 如果没有检测到表头，尝试宽松匹配
+                if (sourceFields.isEmpty()) {
+                    log.warn("严格表头检测失败，尝试宽松匹配");
+                    for (int i = 0; i < Math.min(15, lines.length); i++) {
+                        String line = lines[i].trim();
+                        String lineLower = line.toLowerCase();
+                        
+                        // 宽松条件：包含 marketplace 和 sku
+                        if (lineLower.contains("marketplace") && lineLower.contains("sku")) {
+                            headerRow = i + 1;
+                            sourceFields = parseCsvLine(line);
+                            log.info("宽松检测到表头行: row={}, fieldsCount={}", headerRow, sourceFields.size());
+                            break;
+                        }
+                    }
+                }
+                
+                // 从数据中自动识别站点
+                if (headerRow < lines.length) {
+                    for (int i = headerRow; i < Math.min(headerRow + 10, lines.length); i++) {
+                        String line = lines[i];
+                        // 查找 marketplace 字段
+                        String detected = SiteCodeResolver.detectSiteFromLine(line);
+                        if (detected != null) {
+                            detectedSiteCode = detected;
+                            break;
+                        }
+                    }
+                }
+                
+                totalRows = totalRows - headerRow; // 减去表头及之前的行
+            } else {
+                // ERP数据：第一行就是表头
+                if (lines.length > 0) {
+                    sourceFields = parseCsvLine(lines[0]);
+                }
+                totalRows = lines.length - 1; // 减去表头行
+            }
+            
+            // 生成文件ID
+            String fileId = UUID.randomUUID().toString().replace("-", "");
+            
+            // 缓存文件信息
+            uploadedFileCache.put(fileId, new UploadedFileCache(
+                file.getOriginalFilename(),
+                file.getSize(),
+                content,
+                sourceFields,
+                headerRow,
+                detectedSiteCode
+            ));
+            
+            // 清理过期缓存（超过1小时）
+            cleanExpiredCache();
+            
+            // 构建返回结果
+            SalesUploadResult result = new SalesUploadResult();
+            result.setFileId(fileId);
+            result.setFileName(file.getOriginalFilename());
+            result.setFileSize(file.getSize());
+            result.setTotalRows(totalRows);
+            result.setHeaderRow(headerRow);
+            result.setSourceFields(sourceFields);
+            result.setDetectedSiteCode(detectedSiteCode);
+            
+            log.info("文件上传成功: fileId={}, headerRow={}, sourceFields={}, detectedSiteCode={}", 
+                    fileId, headerRow, sourceFields.size(), detectedSiteCode);
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("文件上传失败", e);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_ERROR, "文件上传失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public SalesPreviewResult previewImport(SalesPreviewRequest request) {
+        log.info("预览导入数据: fileId={}, sourceType={}, siteCode={}, templateId={}", 
+                request.getFileId(), request.getSourceType(), request.getSiteCode(), request.getTemplateId());
+        
+        // 获取缓存的文件
+        UploadedFileCache fileCache = uploadedFileCache.get(request.getFileId());
+        if (fileCache == null) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND, "文件已过期，请重新上传");
+        }
+        
+        // 获取映射模板
+        FieldMappingTemplate template = fieldMappingTemplateMapper.selectById(request.getTemplateId());
+        if (template == null) {
+            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
+        }
+        
+        try {
+            // 解析映射配置：格式为 [{"source": "xxx", "target": "yyy"}, ...]
+            Map<String, String> mappingConfig = parseMappingConfig(template.getMappingConfig());
+            
+            // 构建解析上下文
+            ParseContext context = ParseContext.builder()
+                    .sourceType(request.getSourceType())
+                    .siteCode(request.getSiteCode())
+                    .templateId(request.getTemplateId())
+                    .fieldMapping(mappingConfig)
+                    .quarter(request.getQuarter())
+                    .build();
+            
+            // 获取解析器
+            SalesDataParser parser = parserFactory.getParser(request.getSourceType());
+            
+            // 解析数据（仅预览前20条）
+            String fileContent = new String(fileCache.content, StandardCharsets.UTF_8);
+            ParseResult parseResult = parser.parse(fileContent, context, 20);
+            
+            // 构建预览结果
+            SalesPreviewResult result = new SalesPreviewResult();
+            result.setTotalRows(parseResult.getTotalRows());
+            result.setPreviewRows(parseResult.getDataList().size());
+            
+            // 构建列元信息
+            List<ColumnMeta> columns = buildColumnMeta(mappingConfig);
+            result.setColumns(columns);
+            
+            // 构建预览数据
+            List<Map<String, Object>> previewData = new ArrayList<>();
+            for (SalesData data : parseResult.getDataList()) {
+                previewData.add(salesDataToMap(data));
+            }
+            result.setData(previewData);
+            
+            // 构建映射状态（根据数据源类型获取必填和可选字段）
+            SalesSourceType sourceType = request.getSourceType();
+            Set<String> mappedTargets = new HashSet<>(mappingConfig.values());
+            MappingStatus mappingStatus = new MappingStatus();
+            mappingStatus.setTotalFields(getRequiredFields(sourceType).size() + getOptionalFields(sourceType).size());
+            mappingStatus.setMappedFields(mappingConfig.size());
+            
+            // 检查必填字段是否都已映射（检查目标字段是否在映射值中）
+            List<String> requiredMissing = new ArrayList<>();
+            for (String required : getRequiredFields(sourceType)) {
+                if (!mappedTargets.contains(required)) {
+                    requiredMissing.add(required);
+                }
+            }
+            mappingStatus.setRequiredMissing(requiredMissing);
+            result.setMappingStatus(mappingStatus);
+            
+            // 添加警告信息
+            List<String> warnings = new ArrayList<>();
+            if (parseResult.getErrors() != null && !parseResult.getErrors().isEmpty()) {
+                for (int i = 0; i < Math.min(5, parseResult.getErrors().size()); i++) {
+                    ParseResult.ParseError error = parseResult.getErrors().get(i);
+                    warnings.add(String.format("第%d行: %s", error.getRow(), error.getMessage()));
+                }
+            }
+            result.setWarnings(warnings);
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("预览数据失败", e);
+            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "预览数据失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SalesImportResult executeImport(SalesImportRequest request) {
+        log.info("执行导入: fileId={}, sourceType={}, siteCode={}, templateId={}", 
+                request.getFileId(), request.getSourceType(), request.getSiteCode(), request.getTemplateId());
+        
+        // 获取缓存的文件
+        UploadedFileCache fileCache = uploadedFileCache.get(request.getFileId());
+        if (fileCache == null) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND, "文件已过期，请重新上传");
+        }
+        
+        // 获取映射模板
+        FieldMappingTemplate template = fieldMappingTemplateMapper.selectById(request.getTemplateId());
+        if (template == null) {
+            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
+        }
+        
+        // 生成批次号
+        String batchNo = generateBatchNo();
+        
+        // 创建导入记录
+        ImportRecord importRecord = new ImportRecord();
+        importRecord.setBatchNo(batchNo);
+        importRecord.setDataType("sales");
+        importRecord.setFileName(fileCache.fileName);
+        importRecord.setFileSize(fileCache.fileSize);
+        importRecord.setImportStatus("processing");
+        importRecordMapper.insert(importRecord);
+        
+        // 初始化进度
+        SalesImportProgress progress = new SalesImportProgress();
+        progress.setBatchNo(batchNo);
+        progress.setStatus("PROCESSING");
+        progress.setTotalCount(0);
+        progress.setSuccessCount(0);
+        progress.setFailCount(0);
+        progress.setSkipCount(0);
+        progress.setProgress(0);
+        importProgressCache.put(batchNo, progress);
+        
+        int totalCount = 0;
+        int successCount = 0;
+        int failCount = 0;
+        int skipCount = 0;
+        List<String> errors = new ArrayList<>();
+        
+        try {
+            // 解析映射配置：格式为 [{"source": "xxx", "target": "yyy"}, ...]
+            Map<String, String> mappingConfig = parseMappingConfig(template.getMappingConfig());
+            
+            // 获取交易类型映射
+            Map<String, String> transactionTypeMapping = getTransactionTypeMapping(request.getSiteCode());
+            
+            // 构建解析上下文
+            ParseContext context = ParseContext.builder()
+                    .sourceType(request.getSourceType())
+                    .siteCode(request.getSiteCode())
+                    .templateId(request.getTemplateId())
+                    .fieldMapping(mappingConfig)
+                    .transactionTypeMapping(transactionTypeMapping)
+                    .quarter(request.getQuarter())
+                    .build();
+            
+            // 获取解析器
+            SalesDataParser parser = parserFactory.getParser(request.getSourceType());
+            
+            // 解析全部数据
+            String fileContent = new String(fileCache.content, StandardCharsets.UTF_8);
+            ParseResult parseResult = parser.parse(fileContent, context, Integer.MAX_VALUE);
+            
+            totalCount = parseResult.getDataList().size();
+            progress.setTotalCount(totalCount);
+            
+            List<SalesData> dataList = parseResult.getDataList();
+            
+            // 批量设置额外字段
+            for (SalesData data : dataList) {
+                data.setImportBatchId(importRecord.getId());
+                data.setSourceType(request.getSourceType().getCode());
+            }
+            
+            // 批量检查重复（一次性查询所有可能重复的订单）
+            Set<String> existingOrderKeys = batchCheckDuplicates(dataList);
+            
+            // 分批处理数据
+            List<SalesData> batchToInsert = new ArrayList<>();
+            int batchSize = 500; // 每批插入500条
+            
+            for (int i = 0; i < dataList.size(); i++) {
+                SalesData data = dataList.get(i);
+                String orderKey = buildOrderKey(data);
+                
+                // 检查重复
+                if (existingOrderKeys.contains(orderKey)) {
+                    if (Boolean.TRUE.equals(request.getSkipDuplicate())) {
+                        skipCount++;
+                        continue;
+                    } else if (Boolean.TRUE.equals(request.getOverwriteDuplicate())) {
+                        // 删除旧数据
+                        deleteExistingData(data);
+                    } else {
+                        failCount++;
+                        if (errors.size() < 100) { // 限制错误信息数量
+                            errors.add(String.format("第%d行: 订单%s已存在", i + 1, data.getOrderId()));
+                        }
+                        continue;
+                    }
+                }
+                
+                batchToInsert.add(data);
+                
+                // 达到批量大小，执行批量插入
+                if (batchToInsert.size() >= batchSize) {
+                    int inserted = executeBatchInsert(batchToInsert, errors, i - batchToInsert.size() + 2);
+                    successCount += inserted;
+                    failCount += batchToInsert.size() - inserted;
+                    batchToInsert.clear();
+                }
+                
+                // 更新进度
+                if (i % 500 == 0) {
+                    progress.setSuccessCount(successCount);
+                    progress.setFailCount(failCount);
+                    progress.setSkipCount(skipCount);
+                    progress.setProgress((i + 1) * 100 / totalCount);
+                }
+            }
+            
+            // 处理剩余数据
+            if (!batchToInsert.isEmpty()) {
+                int inserted = executeBatchInsert(batchToInsert, errors, totalCount - batchToInsert.size() + 1);
+                successCount += inserted;
+                failCount += batchToInsert.size() - inserted;
+            }
+            
+            // 添加解析错误
+            if (parseResult.getErrors() != null && !parseResult.getErrors().isEmpty()) {
+                for (ParseResult.ParseError parseError : parseResult.getErrors()) {
+                    errors.add(String.format("第%d行: %s", parseError.getRow(), parseError.getMessage()));
+                }
+                failCount += parseResult.getErrors().size();
+            }
+            
+            // 更新导入记录
+            importRecord.setTotalCount(totalCount);
+            importRecord.setSuccessCount(successCount);
+            importRecord.setFailCount(failCount);
+            String finalStatus = failCount == 0 ? "success" : (successCount > 0 ? "partial" : "fail");
+            importRecord.setImportStatus(finalStatus);
+            importRecord.setCompleteTime(LocalDateTime.now());
+            if (!errors.isEmpty()) {
+                importRecord.setErrorMessage(String.join("\n", errors.subList(0, Math.min(20, errors.size()))));
+            }
+            importRecordMapper.updateById(importRecord);
+            
+            // 更新最终进度
+            progress.setStatus(finalStatus.equals("success") ? "SUCCESS" : 
+                              (finalStatus.equals("partial") ? "PARTIAL" : "FAIL"));
+            progress.setSuccessCount(successCount);
+            progress.setFailCount(failCount);
+            progress.setSkipCount(skipCount);
+            progress.setProgress(100);
+            
+            // 清理文件缓存
+            uploadedFileCache.remove(request.getFileId());
+            
+        } catch (Exception e) {
+            log.error("导入失败", e);
+            importRecord.setImportStatus("fail");
+            importRecord.setErrorMessage(e.getMessage());
+            importRecordMapper.updateById(importRecord);
+            
+            progress.setStatus("FAIL");
+            progress.setCurrentError(e.getMessage());
+            
+            throw new BusinessException(ErrorCode.IMPORT_FAILED, "导入失败: " + e.getMessage());
+        }
+        
+        // 构建返回结果
+        SalesImportResult result = new SalesImportResult();
+        result.setBatchNo(batchNo);
+        result.setStatus(progress.getStatus());
+        result.setTotalCount(totalCount);
+        result.setSuccessCount(successCount);
+        result.setFailCount(failCount);
+        result.setSkipCount(skipCount);
+        result.setAsync(false); // 同步处理
+        
+        if (!errors.isEmpty()) {
+            result.setErrors(errors.subList(0, Math.min(10, errors.size())));
+        }
+        
+        log.info("导入完成: batchNo={}, total={}, success={}, fail={}, skip={}", 
+                batchNo, totalCount, successCount, failCount, skipCount);
+        
+        return result;
+    }
+    
+    @Override
+    public SalesImportProgress getImportProgress(String batchNo) {
+        SalesImportProgress progress = importProgressCache.get(batchNo);
+        if (progress != null) {
+            return progress;
+        }
+        
+        // 如果缓存中没有，从数据库查询
+        LambdaQueryWrapper<ImportRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ImportRecord::getBatchNo, batchNo);
+        ImportRecord record = importRecordMapper.selectOne(wrapper);
+        
+        if (record == null) {
+            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "导入记录不存在");
+        }
+        
+        progress = new SalesImportProgress();
+        progress.setBatchNo(batchNo);
+        progress.setStatus(mapImportStatus(record.getImportStatus()));
+        progress.setTotalCount(record.getTotalCount() != null ? record.getTotalCount() : 0);
+        progress.setSuccessCount(record.getSuccessCount() != null ? record.getSuccessCount() : 0);
+        progress.setFailCount(record.getFailCount() != null ? record.getFailCount() : 0);
+        progress.setSkipCount(0);
+        progress.setProgress(100);
+        
+        return progress;
+    }
+    
+    // ========== 辅助方法 ==========
+    
+    /**
+     * 解析CSV行
+     */
+    private List<String> parseCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        if (line == null || line.isEmpty()) {
+            return fields;
+        }
+        
+        // 简单CSV解析（处理引号内的逗号）
+        boolean inQuotes = false;
+        StringBuilder field = new StringBuilder();
+        
+        for (char c : line.toCharArray()) {
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                fields.add(field.toString().trim());
+                field = new StringBuilder();
+            } else {
+                field.append(c);
+            }
+        }
+        fields.add(field.toString().trim());
+        
+        return fields;
+    }
+    
+    /**
+     * 清理过期缓存
+     */
+    private void cleanExpiredCache() {
+        long now = System.currentTimeMillis();
+        long expireTime = 60 * 60 * 1000; // 1小时
+        
+        uploadedFileCache.entrySet().removeIf(entry -> 
+            now - entry.getValue().uploadTime > expireTime);
+    }
+    
+    /**
+     * 解析映射配置
+     * 将 [{"source": "xxx", "target": "yyy"}, ...] 格式转换为 Map<source, target>
+     */
+    private Map<String, String> parseMappingConfig(String mappingConfigJson) {
+        Map<String, String> result = new HashMap<>();
+        if (mappingConfigJson == null || mappingConfigJson.isBlank()) {
+            return result;
+        }
+        
+        try {
+            // 解析为数组格式
+            List<Map<String, String>> mappingList = objectMapper.readValue(
+                    mappingConfigJson,
+                    new TypeReference<List<Map<String, String>>>() {});
+            
+            // 转换为 source -> target 的 Map
+            for (Map<String, String> item : mappingList) {
+                String source = item.get("source");
+                String target = item.get("target");
+                if (source != null && target != null) {
+                    result.put(source, target);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析映射配置失败: {}", e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 构建列元信息
+     * @param mappingConfig Map<sourceField, targetField>
+     */
+    private List<ColumnMeta> buildColumnMeta(Map<String, String> mappingConfig) {
+        List<ColumnMeta> columns = new ArrayList<>();
+        
+        // 获取所有已映射的目标字段
+        Set<String> mappedTargets = new HashSet<>(mappingConfig.values());
+        
+        // 定义标准列
+        String[][] standardColumns = {
+            {"orderId", "订单号"},
+            {"siteCode", "站点"},
+            {"transactionDate", "交易日期"},
+            {"transactionType", "交易类型"},
+            {"transactionCategory", "交易分类"},
+            {"sku", "SKU"},
+            {"quantity", "数量"},
+            {"productSales", "产品销售"},
+            {"sellingFees", "销售费用"},
+            {"fbaFees", "FBA费用"},
+            {"total", "合计"},
+            {"currencyCode", "货币"}
+        };
+        
+        for (String[] col : standardColumns) {
+            ColumnMeta meta = new ColumnMeta();
+            meta.setField(col[0]);
+            meta.setLabel(col[1]);
+            meta.setMapped(mappedTargets.contains(col[0]));
+            columns.add(meta);
+        }
+        
+        return columns;
+    }
+    
+    /**
+     * SalesData转Map
+     */
+    private Map<String, Object> salesDataToMap(SalesData data) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("orderId", data.getOrderId());
+        map.put("siteCode", data.getSiteCode());
+        map.put("transactionDate", data.getTransactionDate() != null ? 
+                data.getTransactionDate().toString() : null);
+        map.put("transactionType", data.getTransactionType());
+        map.put("transactionCategory", data.getTransactionCategory());
+        map.put("sku", data.getSku());
+        map.put("quantity", data.getQuantity());
+        map.put("productSales", data.getProductSales());
+        map.put("sellingFees", data.getSellingFees());
+        map.put("fbaFees", data.getFbaFees());
+        map.put("total", data.getTotal());
+        map.put("currencyCode", data.getCurrencyCode());
+        return map;
+    }
+    
+    /**
+     * 获取必填字段列表（根据数据源类型区分）
+     * 
+     * @param sourceType 数据源类型（可以为 null，默认为 ORIGINAL）
+     */
+    private List<String> getRequiredFields(SalesSourceType sourceType) {
+        if (sourceType == SalesSourceType.ERP) {
+            // ERP数据：交易类型和合计都是自动计算的，只需要订单号
+            // 其他字段如 transactionType、total 由 ErpSettlementParser 自动处理
+            return Arrays.asList("orderId");
+        }
+        // 亚马逊原始数据：需要完整映射
+        return Arrays.asList("orderId", "transactionDate");
+    }
+    
+    /**
+     * 获取必填字段列表（默认为原始数据）
+     */
+    private List<String> getRequiredFields() {
+        return getRequiredFields(null);
+    }
+    
+    /**
+     * 获取可选字段列表（根据数据源类型区分）
+     */
+    private List<String> getOptionalFields(SalesSourceType sourceType) {
+        if (sourceType == SalesSourceType.ERP) {
+            // ERP数据的可选字段较少，大部分由解析器自动处理
+            return Arrays.asList("sku", "quantity", "settlementId");
+        }
+        // 亚马逊原始数据的可选字段
+        return Arrays.asList("sku", "quantity", "transactionType", "productSales", "sellingFees", 
+                "fbaFees", "shippingCredits", "promotionalRebates", "other", "total");
+    }
+    
+    /**
+     * 获取可选字段列表（默认为原始数据）
+     */
+    private List<String> getOptionalFields() {
+        return getOptionalFields(null);
+    }
+    
+    /**
+     * 删除已存在的数据（用于覆盖导入）
+     */
+    private void deleteExistingData(SalesData data) {
+        LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SalesData::getOrderId, data.getOrderId())
+                .eq(SalesData::getSiteCode, data.getSiteCode())
+                .eq(SalesData::getTransactionCategory, data.getTransactionCategory());
+        salesDataMapper.delete(wrapper);
+    }
+    
+    /**
+     * 批量检查重复数据
+     * 一次性查询所有可能存在的订单，避免 N+1 查询
+     * 
+     * @param dataList 待导入数据列表
+     * @return 已存在的订单 key 集合（orderId + siteCode + transactionCategory）
+     */
+    private Set<String> batchCheckDuplicates(List<SalesData> dataList) {
+        Set<String> existingKeys = new HashSet<>();
+        
+        if (dataList == null || dataList.isEmpty()) {
+            return existingKeys;
+        }
+        
+        // 收集所有订单号
+        Set<String> orderIds = dataList.stream()
+                .map(SalesData::getOrderId)
+                .filter(id -> id != null && !id.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+        
+        if (orderIds.isEmpty()) {
+            return existingKeys;
+        }
+        
+        // 分批查询（避免 IN 子句过长）
+        List<String> orderIdList = new ArrayList<>(orderIds);
+        int batchSize = 500;
+        
+        for (int i = 0; i < orderIdList.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, orderIdList.size());
+            List<String> batch = orderIdList.subList(i, end);
+            
+            LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SalesData::getOrderId, batch)
+                    .select(SalesData::getOrderId, SalesData::getSiteCode, SalesData::getTransactionCategory);
+            
+            List<SalesData> existingData = salesDataMapper.selectList(wrapper);
+            
+            for (SalesData data : existingData) {
+                existingKeys.add(buildOrderKey(data));
+            }
+        }
+        
+        return existingKeys;
+    }
+    
+    /**
+     * 构建订单唯一 key
+     */
+    private String buildOrderKey(SalesData data) {
+        return String.format("%s|%s|%s", 
+                data.getOrderId() != null ? data.getOrderId() : "",
+                data.getSiteCode() != null ? data.getSiteCode() : "",
+                data.getTransactionCategory() != null ? data.getTransactionCategory() : "");
+    }
+    
+    /**
+     * 执行批量插入
+     * 
+     * @param batchList 待插入数据列表
+     * @param errors 错误信息列表
+     * @param startRow 起始行号（用于错误信息）
+     * @return 成功插入的数量
+     */
+    private int executeBatchInsert(List<SalesData> batchList, List<String> errors, int startRow) {
+        if (batchList == null || batchList.isEmpty()) {
+            return 0;
+        }
+        
+        int successCount = 0;
+        
+        // 使用逐条插入，捕获单条失败（为保证数据完整性）
+        // 如果需要更高性能，可以使用 JDBC 批量插入
+        for (int i = 0; i < batchList.size(); i++) {
+            try {
+                salesDataMapper.insert(batchList.get(i));
+                successCount++;
+            } catch (Exception e) {
+                if (errors.size() < 100) {
+                    errors.add(String.format("第%d行: %s", startRow + i, e.getMessage()));
+                }
+            }
+        }
+        
+        return successCount;
+    }
+    
+    /**
+     * 映射导入状态
+     */
+    private String mapImportStatus(String dbStatus) {
+        if (dbStatus == null) return "PENDING";
+        return switch (dbStatus) {
+            case "processing" -> "PROCESSING";
+            case "success" -> "SUCCESS";
+            case "partial" -> "PARTIAL";
+            case "fail" -> "FAIL";
+            default -> "PENDING";
+        };
     }
 }

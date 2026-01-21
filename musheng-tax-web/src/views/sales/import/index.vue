@@ -3,167 +3,354 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1 class="page-title">销售数据导入</h1>
-      <p class="page-desc">上传亚马逊销售报告文件，系统将自动解析并导入数据</p>
+      <p class="page-desc">支持亚马逊原始数据和ERP结算数据两种格式导入</p>
     </div>
 
     <!-- 导入步骤 -->
     <a-card class="steps-card">
-      <a-steps :current="currentStep" :items="stepItems" />
+      <a-steps :current="currentStep" :items="stepItems" size="small" />
     </a-card>
 
-    <!-- 步骤1: 选择站点和模板 -->
+    <!-- 步骤1: 选择站点 -->
     <a-card v-show="currentStep === 0" class="step-card">
-      <a-form
-        ref="step1FormRef"
-        :model="importForm"
-        :rules="step1Rules"
-        :label-col="{ span: 4 }"
-        :wrapper-col="{ span: 12 }"
-      >
-        <a-form-item label="选择站点" name="marketplaceId">
-          <a-select
-            v-model:value="importForm.marketplaceId"
-            placeholder="请选择导入数据所属站点"
-            show-search
-            :filter-option="filterOption"
-            @change="handleMarketplaceChange"
+      <div class="step-content">
+        <h3 class="step-title">选择站点</h3>
+        <p class="step-desc">请选择导入数据所属的亚马逊站点</p>
+        
+        <div class="site-grid">
+          <div
+            v-for="site in siteOptions"
+            :key="site.code"
+            :class="['site-item', { active: formState.siteCode === site.code }]"
+            @click="formState.siteCode = site.code"
           >
-            <a-select-option
-              v-for="marketplace in marketplaceOptions"
-              :key="marketplace.id"
-              :value="marketplace.id"
-            >
-              {{ marketplace.siteCode }} - {{ marketplace.siteName }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+            <div class="site-code">{{ site.code }}</div>
+            <div class="site-name">{{ site.name }}</div>
+          </div>
+        </div>
+      </div>
 
-        <a-form-item label="字段映射模板" name="templateId">
-          <a-select
-            v-model:value="importForm.templateId"
-            placeholder="请选择字段映射模板"
-            :disabled="!importForm.marketplaceId"
+      <div class="step-actions">
+        <a-button type="primary" :disabled="!formState.siteCode" @click="goToStep(1)">
+          下一步 <RightOutlined />
+        </a-button>
+      </div>
+    </a-card>
+
+    <!-- 步骤2: 选择数据源类型 -->
+    <a-card v-show="currentStep === 1" class="step-card">
+      <div class="step-content">
+        <h3 class="step-title">选择数据源类型</h3>
+        <p class="step-desc">请选择要导入的数据格式</p>
+        
+        <div class="source-type-grid">
+          <div
+            v-for="type in sourceTypeOptions"
+            :key="type.value"
+            :class="['source-type-item', { active: formState.sourceType === type.value }]"
+            @click="handleSourceTypeChange(type.value)"
           >
-            <a-select-option
-              v-for="template in templateOptions"
-              :key="template.id"
-              :value="template.id"
-            >
-              {{ template.name }}
-              <a-tag v-if="template.isDefault" color="gold" size="small">默认</a-tag>
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+            <div class="type-icon">
+              <FileTextOutlined v-if="type.value === 'ORIGINAL'" />
+              <DatabaseOutlined v-else />
+            </div>
+            <div class="type-info">
+              <div class="type-label">{{ type.label }}</div>
+              <div class="type-desc">{{ type.description }}</div>
+            </div>
+          </div>
+        </div>
 
-        <a-form-item label="数据季度" name="quarter">
-          <a-date-picker
-            v-model:value="importForm.quarterDate"
-            picker="quarter"
-            placeholder="选择数据所属季度（可选）"
-            style="width: 100%"
-          />
-        </a-form-item>
+        <a-alert
+          v-if="formState.sourceType === 'ORIGINAL'"
+          type="info"
+          show-icon
+          class="source-tip"
+        >
+          <template #message>亚马逊原始数据说明</template>
+          <template #description>
+            <ul class="tip-list">
+              <li>每个国家单独文件，系统将自动识别站点</li>
+              <li>文件前7-8行为说明信息，系统会自动跳过</li>
+              <li>每行是一笔订单的完整信息</li>
+            </ul>
+          </template>
+        </a-alert>
 
-        <a-form-item :wrapper-col="{ offset: 4, span: 12 }">
-          <a-button type="primary" @click="handleStep1Next">
+        <a-alert
+          v-if="formState.sourceType === 'ERP'"
+          type="info"
+          show-icon
+          class="source-tip"
+        >
+          <template #message>ERP结算数据说明</template>
+          <template #description>
+            <ul class="tip-list">
+              <li>多国家合并在一个文件中</li>
+              <li>每行是一笔费用明细（系统会自动聚合为订单维度）</li>
+              <li>中文表头，无需跳过说明行</li>
+            </ul>
+          </template>
+        </a-alert>
+      </div>
+
+      <div class="step-actions">
+        <a-space>
+          <a-button @click="goToStep(0)">
+            <LeftOutlined /> 上一步
+          </a-button>
+          <a-button type="primary" :disabled="!formState.sourceType" @click="goToStep(2)">
             下一步 <RightOutlined />
           </a-button>
-        </a-form-item>
-      </a-form>
+        </a-space>
+      </div>
     </a-card>
 
-    <!-- 步骤2: 上传文件 -->
-    <a-card v-show="currentStep === 1" class="step-card">
-      <div class="upload-area">
-        <a-upload-dragger
-          v-model:file-list="fileList"
-          name="file"
-          :multiple="false"
-          :before-upload="beforeUpload"
-          :custom-request="handleUpload"
-          accept=".csv,.xlsx,.xls"
-          :disabled="uploading"
-        >
-          <p class="ant-upload-drag-icon">
-            <InboxOutlined />
-          </p>
-          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
-          <p class="ant-upload-hint">
-            支持 CSV、Excel (.xlsx, .xls) 格式，单个文件最大 50MB
-          </p>
-        </a-upload-dragger>
+    <!-- 步骤3: 选择映射模板 -->
+    <a-card v-show="currentStep === 2" class="step-card">
+      <div class="step-content">
+        <h3 class="step-title">选择字段映射模板</h3>
+        <p class="step-desc">选择与数据格式匹配的映射模板</p>
+        
+        <a-spin :spinning="loadingTemplates">
+          <div v-if="templateOptions.length > 0" class="template-list">
+            <div
+              v-for="template in templateOptions"
+              :key="template.id"
+              :class="['template-item', { active: formState.templateId === template.id }]"
+              @click="formState.templateId = template.id"
+            >
+              <div class="template-info">
+                <div class="template-name">
+                  {{ template.templateName }}
+                  <a-tag v-if="template.isDefault" color="gold" size="small">默认</a-tag>
+                </div>
+                <div class="template-meta">
+                  <span v-if="template.siteCode">站点: {{ template.siteCode }}</span>
+                  <span>映射字段: {{ template.mappingCount }}个</span>
+                </div>
+              </div>
+              <CheckCircleFilled v-if="formState.templateId === template.id" class="check-icon" />
+            </div>
+          </div>
+          <a-empty v-else description="暂无可用模板，请先创建字段映射模板" />
+        </a-spin>
 
-        <div v-if="uploadedFileInfo" class="uploaded-file-info">
-          <a-card size="small">
-            <a-descriptions :column="2">
-              <a-descriptions-item label="文件名">{{ uploadedFileInfo.fileName }}</a-descriptions-item>
-              <a-descriptions-item label="文件大小">{{ formatFileSize(uploadedFileInfo.fileSize) }}</a-descriptions-item>
+        <a-form-item label="数据季度" class="quarter-form">
+          <a-date-picker
+            v-model:value="formState.quarterDate"
+            picker="quarter"
+            placeholder="选择数据所属季度（可选）"
+            style="width: 200px"
+          />
+        </a-form-item>
+      </div>
+
+      <div class="step-actions">
+        <a-space>
+          <a-button @click="goToStep(1)">
+            <LeftOutlined /> 上一步
+          </a-button>
+          <a-button type="primary" :disabled="!formState.templateId" @click="goToStep(3)">
+            下一步 <RightOutlined />
+          </a-button>
+        </a-space>
+      </div>
+    </a-card>
+
+    <!-- 步骤4: 上传文件 -->
+    <a-card v-show="currentStep === 3" class="step-card">
+      <div class="step-content">
+        <h3 class="step-title">上传数据文件</h3>
+        <p class="step-desc">上传CSV格式的销售数据文件</p>
+        
+        <div class="upload-area">
+          <a-upload-dragger
+            v-model:file-list="fileList"
+            name="file"
+            :multiple="false"
+            :before-upload="beforeUpload"
+            :custom-request="handleUpload"
+            accept=".csv"
+            :disabled="uploading"
+          >
+            <p class="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+            <p class="ant-upload-hint">支持 CSV 格式，单个文件最大 100MB</p>
+          </a-upload-dragger>
+        </div>
+
+        <div v-if="uploadResult" class="upload-result">
+          <a-card size="small" title="文件解析结果">
+            <a-descriptions :column="3" size="small">
+              <a-descriptions-item label="文件名" :span="2">{{ uploadResult.fileName }}</a-descriptions-item>
+              <a-descriptions-item label="文件大小">{{ formatFileSize(uploadResult.fileSize) }}</a-descriptions-item>
+              <a-descriptions-item label="数据行数">{{ uploadResult.totalRows }} 行</a-descriptions-item>
+              <a-descriptions-item label="表头行号">第 {{ uploadResult.headerRow }} 行</a-descriptions-item>
+              <a-descriptions-item label="识别站点">
+                <a-tag v-if="uploadResult.detectedSiteCode" color="blue">{{ uploadResult.detectedSiteCode }}</a-tag>
+                <span v-else>-</span>
+              </a-descriptions-item>
+              <a-descriptions-item label="源字段数" :span="3">{{ uploadResult.sourceFields?.length || 0 }} 个</a-descriptions-item>
             </a-descriptions>
+
+            <a-divider>源字段列表</a-divider>
+            <div class="source-fields">
+              <a-tag v-for="field in uploadResult.sourceFields?.slice(0, 15)" :key="field">
+                {{ field }}
+              </a-tag>
+              <a-tag v-if="(uploadResult.sourceFields?.length || 0) > 15">
+                +{{ uploadResult.sourceFields!.length - 15 }} 更多
+              </a-tag>
+            </div>
           </a-card>
         </div>
       </div>
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="currentStep = 0">
+          <a-button @click="goToStep(2)">
             <LeftOutlined /> 上一步
           </a-button>
-          <a-button type="primary" :disabled="!uploadedFileInfo" @click="handleStep2Next">
-            下一步 <RightOutlined />
+          <a-button 
+            type="primary" 
+            :disabled="!uploadResult" 
+            :loading="previewing"
+            @click="handlePreview"
+          >
+            预览数据 <RightOutlined />
           </a-button>
         </a-space>
       </div>
     </a-card>
 
-    <!-- 步骤3: 确认导入 -->
-    <a-card v-show="currentStep === 2" class="step-card">
-      <a-descriptions title="导入信息确认" :column="2" bordered>
-        <a-descriptions-item label="站点">
-          {{ getMarketplaceName(importForm.marketplaceId) }}
-        </a-descriptions-item>
-        <a-descriptions-item label="映射模板">
-          {{ getTemplateName(importForm.templateId) }}
-        </a-descriptions-item>
-        <a-descriptions-item label="数据季度">
-          {{ importForm.quarterDate?.format('YYYY年Q季度') || '未指定' }}
-        </a-descriptions-item>
-        <a-descriptions-item label="文件名">
-          {{ uploadedFileInfo?.fileName }}
-        </a-descriptions-item>
-        <a-descriptions-item label="文件大小">
-          {{ formatFileSize(uploadedFileInfo?.fileSize || 0) }}
-        </a-descriptions-item>
-      </a-descriptions>
+    <!-- 步骤5: 预览确认 -->
+    <a-card v-show="currentStep === 4" class="step-card">
+      <div class="step-content">
+        <h3 class="step-title">预览确认</h3>
+        <p class="step-desc">请确认解析后的数据是否正确</p>
+        
+        <a-spin :spinning="previewing">
+          <div v-if="previewResult" class="preview-section">
+            <!-- 导入配置概览 -->
+            <a-descriptions title="导入配置" :column="4" size="small" bordered class="config-summary">
+              <a-descriptions-item label="站点">{{ formState.siteCode }}</a-descriptions-item>
+              <a-descriptions-item label="数据源">{{ getSourceTypeLabel() }}</a-descriptions-item>
+              <a-descriptions-item label="模板">{{ getTemplateName() }}</a-descriptions-item>
+              <a-descriptions-item label="季度">{{ formState.quarterDate?.format('YYYY-Q') || '未指定' }}</a-descriptions-item>
+            </a-descriptions>
 
-      <a-alert
-        class="import-tip"
-        type="info"
-        show-icon
-        message="导入说明"
-        description="点击开始导入后，系统将在后台处理数据。您可以在导入记录页面查看进度和结果。"
-      />
+            <!-- 映射状态 -->
+            <div class="mapping-status">
+              <a-statistic-countdown
+                title="映射字段"
+                :value="previewResult.mappingStatus.mappedFields"
+                :suffix="`/ ${previewResult.mappingStatus.totalFields}`"
+                :value-style="{ color: previewResult.mappingStatus.requiredMissing.length > 0 ? '#cf1322' : '#3f8600' }"
+              />
+              <a-alert
+                v-if="previewResult.mappingStatus.requiredMissing.length > 0"
+                type="error"
+                show-icon
+                class="mapping-warning"
+              >
+                <template #message>缺少必填字段映射</template>
+                <template #description>
+                  {{ previewResult.mappingStatus.requiredMissing.join(', ') }}
+                </template>
+              </a-alert>
+            </div>
+
+            <!-- 警告信息 -->
+            <a-alert
+              v-for="(warning, index) in previewResult.warnings"
+              :key="index"
+              type="warning"
+              :message="warning"
+              show-icon
+              class="preview-warning"
+            />
+
+            <!-- 数据预览表格 -->
+            <a-table
+              :columns="previewColumns"
+              :data-source="previewResult.data"
+              :pagination="false"
+              size="small"
+              :scroll="{ x: 1200 }"
+              class="preview-table"
+            />
+
+            <div class="preview-info">
+              <a-typography-text type="secondary">
+                共 {{ previewResult.totalRows }} 条数据，以上显示前 {{ previewResult.previewRows }} 条
+              </a-typography-text>
+            </div>
+          </div>
+        </a-spin>
+
+        <!-- 导入选项 -->
+        <div class="import-options">
+          <a-checkbox v-model:checked="importOptions.skipDuplicate">
+            跳过重复数据
+          </a-checkbox>
+          <a-checkbox v-model:checked="importOptions.overwriteDuplicate" :disabled="importOptions.skipDuplicate">
+            覆盖重复数据
+          </a-checkbox>
+        </div>
+      </div>
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="currentStep = 1">
+          <a-button @click="goToStep(3)">
             <LeftOutlined /> 上一步
           </a-button>
-          <a-button type="primary" :loading="importing" @click="handleStartImport">
+          <a-button 
+            type="primary" 
+            :loading="importing"
+            :disabled="(previewResult?.mappingStatus?.requiredMissing?.length ?? 0) > 0"
+            @click="handleExecuteImport"
+          >
             <CloudUploadOutlined /> 开始导入
           </a-button>
         </a-space>
       </div>
     </a-card>
 
-    <!-- 步骤4: 导入结果 -->
-    <a-card v-show="currentStep === 3" class="step-card">
+    <!-- 导入结果弹窗 -->
+    <a-modal
+      v-model:open="showResultModal"
+      :title="importResult?.status === 'SUCCESS' ? '导入成功' : '导入完成'"
+      :footer="null"
+      :closable="false"
+      :maskClosable="false"
+      width="500px"
+    >
       <a-result
-        :status="importResult?.status === 2 ? 'success' : importResult?.status === 4 ? 'error' : 'info'"
+        :status="getResultStatus()"
         :title="getResultTitle()"
         :sub-title="getResultSubTitle()"
       >
         <template #extra>
-          <a-space>
+          <div v-if="importResult" class="result-stats">
+            <a-row :gutter="16">
+              <a-col :span="8">
+                <a-statistic title="总记录" :value="importResult.totalCount" />
+              </a-col>
+              <a-col :span="8">
+                <a-statistic title="成功" :value="importResult.successCount" :value-style="{ color: '#3f8600' }" />
+              </a-col>
+              <a-col :span="8">
+                <a-statistic title="失败" :value="importResult.failCount" :value-style="{ color: '#cf1322' }" />
+              </a-col>
+            </a-row>
+            <div v-if="importResult.skipCount > 0" class="skip-info">
+              跳过重复数据: {{ importResult.skipCount }} 条
+            </div>
+          </div>
+          <a-space class="result-actions">
             <a-button type="primary" @click="handleViewRecords">
               查看导入记录
             </a-button>
@@ -172,135 +359,162 @@
             </a-button>
           </a-space>
         </template>
-
-        <template v-if="importResult" #icon>
-          <LoadingOutlined v-if="importResult.status === 1" spin style="color: #1890ff" />
-        </template>
       </a-result>
-
-      <div v-if="importResult" class="import-progress">
-        <a-descriptions :column="3" size="small">
-          <a-descriptions-item label="批次号">
-            <a-typography-text copyable>{{ importResult.batchNo }}</a-typography-text>
-          </a-descriptions-item>
-          <a-descriptions-item label="总行数">{{ importResult.totalRows }}</a-descriptions-item>
-          <a-descriptions-item label="成功">
-            <span class="success-text">{{ importResult.successRows }}</span>
-          </a-descriptions-item>
-          <a-descriptions-item label="失败">
-            <span class="error-text">{{ importResult.failedRows }}</span>
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-    </a-card>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import type { FormInstance, UploadProps, UploadFile } from 'ant-design-vue'
+import type { UploadProps, UploadFile } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import {
   RightOutlined,
   LeftOutlined,
   InboxOutlined,
   CloudUploadOutlined,
-  LoadingOutlined
+  FileTextOutlined,
+  DatabaseOutlined,
+  CheckCircleFilled
 } from '@ant-design/icons-vue'
-import { getEnabledMarketplaces } from '@/api/marketplace'
-import { getEnabledTemplates } from '@/api/fieldMapping'
-import { importSalesData } from '@/api/sales'
-import { simpleUpload } from '@/api/upload'
-import type { Marketplace } from '@/types/marketplace'
-import type { FieldMappingTemplate } from '@/types/fieldMapping'
-import type { ImportRecord } from '@/types/importRecord'
+import {
+  uploadSalesFile,
+  previewSalesImport,
+  executeSalesImport,
+  getTemplatesByType
+} from '@/api/sales'
+import type {
+  SalesSourceType,
+  SalesUploadResult,
+  SalesPreviewResult,
+  SalesImportResult,
+  FieldMappingTemplateOption
+} from '@/types/sales'
 
 const router = useRouter()
 
 // ============= 步骤相关 =============
 const currentStep = ref(0)
 const stepItems = [
-  { title: '选择配置', description: '站点和模板' },
-  { title: '上传文件', description: 'CSV/Excel' },
-  { title: '确认导入', description: '核对信息' },
-  { title: '导入结果', description: '查看状态' }
+  { title: '选择站点' },
+  { title: '数据源类型' },
+  { title: '选择模板' },
+  { title: '上传文件' },
+  { title: '预览确认' }
 ]
 
-// ============= 表单相关 =============
-const step1FormRef = ref<FormInstance>()
-const importForm = reactive<{
-  marketplaceId: number | undefined
-  templateId: number | undefined
+// ============= 站点选项 =============
+const siteOptions = [
+  { code: 'US', name: '美国站' },
+  { code: 'UK', name: '英国站' },
+  { code: 'DE', name: '德国站' },
+  { code: 'CA', name: '加拿大站' },
+  { code: 'FR', name: '法国站' },
+  { code: 'IT', name: '意大利站' },
+  { code: 'ES', name: '西班牙站' }
+]
+
+// ============= 数据源类型选项 =============
+const sourceTypeOptions = [
+  { 
+    value: 'ORIGINAL' as SalesSourceType, 
+    label: '亚马逊原始数据',
+    description: '按国家分散的CSV文件，每行是完整订单信息'
+  },
+  { 
+    value: 'ERP' as SalesSourceType, 
+    label: 'ERP结算数据',
+    description: '多国家合并文件，每行是费用明细'
+  }
+]
+
+// ============= 表单状态 =============
+const formState = reactive<{
+  siteCode: string
+  sourceType: SalesSourceType | null
+  templateId: number | null
   quarterDate: Dayjs | null
 }>({
-  marketplaceId: undefined,
-  templateId: undefined,
+  siteCode: '',
+  sourceType: null,
+  templateId: null,
   quarterDate: null
 })
 
-const step1Rules = {
-  marketplaceId: [{ required: true, message: '请选择站点', trigger: 'change' }],
-  templateId: [{ required: true, message: '请选择字段映射模板', trigger: 'change' }]
-}
-
-// ============= 选项数据 =============
-const marketplaceOptions = ref<Marketplace[]>([])
-const templateOptions = ref<FieldMappingTemplate[]>([])
+// ============= 模板相关 =============
+const loadingTemplates = ref(false)
+const templateOptions = ref<FieldMappingTemplateOption[]>([])
 
 // ============= 上传相关 =============
 const fileList = ref<UploadFile[]>([])
 const uploading = ref(false)
-const uploadedFileInfo = ref<{ fileId: string; fileName: string; fileSize: number } | null>(null)
+const uploadResult = ref<SalesUploadResult | null>(null)
+
+// ============= 预览相关 =============
+const previewing = ref(false)
+const previewResult = ref<SalesPreviewResult | null>(null)
 
 // ============= 导入相关 =============
 const importing = ref(false)
-const importResult = ref<ImportRecord | null>(null)
+const importResult = ref<SalesImportResult | null>(null)
+const showResultModal = ref(false)
+const importOptions = reactive({
+  skipDuplicate: true,
+  overwriteDuplicate: false
+})
+
+// ============= 预览表格列 =============
+const previewColumns = computed(() => {
+  if (!previewResult.value?.columns) return []
+  return previewResult.value.columns.map(col => ({
+    title: col.label,
+    dataIndex: col.field,
+    key: col.field,
+    width: 120,
+    ellipsis: true
+  }))
+})
 
 // ============= 方法 =============
-function filterOption(input: string, option: any): boolean {
-  const marketplace = marketplaceOptions.value.find(m => m.siteCode === option.value)
-  if (!marketplace) return false
-  const searchText = input.toLowerCase()
-  return marketplace.siteCode.toLowerCase().includes(searchText) ||
-         marketplace.siteName.toLowerCase().includes(searchText)
+function goToStep(step: number) {
+  currentStep.value = step
 }
 
-async function fetchMarketplaces() {
-  try {
-    const res = await getEnabledMarketplaces()
-    marketplaceOptions.value = res.data || []
-  } catch (error) {
-    console.error('获取站点列表失败:', error)
-  }
+function handleSourceTypeChange(type: SalesSourceType) {
+  formState.sourceType = type
+  formState.templateId = null
+  // 加载对应类型的模板
+  fetchTemplates()
 }
 
 async function fetchTemplates() {
+  if (!formState.sourceType) return
+  
+  loadingTemplates.value = true
   try {
-    const res = await getEnabledTemplates('SALES')
+    const res = await getTemplatesByType('SALES', formState.sourceType, formState.siteCode)
     templateOptions.value = res.data || []
     // 自动选择默认模板
     const defaultTemplate = templateOptions.value.find(t => t.isDefault)
     if (defaultTemplate) {
-      importForm.templateId = defaultTemplate.id
+      formState.templateId = defaultTemplate.id
     }
   } catch (error) {
     console.error('获取模板列表失败:', error)
+    message.error('获取模板列表失败')
+  } finally {
+    loadingTemplates.value = false
   }
 }
 
-function handleMarketplaceChange() {
-  // 站点变更时重新加载模板（如果模板与站点关联）
-  fetchTemplates()
+function getTemplateName(): string {
+  return templateOptions.value.find(t => t.id === formState.templateId)?.templateName || '-'
 }
 
-function getMarketplaceName(id?: number): string {
-  return marketplaceOptions.value.find(m => m.id === id)?.siteName || '-'
-}
-
-function getTemplateName(id?: number): string {
-  return templateOptions.value.find(t => t.id === id)?.name || '-'
+function getSourceTypeLabel(): string {
+  return sourceTypeOptions.find(t => t.value === formState.sourceType)?.label || '-'
 }
 
 function formatFileSize(bytes: number): string {
@@ -309,30 +523,16 @@ function formatFileSize(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(2) + ' MB'
 }
 
-async function handleStep1Next() {
-  try {
-    await step1FormRef.value?.validate()
-    currentStep.value = 1
-  } catch {
-    // 验证失败
-  }
-}
-
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-  const isValidType = [
-    'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ].includes(file.type) || file.name.endsWith('.csv')
-  
-  if (!isValidType) {
-    message.error('只能上传 CSV 或 Excel 文件!')
+  const isCSV = file.type === 'text/csv' || file.name.endsWith('.csv')
+  if (!isCSV) {
+    message.error('只能上传 CSV 文件!')
     return false
   }
 
-  const isLt50M = file.size / 1024 / 1024 < 50
-  if (!isLt50M) {
-    message.error('文件大小不能超过 50MB!')
+  const isLt100M = file.size / 1024 / 1024 < 100
+  if (!isLt100M) {
+    message.error('文件大小不能超过 100MB!')
     return false
   }
 
@@ -342,160 +542,405 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
 const handleUpload: UploadProps['customRequest'] = async (options) => {
   const { file, onSuccess, onError } = options
   uploading.value = true
+  uploadResult.value = null
   
   try {
-    const res = await simpleUpload(file as File, 'SALES', importForm.marketplaceId)
-    uploadedFileInfo.value = {
-      fileId: res.data.fileId,
-      fileName: res.data.fileName,
-      fileSize: res.data.fileSize
-    }
+    const res = await uploadSalesFile(
+      file as File, 
+      formState.sourceType!, 
+      formState.siteCode
+    )
+    uploadResult.value = res.data
     onSuccess?.(res.data)
-    message.success('文件上传成功')
+    message.success('文件上传并解析成功')
+    
+    // 如果检测到站点，更新表单
+    if (res.data.detectedSiteCode && formState.sourceType === 'ORIGINAL') {
+      formState.siteCode = res.data.detectedSiteCode
+    }
   } catch (error: any) {
     onError?.(error)
-    message.error('文件上传失败')
+    message.error('文件上传失败: ' + (error.message || '未知错误'))
   } finally {
     uploading.value = false
   }
 }
 
-function handleStep2Next() {
-  if (!uploadedFileInfo.value) {
-    message.warning('请先上传文件')
+async function handlePreview() {
+  if (!uploadResult.value || !formState.templateId) {
+    message.warning('请先上传文件并选择模板')
     return
   }
-  currentStep.value = 2
+
+  previewing.value = true
+  try {
+    const res = await previewSalesImport({
+      fileId: uploadResult.value.fileId,
+      sourceType: formState.sourceType!,
+      siteCode: formState.siteCode,
+      templateId: formState.templateId,
+      quarter: formState.quarterDate?.format('YYYY-Q')
+    })
+    previewResult.value = res.data
+    goToStep(4)
+  } catch (error: any) {
+    message.error('预览失败: ' + (error.message || '未知错误'))
+  } finally {
+    previewing.value = false
+  }
 }
 
-async function handleStartImport() {
-  if (!uploadedFileInfo.value) {
-    message.warning('请先上传文件')
+async function handleExecuteImport() {
+  if (!uploadResult.value || !formState.templateId) {
+    message.warning('请先完成上传和配置')
     return
   }
 
   importing.value = true
   try {
-    const res = await importSalesData({
-      marketplaceId: importForm.marketplaceId!,
-      templateId: importForm.templateId!,
-      fileId: uploadedFileInfo.value.fileId,
-      quarter: importForm.quarterDate?.format('YYYY-Q') || undefined
+    const res = await executeSalesImport({
+      fileId: uploadResult.value.fileId,
+      sourceType: formState.sourceType!,
+      siteCode: formState.siteCode,
+      templateId: formState.templateId,
+      quarter: formState.quarterDate?.format('YYYY-Q'),
+      skipDuplicate: importOptions.skipDuplicate,
+      overwriteDuplicate: importOptions.overwriteDuplicate
     })
     importResult.value = res.data
-    currentStep.value = 3
+    showResultModal.value = true
     message.success('导入任务已提交')
-  } catch (error) {
-    console.error('导入失败:', error)
-    message.error('导入失败')
+  } catch (error: any) {
+    message.error('导入失败: ' + (error.message || '未知错误'))
   } finally {
     importing.value = false
+  }
+}
+
+function getResultStatus(): 'success' | 'error' | 'info' | 'warning' {
+  if (!importResult.value) return 'info'
+  switch (importResult.value.status) {
+    case 'SUCCESS': return 'success'
+    case 'FAIL': return 'error'
+    case 'PARTIAL': return 'warning'
+    default: return 'info'
   }
 }
 
 function getResultTitle(): string {
   if (!importResult.value) return ''
   switch (importResult.value.status) {
-    case 1: return '正在处理中...'
-    case 2: return '导入成功'
-    case 3: return '部分导入成功'
-    case 4: return '导入失败'
+    case 'SUCCESS': return '导入成功'
+    case 'FAIL': return '导入失败'
+    case 'PARTIAL': return '部分导入成功'
+    case 'PROCESSING': return '正在处理中...'
     default: return '等待处理'
   }
 }
 
 function getResultSubTitle(): string {
   if (!importResult.value) return ''
-  if (importResult.value.status === 1) {
-    return '系统正在后台处理数据，请稍候查看导入记录'
+  const { successCount, failCount, totalCount } = importResult.value
+  if (importResult.value.status === 'PROCESSING') {
+    return `批次号: ${importResult.value.batchNo}，系统正在后台处理`
   }
-  if (importResult.value.failedRows > 0) {
-    return `成功导入 ${importResult.value.successRows} 条，失败 ${importResult.value.failedRows} 条`
+  if (failCount > 0) {
+    return `成功导入 ${successCount}/${totalCount} 条，失败 ${failCount} 条`
   }
-  return `成功导入 ${importResult.value.successRows} 条数据`
+  return `成功导入 ${successCount} 条数据`
 }
 
 function handleViewRecords() {
+  showResultModal.value = false
   router.push('/config/import-record')
 }
 
 function handleImportAgain() {
+  showResultModal.value = false
+  // 重置状态
   currentStep.value = 0
+  formState.siteCode = ''
+  formState.sourceType = null
+  formState.templateId = null
+  formState.quarterDate = null
   fileList.value = []
-  uploadedFileInfo.value = null
+  uploadResult.value = null
+  previewResult.value = null
   importResult.value = null
-  importForm.marketplaceId = undefined
-  importForm.templateId = undefined
-  importForm.quarterDate = null
+  templateOptions.value = []
 }
 
 // 初始化
 onMounted(() => {
-  fetchMarketplaces()
-  fetchTemplates()
+  // 无需初始加载
 })
 </script>
 
 <style lang="scss" scoped>
 .sales-import-page {
-  padding: $spacing-lg;
+  padding: 24px;
 
   .page-header {
-    margin-bottom: $spacing-lg;
+    margin-bottom: 24px;
 
     .page-title {
-      font-size: $font-size-xl;
+      font-size: 20px;
       font-weight: 600;
-      color: $text-color;
-      margin: 0 0 $spacing-xs 0;
+      color: #262626;
+      margin: 0 0 8px 0;
     }
 
     .page-desc {
-      font-size: $font-size-md;
-      color: $text-color-secondary;
+      font-size: 14px;
+      color: #8c8c8c;
       margin: 0;
     }
   }
 
   .steps-card {
-    margin-bottom: $spacing-lg;
+    margin-bottom: 24px;
   }
 
   .step-card {
-    .upload-area {
-      max-width: 600px;
-      margin: 0 auto;
+    .step-content {
+      min-height: 300px;
     }
 
-    .uploaded-file-info {
-      margin-top: $spacing-md;
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+    }
+
+    .step-desc {
+      color: #8c8c8c;
+      margin-bottom: 24px;
     }
 
     .step-actions {
-      margin-top: $spacing-lg;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #f0f0f0;
       text-align: center;
     }
+  }
 
-    .import-tip {
-      margin-top: $spacing-lg;
+  // 站点选择网格
+  .site-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 16px;
+    max-width: 600px;
+
+    .site-item {
+      padding: 16px;
+      border: 2px solid #f0f0f0;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+
+      &:hover {
+        border-color: #1890ff;
+      }
+
+      &.active {
+        border-color: #1890ff;
+        background: #e6f7ff;
+      }
+
+      .site-code {
+        font-size: 18px;
+        font-weight: 600;
+        color: #262626;
+      }
+
+      .site-name {
+        font-size: 12px;
+        color: #8c8c8c;
+        margin-top: 4px;
+      }
     }
   }
 
-  .import-progress {
-    margin-top: $spacing-lg;
-    padding: $spacing-md;
-    background: $background-color-light;
-    border-radius: $border-radius-md;
+  // 数据源类型选择
+  .source-type-grid {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+
+    .source-type-item {
+      flex: 1;
+      max-width: 300px;
+      padding: 24px;
+      border: 2px solid #f0f0f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+
+      &:hover {
+        border-color: #1890ff;
+      }
+
+      &.active {
+        border-color: #1890ff;
+        background: #e6f7ff;
+      }
+
+      .type-icon {
+        font-size: 32px;
+        color: #1890ff;
+      }
+
+      .type-info {
+        .type-label {
+          font-size: 16px;
+          font-weight: 600;
+          margin-bottom: 4px;
+        }
+
+        .type-desc {
+          font-size: 12px;
+          color: #8c8c8c;
+        }
+      }
+    }
   }
 
-  .success-text {
-    color: $success-color;
-    font-weight: 600;
+  .source-tip {
+    margin-top: 16px;
+    max-width: 600px;
+
+    .tip-list {
+      margin: 0;
+      padding-left: 20px;
+      
+      li {
+        margin-bottom: 4px;
+      }
+    }
   }
 
-  .error-text {
-    color: $error-color;
-    font-weight: 600;
+  // 模板列表
+  .template-list {
+    max-width: 600px;
+
+    .template-item {
+      padding: 16px;
+      border: 2px solid #f0f0f0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      &:hover {
+        border-color: #1890ff;
+      }
+
+      &.active {
+        border-color: #1890ff;
+        background: #e6f7ff;
+      }
+
+      .template-name {
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      .template-meta {
+        font-size: 12px;
+        color: #8c8c8c;
+
+        span {
+          margin-right: 16px;
+        }
+      }
+
+      .check-icon {
+        font-size: 20px;
+        color: #1890ff;
+      }
+    }
+  }
+
+  .quarter-form {
+    margin-top: 24px;
+    max-width: 400px;
+  }
+
+  // 上传区域
+  .upload-area {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .upload-result {
+    margin-top: 24px;
+    max-width: 600px;
+
+    .source-fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
+
+  // 预览区域
+  .preview-section {
+    .config-summary {
+      margin-bottom: 24px;
+    }
+
+    .mapping-status {
+      margin-bottom: 16px;
+    }
+
+    .mapping-warning {
+      margin-top: 12px;
+    }
+
+    .preview-warning {
+      margin-bottom: 12px;
+    }
+
+    .preview-table {
+      margin-top: 16px;
+    }
+
+    .preview-info {
+      margin-top: 12px;
+      text-align: right;
+    }
+  }
+
+  .import-options {
+    margin-top: 24px;
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+    display: flex;
+    gap: 24px;
+  }
+
+  // 结果弹窗
+  .result-stats {
+    margin-bottom: 24px;
+
+    .skip-info {
+      margin-top: 12px;
+      text-align: center;
+      color: #8c8c8c;
+    }
+  }
+
+  .result-actions {
+    margin-top: 16px;
   }
 }
 </style>

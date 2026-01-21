@@ -18,7 +18,12 @@ export interface FieldMappingTemplate {
   templateName: string
   siteCode: string
   dataType: FieldMappingDataType
+  sourceType?: string  // 数据源类型：ORIGINAL/ERP（仅销售数据有效）
+  subType?: string     // 兼容旧字段（已废弃，使用 sourceType）
   mappingConfig: FieldMappingItem[]  // JSON格式存储
+  sourceFields?: string  // 源字段列表（JSON格式）
+  headerRow?: number     // 表头行号
+  defaultValues?: string // 默认值配置（JSON格式）
   isDefault: boolean
   createBy?: number
   createTime: string
@@ -44,7 +49,11 @@ export interface FieldMappingTemplateForm {
   templateName: string
   siteCode: string
   dataType: FieldMappingDataType
-  mappingConfig: FieldMappingItem[]
+  sourceType?: string  // 数据源类型：ORIGINAL/ERP
+  mappingConfig: FieldMappingItem[] | string  // JSON格式或对象
+  sourceFields?: string  // 源字段列表（JSON格式）
+  headerRow?: number
+  defaultValues?: string  // 默认值配置（JSON格式）
   isDefault?: boolean
 }
 

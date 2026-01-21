@@ -1,14 +1,17 @@
 package com.musheng.business.sales.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.business.sales.dto.*;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.service.SalesDataService;
 import com.musheng.common.annotation.OperationLog;
+import com.musheng.common.enums.SalesSourceType;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -113,5 +116,42 @@ public class SalesDataController {
             @Parameter(description = "结束日期") @RequestParam(required = false) String endDate,
             jakarta.servlet.http.HttpServletResponse response) {
         salesDataService.exportData(siteCode, transactionCategory, startDate, endDate, response);
+    }
+    
+    // ========== 双格式导入相关接口 ==========
+    
+    @Operation(summary = "上传销售数据文件", description = "上传文件并解析表头，返回源字段列表")
+    @PostMapping("/upload")
+    public Result<SalesUploadResult> uploadFile(
+            @Parameter(description = "数据源类型", required = true) @RequestParam SalesSourceType sourceType,
+            @Parameter(description = "站点编码（ERP数据需要预选）") @RequestParam(required = false) String siteCode,
+            @Parameter(description = "上传文件", required = true) @RequestParam("file") MultipartFile file) {
+        SalesUploadResult result = salesDataService.uploadFile(file, sourceType, siteCode);
+        return Result.success(result);
+    }
+    
+    @Operation(summary = "预览导入数据", description = "根据模板预览解析后的数据（前10行）")
+    @PostMapping("/preview")
+    public Result<SalesPreviewResult> previewImport(
+            @Valid @RequestBody SalesPreviewRequest request) {
+        SalesPreviewResult result = salesDataService.previewImport(request);
+        return Result.success(result);
+    }
+    
+    @OperationLog(module = "销售数据", operation = "执行双格式导入")
+    @Operation(summary = "执行导入", description = "根据模板配置执行销售数据导入")
+    @PostMapping("/import/execute")
+    public Result<SalesImportResult> executeImport(
+            @Valid @RequestBody SalesImportRequest request) {
+        SalesImportResult result = salesDataService.executeImport(request);
+        return Result.success(result);
+    }
+    
+    @Operation(summary = "获取导入进度", description = "获取导入任务的实时进度")
+    @GetMapping("/import/progress/{batchNo}")
+    public Result<SalesImportProgress> getImportProgress(
+            @Parameter(description = "导入批次号", required = true) @PathVariable String batchNo) {
+        SalesImportProgress progress = salesDataService.getImportProgress(batchNo);
+        return Result.success(progress);
     }
 }

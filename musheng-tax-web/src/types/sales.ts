@@ -88,3 +88,154 @@ export interface SalesStatByType {
   totalAmount: number
   percentage: number
 }
+
+// ========== 双格式导入相关类型 ==========
+
+/**
+ * 数据源类型
+ */
+export type SalesSourceType = 'ORIGINAL' | 'ERP'
+
+/**
+ * 数据源类型选项
+ */
+export const SalesSourceTypeOptions = [
+  { value: 'ORIGINAL' as SalesSourceType, label: '亚马逊原始数据' },
+  { value: 'ERP' as SalesSourceType, label: 'ERP结算数据' }
+]
+
+/**
+ * 上传文件请求参数
+ */
+export interface SalesUploadParams {
+  file: File
+  sourceType: SalesSourceType
+  siteCode?: string
+}
+
+/**
+ * 上传文件结果
+ */
+export interface SalesUploadResult {
+  fileId: string
+  fileName: string
+  fileSize: number
+  filePath: string
+  totalRows: number
+  headerRow: number
+  sourceFields: string[]
+  detectedSiteCode: string
+  detectedSiteCodes: string[]
+  encoding: string
+  sampleData: Record<string, any>[]
+}
+
+/**
+ * 预览请求参数
+ */
+export interface SalesPreviewParams {
+  fileId: string
+  sourceType: SalesSourceType
+  siteCode: string
+  templateId: number
+  quarter?: string
+}
+
+/**
+ * 列元数据
+ */
+export interface ColumnMeta {
+  field: string
+  label: string
+  type: string
+  sourceField: string
+}
+
+/**
+ * 映射状态
+ */
+export interface MappingStatus {
+  totalFields: number
+  mappedFields: number
+  requiredMissing: string[]
+}
+
+/**
+ * 预览结果
+ */
+export interface SalesPreviewResult {
+  totalRows: number
+  previewRows: number
+  columns: ColumnMeta[]
+  data: Record<string, any>[]
+  mappingStatus: MappingStatus
+  warnings: string[]
+}
+
+/**
+ * 双格式导入请求参数
+ */
+export interface SalesDualImportParams {
+  fileId: string
+  sourceType: SalesSourceType
+  siteCode: string
+  templateId: number
+  quarter?: string
+  skipDuplicate?: boolean
+  overwriteDuplicate?: boolean
+}
+
+/**
+ * 导入结果
+ */
+export interface SalesImportResult {
+  batchNo: string
+  status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'PARTIAL' | 'FAIL'
+  totalCount: number
+  successCount: number
+  failCount: number
+  skipCount: number
+  importRecordId: number
+  async: boolean
+  estimatedSeconds: number
+}
+
+/**
+ * 销售导入错误详情
+ */
+export interface SalesImportErrorDetail {
+  row: number
+  orderId: string
+  error: string
+}
+
+/**
+ * 导入进度
+ */
+export interface SalesImportProgress {
+  batchNo: string
+  status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'PARTIAL' | 'FAIL'
+  totalCount: number
+  processedCount: number
+  successCount: number
+  failCount: number
+  skipCount: number
+  percentage: number
+  message: string
+  errorDetails: SalesImportErrorDetail[]
+  startTime: string
+  endTime?: string
+}
+
+/**
+ * 字段映射模板（用于选择）
+ */
+export interface FieldMappingTemplateOption {
+  id: number
+  templateName: string
+  siteCode: string
+  dataType: string
+  sourceType: string
+  isDefault: boolean
+  mappingCount: number
+}
