@@ -1,0 +1,83 @@
+// ============================================
+// 慕声报税系统 - SCSS变量定义
+// ============================================
+
+// 主题色
+$primary-color: #1890FF;
+$primary-color-hover: #40a9ff;
+$primary-color-active: #096dd9;
+
+// 功能色
+$success-color: #52C41A;
+$warning-color: #FAAD14;
+$error-color: #FF4D4F;
+$info-color: #1890FF;
+
+// 文本色
+$text-color: #262626;
+$text-color-secondary: #8C8C8C;
+$text-color-disabled: #BFBFBF;
+$text-color-inverse: #FFFFFF;
+
+// 边框色
+$border-color: #D9D9D9;
+$border-color-light: #F0F0F0;
+$border-color-dark: #BFBFBF;
+
+// 背景色
+$background-color: #F5F5F5;
+$background-color-light: #FAFAFA;
+$background-color-white: #FFFFFF;
+$background-color-dark: #001529;
+
+// 间距
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+$spacing-xxl: 48px;
+
+// 圆角
+$border-radius-sm: 2px;
+$border-radius-md: 4px;
+$border-radius-lg: 8px;
+
+// 阴影
+$box-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+$box-shadow-md: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+$box-shadow-lg: 0 6px 16px -8px rgba(0, 0, 0, 0.08), 0 9px 28px 0 rgba(0, 0, 0, 0.05), 0 12px 48px 16px rgba(0, 0, 0, 0.03);
+
+// 字体
+$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+$font-size-sm: 12px;
+$font-size-md: 14px;
+$font-size-lg: 16px;
+$font-size-xl: 20px;
+$font-size-xxl: 24px;
+
+// 行高
+$line-height-base: 1.5715;
+
+// 布局
+$header-height: 64px;
+$sidebar-width: 200px;
+$sidebar-collapsed-width: 60px;
+
+// 断点
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
+$breakpoint-xxl: 1600px;
+
+// 最小宽度
+$min-width: 1280px;
+
+// z-index
+$z-index-dropdown: 1050;
+$z-index-modal: 1000;
+$z-index-modal-mask: 999;
+$z-index-message: 1010;
+$z-index-notification: 1010;
+$z-index-tooltip: 1070;

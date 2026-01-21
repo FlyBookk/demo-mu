@@ -1,0 +1,154 @@
+# ============================================
+# Musheng Tax System Configuration
+# ============================================
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: musheng-tax-system
+
+  # Database Configuration
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/musheng_tax?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: ${DB_PASSWORD:root}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: -1ms
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+      enabled: true
+
+  # Jackson Configuration
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+# MyBatis-Plus Configuration
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.musheng.**.entity
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      table-prefix: t_
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Sa-Token Configuration
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  is-read-header: true
+  is-read-cookie: false
+  timeout: 86400
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: true
+
+# Knife4j API Documentation Configuration
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+# Application Custom Configuration
+app:
+  # File Upload Path
+  upload:
+    chunk-dir: ./uploads/chunks
+    final-dir: ./uploads/files
+    temp-dir: ./uploads/temp
+
+  # Company Information
+  company:
+    name-en: dongguanshimushengshangmaoyouxiangongsi
+    tax-id: 91441900MA4WNG4C6H
+
+  # Business Configuration
+  business:
+    purchase-ratio: 0.96
+    rate-defer-max-days: 10
+
+# Rate Sync Configuration
+rate:
+  sync:
+    # 是否启用自动同步 (true/false)
+    enabled: true
+    # 同步时间 Cron 表达式 (默认: 每天早上8:00)
+    cron: "0 0 8 * * ?"
+    check:
+      # 是否启用汇率数据检查 (true/false)
+      enabled: false
+      # 检查时间 Cron 表达式 (默认: 每小时)
+      cron: "0 0 * * * ?"
+
+# China Money API Configuration
+# 中国外汇交易中心接口配置
+china-money:
+  # 是否启用 Cookie（用于绕过反爬虫机制）
+  enable-cookie: true
+  # Cookie 值（从浏览器开发者工具获取，会话有效期内可用）
+  # 获取方式：
+  # 1. 打开浏览器访问 https://www.chinamoney.com.cn/chinese/bkccpr/
+  # 2. 打开开发者工具(F12) -> Network -> 找到 CcprHisNew 请求
+  # 3. 复制 Request Headers 中的 Cookie 值
+  cookie: "lss=c21ab7243ea1585f3bf81b2856caa228; _ulta_id.CM-Prod.e9dc=8655ca423b3f8b91; AlteonP10=AZf0ayw/F6xl9ZV6N/cQIA$; _ulta_ses.CM-Prod.e9dc=7387e7b852425ca3; isLogin=0"
+  # 请求超时时间（毫秒）
+  timeout: 30000
+
+
+# Logging Configuration
+logging:
+  level:
+    root: info
+    com.musheng: debug
+    org.springframework: info
+    com.baomidou.mybatisplus: debug
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
