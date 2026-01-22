@@ -49,14 +49,16 @@ export function getReportSummaryByQuarter(siteCode: string, startQuarter?: strin
  * 导出汇总报表
  */
 export function exportReportSummary(params: ReportQuery) {
-  return request.download(`${BASE_URL}/summary/export`, params)
+  const filename = `汇总报表_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/summary/export`, filename, params)
 }
 
 /**
  * 导出明细报表
  */
 export function exportReportDetail(siteCode: string, yearQuarter: string, reportType?: string) {
-  return request.download(`${BASE_URL}/detail/export`, { siteCode, yearQuarter, reportType })
+  const filename = `明细报表_${siteCode}_${yearQuarter}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/detail/export`, filename, { siteCode, yearQuarter, reportType })
 }
 
 /**
@@ -70,12 +72,14 @@ export function getMarketplaceReportSummary(yearQuarter: string) {
  * 导出汇总报表
  */
 export function exportReport(params: ReportExportParams) {
-  return request.download(`${BASE_URL}/summary/export`, params)
+  const filename = `汇总报表_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/summary/export`, filename, params)
 }
 
 /**
  * 导出明细报表（VAT报表）
  */
 export function exportVatReport(siteCode: string, yearQuarter: string) {
-  return request.download(`${BASE_URL}/detail/export`, { siteCode, yearQuarter, reportType: 'all' })
+  const filename = `VAT报表_${siteCode}_${yearQuarter}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/detail/export`, filename, { siteCode, yearQuarter, reportType: 'all' })
 }

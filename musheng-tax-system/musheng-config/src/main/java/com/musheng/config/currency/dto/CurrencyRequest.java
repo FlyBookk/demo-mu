@@ -2,10 +2,7 @@ package com.musheng.config.currency.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-
-import java.math.BigDecimal;
 
 /**
  * Currency Request DTO
@@ -24,10 +21,6 @@ public class CurrencyRequest {
 
     @Schema(description = "Currency symbol", example = "$")
     private String currencySymbol;
-
-    @Schema(description = "Exchange rate", example = "1.00")
-    @NotNull(message = "Exchange rate is required")
-    private BigDecimal exchangeRate;
 
     @Schema(description = "Decimal places", example = "2")
     private Integer decimalPlaces;

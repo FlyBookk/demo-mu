@@ -13,6 +13,7 @@ import com.musheng.config.importrecord.entity.ImportRecord;
 import com.musheng.config.importrecord.mapper.ImportRecordMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
+import com.musheng.business.rate.service.RateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -43,9 +44,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     private final MarketplaceMapper marketplaceMapper;
     private final ImportRecordMapper importRecordMapper;
     private final CsvParseServiceImpl csvParseService;
+    private final RateService rateService;
+    private final org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
 
     @Override
-    public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId, int page, int size) {
+    public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId,
+                                   String startDate, String endDate, int page, int size) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
 
         if (StringUtils.hasText(siteCode)) {
@@ -57,8 +61,25 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         if (StringUtils.hasText(orderId)) {
             wrapper.like(ShippingData::getOrderId, orderId);
         }
+        // 按发货日期过滤
+        if (StringUtils.hasText(startDate)) {
+            try {
+                java.time.LocalDate start = java.time.LocalDate.parse(startDate);
+                wrapper.ge(ShippingData::getShipDate, start);
+            } catch (Exception e) {
+                log.warn("Invalid start date format: {}", startDate);
+            }
+        }
+        if (StringUtils.hasText(endDate)) {
+            try {
+                java.time.LocalDate end = java.time.LocalDate.parse(endDate);
+                wrapper.le(ShippingData::getShipDate, end);
+            } catch (Exception e) {
+                log.warn("Invalid end date format: {}", endDate);
+            }
+        }
 
-        wrapper.orderByDesc(ShippingData::getCreateTime);
+        wrapper.orderByDesc(ShippingData::getShipDate);
 
         return shippingDataMapper.selectPage(new Page<>(page, size), wrapper);
     }
@@ -107,6 +128,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             List<String> headers = headerResult.getHeaders();
             int headerRowIndex = headerResult.getHeaderRowIndex();
             String charsetName = headerResult.getCharset();
+            String headerLanguage = headerResult.getHeaderLanguage(); // 用于决定数字格式
             java.nio.charset.Charset charset = charsetName != null ?
                     java.nio.charset.Charset.forName(charsetName) : StandardCharsets.UTF_8;
 
@@ -134,7 +156,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                 for (CSVRecord record : parser) {
                     totalCount++;
                     try {
-                        ShippingData shippingData = parseShippingRecord(record, headers, totalCount, marketplaceMap);
+                        ShippingData shippingData = parseShippingRecord(record, headers, totalCount, marketplaceMap, headerLanguage);
 
                         if (shippingData != null) {
                             shippingData.setImportBatchId(importRecord.getId());
@@ -171,15 +193,29 @@ public class ShippingDataServiceImpl implements ShippingDataService {
 
             log.info("Duplicate check completed: {} to insert, {} duplicates", toInsert.size(), duplicates.size());
 
-            // Step 3: Batch insert (使用MyBatis Plus批量插入)
+            // Step 3: Fill exchange rates for each record
+            for (ShippingData data : toInsert) {
+                fillExchangeRate(data);
+            }
+            log.info("Exchange rates filled for {} records", toInsert.size());
+
+            // Step 4: Batch insert (使用 SqlSession BATCH 模式)
             if (!toInsert.isEmpty()) {
                 int batchSize = 500; // 每批500条
                 for (int i = 0; i < toInsert.size(); i += batchSize) {
                     int end = Math.min(i + batchSize, toInsert.size());
                     List<ShippingData> batch = toInsert.subList(i, end);
 
-                    // MyBatis Plus batch insert
-                    batch.forEach(shippingDataMapper::insert);
+                    // 使用 SqlSession BATCH 模式进行真正的批量插入
+                    try (org.apache.ibatis.session.SqlSession sqlSession = sqlSessionFactory.openSession(
+                            org.apache.ibatis.session.ExecutorType.BATCH, false)) {
+                        ShippingDataMapper batchMapper = sqlSession.getMapper(ShippingDataMapper.class);
+                        for (ShippingData data : batch) {
+                            batchMapper.insert(data);
+                        }
+                        sqlSession.flushStatements();
+                        sqlSession.commit();
+                    }
                     successCount += batch.size();
 
                     log.info("Batch inserted records {}-{}/{}", i + 1, end, toInsert.size());
@@ -242,9 +278,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     /**
      * Parse a single CSV record into ShippingData entity (自动识别销售渠道)
      * @param marketplaceMap Pre-loaded marketplace configurations to avoid N+1 queries
+     * @param headerLanguage 表头语言（EN/DE/CN），用于决定数字格式：
+     *                       - DE: 德语表头，使用逗号作为小数分隔符
+     *                       - EN/CN/其他: 使用点作为小数分隔符
      */
     private ShippingData parseShippingRecord(CSVRecord record, List<String> headers, int rowNum,
-                                             Map<String, Marketplace> marketplaceMap) {
+                                             Map<String, Marketplace> marketplaceMap, String headerLanguage) {
 
         Map<String, String> rowData = new HashMap<>();
         for (int i = 0; i < Math.min(headers.size(), record.size()); i++) {
@@ -315,15 +354,19 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         }
 
         // Parse price fields (支持中文列名)
-        shippingData.setProductPrice(parseDecimalFieldMulti(rowData, siteCode, "product price", "item price", "商品价格"));
-        shippingData.setProductTax(parseDecimalFieldMulti(rowData, siteCode, "product tax", "item tax", "商品税"));
-        shippingData.setShippingPrice(parseDecimalFieldMulti(rowData, siteCode, "shipping price", "shipping", "运费"));
-        shippingData.setShippingTax(parseDecimalFieldMulti(rowData, siteCode, "shipping tax", "运费税"));
-        shippingData.setGiftWrapPrice(parseDecimalFieldMulti(rowData, siteCode, "gift wrap price", "giftwrap", "礼品包装价格"));
-        shippingData.setGiftWrapTax(parseDecimalFieldMulti(rowData, siteCode, "gift wrap tax", "礼品包装税费"));
-        shippingData.setProductPromotionDiscount(parseDecimalFieldMulti(rowData, siteCode, "item promotion discount", "product promotion", "商品促销折扣"));
-        shippingData.setShipmentPromotionDiscount(parseDecimalFieldMulti(rowData, siteCode, "ship promotion discount", "shipment promotion", "货件促销折扣"));
-        shippingData.setShippingCost(parseDecimalFieldMulti(rowData, siteCode, "shipping cost", "cost"));
+        // 注意：使用 headerLanguage 而不是 siteCode 来决定数字格式
+        // 只有德语表头(DE)的文件才使用逗号作为小数分隔符
+        // 中文表头(CN)和英文表头(EN)的文件使用点作为小数分隔符
+        String numberFormatLocale = "DE".equals(headerLanguage) ? "DE" : "EN";
+        shippingData.setProductPrice(parseDecimalFieldMulti(rowData, numberFormatLocale, "product price", "item price", "商品价格"));
+        shippingData.setProductTax(parseDecimalFieldMulti(rowData, numberFormatLocale, "product tax", "item tax", "商品税"));
+        shippingData.setShippingPrice(parseDecimalFieldMulti(rowData, numberFormatLocale, "shipping price", "shipping", "运费"));
+        shippingData.setShippingTax(parseDecimalFieldMulti(rowData, numberFormatLocale, "shipping tax", "运费税"));
+        shippingData.setGiftWrapPrice(parseDecimalFieldMulti(rowData, numberFormatLocale, "gift wrap price", "giftwrap", "礼品包装价格"));
+        shippingData.setGiftWrapTax(parseDecimalFieldMulti(rowData, numberFormatLocale, "gift wrap tax", "礼品包装税费"));
+        shippingData.setProductPromotionDiscount(parseDecimalFieldMulti(rowData, numberFormatLocale, "item promotion discount", "product promotion", "商品促销折扣"));
+        shippingData.setShipmentPromotionDiscount(parseDecimalFieldMulti(rowData, numberFormatLocale, "ship promotion discount", "shipment promotion", "货件促销折扣"));
+        shippingData.setShippingCost(parseDecimalFieldMulti(rowData, numberFormatLocale, "shipping cost", "cost"));
 
         return shippingData;
     }
@@ -482,6 +525,46 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         return "SHIP-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
+    /**
+     * Fill exchange rate for shipping data based on ship date
+     * If the ship date is a holiday/weekend, the rate service will automatically
+     * use the next workday's rate
+     */
+    private void fillExchangeRate(ShippingData data) {
+        if (data.getShipDate() == null || !StringUtils.hasText(data.getCurrencyCode())) {
+            log.debug("Skipping exchange rate fill: shipDate={}, currencyCode={}",
+                    data.getShipDate(), data.getCurrencyCode());
+            return;
+        }
+
+        // CNY doesn't need exchange rate conversion
+        if ("CNY".equalsIgnoreCase(data.getCurrencyCode())) {
+            data.setExchangeRate(BigDecimal.ONE);
+            data.setExchangeRateDate(data.getShipDate());
+            return;
+        }
+
+        try {
+            // Get rate - the rate service handles holiday deferral automatically
+            BigDecimal rate = rateService.getRate(data.getCurrencyCode(), data.getShipDate().toString());
+            data.setExchangeRate(rate);
+
+            // Get actual rate date (after holiday deferral)
+            // For simplicity, we store the ship date here. If you need the actual rate date,
+            // you can call rateService.getRateWithDate() method
+            data.setExchangeRateDate(data.getShipDate());
+
+            log.debug("Exchange rate filled: currency={}, date={}, rate={}",
+                    data.getCurrencyCode(), data.getShipDate(), rate);
+        } catch (Exception e) {
+            log.warn("Failed to get exchange rate for currency={}, date={}: {}",
+                    data.getCurrencyCode(), data.getShipDate(), e.getMessage());
+            // Don't fail the import, just leave the rate as null
+            data.setExchangeRate(null);
+            data.setExchangeRateDate(null);
+        }
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
@@ -535,21 +618,43 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         summary.put("totalOrders", dataList.size());
         summary.put("totalQuantity", dataList.stream()
                 .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0).sum());
-        summary.put("totalProductPrice", dataList.stream()
-                .map(d -> d.getProductPrice() != null ? d.getProductPrice() : java.math.BigDecimal.ZERO)
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
-        summary.put("totalShippingPrice", dataList.stream()
-                .map(d -> d.getShippingPrice() != null ? d.getShippingPrice() : java.math.BigDecimal.ZERO)
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
-        summary.put("totalShippingCost", dataList.stream()
-                .map(d -> d.getShippingCost() != null ? d.getShippingCost() : java.math.BigDecimal.ZERO)
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
-        summary.put("totalRevenueTotal", dataList.stream()
-                .map(d -> d.getRevenueTotal() != null ? d.getRevenueTotal() : java.math.BigDecimal.ZERO)
-                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
-        summary.put("currencyCode", dataList.isEmpty() ? "USD" : dataList.get(0).getCurrencyCode());
+
+        // 按汇率转换为人民币后汇总（多站点数据统一货币）
+        summary.put("totalProductPriceCny", dataList.stream()
+                .map(d -> convertToCny(d.getProductPrice(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalShippingPriceCny", dataList.stream()
+                .map(d -> convertToCny(d.getShippingPrice(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalShippingCostCny", dataList.stream()
+                .map(d -> convertToCny(d.getShippingCost(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalRevenueTotalCny", dataList.stream()
+                .map(d -> convertToCny(d.getRevenueTotal(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        // 货币统一为人民币
+        summary.put("currencyCode", "CNY");
 
         return summary;
+    }
+
+    /**
+     * 将金额按汇率转换为人民币
+     * @param amount 原始金额
+     * @param exchangeRate 汇率（对人民币）
+     * @return 人民币金额
+     */
+    private BigDecimal convertToCny(BigDecimal amount, BigDecimal exchangeRate) {
+        if (amount == null) {
+            return BigDecimal.ZERO;
+        }
+        if (exchangeRate == null || exchangeRate.compareTo(BigDecimal.ZERO) == 0) {
+            // 如果没有汇率，返回0（避免错误累加）
+            log.warn("Missing exchange rate for conversion, amount={}", amount);
+            return BigDecimal.ZERO;
+        }
+        return amount.multiply(exchangeRate);
     }
 
     @Override
@@ -594,7 +699,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                 // Create header row
                 org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
                 String[] headers = {"订单号", "站点", "发货日期", "SKU", "数量", "产品价格",
-                        "运费价格", "运费成本", "收入合计", "货币", "承运商", "追踪号"};
+                        "运费价格", "运费成本", "收入合计", "货币", "汇率", "汇率日期", "承运商", "追踪号"};
                 for (int i = 0; i < headers.length; i++) {
                     headerRow.createCell(i).setCellValue(headers[i]);
                 }
@@ -613,8 +718,10 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                     row.createCell(7).setCellValue(data.getShippingCost() != null ? data.getShippingCost().doubleValue() : 0);
                     row.createCell(8).setCellValue(data.getRevenueTotal() != null ? data.getRevenueTotal().doubleValue() : 0);
                     row.createCell(9).setCellValue(data.getCurrencyCode());
-                    row.createCell(10).setCellValue(data.getCarrier());
-                    row.createCell(11).setCellValue(data.getTrackingNumber());
+                    row.createCell(10).setCellValue(data.getExchangeRate() != null ? data.getExchangeRate().doubleValue() : 0);
+                    row.createCell(11).setCellValue(data.getExchangeRateDate() != null ? data.getExchangeRateDate().toString() : "");
+                    row.createCell(12).setCellValue(data.getCarrier());
+                    row.createCell(13).setCellValue(data.getTrackingNumber());
                 }
 
                 workbook.write(outputStream);

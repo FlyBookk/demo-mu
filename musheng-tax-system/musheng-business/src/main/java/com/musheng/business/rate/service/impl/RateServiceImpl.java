@@ -12,6 +12,8 @@ import com.musheng.business.rate.mapper.HolidayMapper;
 import com.musheng.business.rate.service.RateService;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
+import com.musheng.config.currency.entity.Currency;
+import com.musheng.config.currency.mapper.CurrencyMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -46,6 +48,7 @@ public class RateServiceImpl implements RateService {
 
     private final ExchangeRateMapper exchangeRateMapper;
     private final HolidayMapper holidayMapper;
+    private final CurrencyMapper currencyMapper;
 
     /**
      * Maximum days to defer for holiday
@@ -288,11 +291,20 @@ public class RateServiceImpl implements RateService {
             throw new BusinessException(ErrorCode.IMPORT_FILE_FORMAT_ERROR, "File name is empty");
         }
 
+        // 获取已配置的货币列表（只导入已配置的货币）
+        Set<String> configuredCurrencies = getConfiguredCurrencyCodes();
+        log.info("Configured currencies: {}", configuredCurrencies);
+
+        if (configuredCurrencies.isEmpty()) {
+            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
+                    "没有配置任何货币，请先在货币管理中添加货币");
+        }
+
         // 判断文件类型
         if (fileName.toLowerCase().endsWith(".xlsx") || fileName.toLowerCase().endsWith(".xls")) {
-            return importExcelData(file);
+            return importExcelData(file, configuredCurrencies);
         } else if (fileName.toLowerCase().endsWith(".csv")) {
-            return importCsvData(file);
+            return importCsvData(file, configuredCurrencies);
         } else {
             throw new BusinessException(ErrorCode.IMPORT_FILE_FORMAT_ERROR,
                     "Unsupported file format. Please use .xlsx, .xls or .csv file");
@@ -300,23 +312,39 @@ public class RateServiceImpl implements RateService {
     }
 
     /**
+     * 获取已配置的货币代码集合（状态为启用）
+     */
+    private Set<String> getConfiguredCurrencyCodes() {
+        LambdaQueryWrapper<Currency> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Currency::getStatus, 1);  // 只取启用状态的货币
+        List<Currency> currencies = currencyMapper.selectList(wrapper);
+        return currencies.stream()
+                .map(Currency::getCurrencyCode)
+                .map(String::toUpperCase)
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * Import exchange rates from CSV file
      * Optimized: batch insert to avoid N+1 query problem
+     * - Skip currencies not configured in currency management
      * - Skip if date+currency already exists (no update)
      * - Batch insert new records
-     * - Return: totalCount, successCount, existsCount, failCount
+     * - Return: totalCount, successCount, existsCount, failCount, skipCount
      */
-    private Map<String, Object> importCsvData(MultipartFile file) {
+    private Map<String, Object> importCsvData(MultipartFile file, Set<String> configuredCurrencies) {
         Map<String, Object> result = new HashMap<>();
         List<String> errors = new ArrayList<>();
         int totalCount = 0;
         int successCount = 0;
         int failCount = 0;
+        int skipCount = 0;  // 跳过未配置货币的数量
         AtomicInteger existsCount = new AtomicInteger();
 
         // 收集待导入的数据
         List<ExchangeRate> ratesToImport = new ArrayList<>();
         Set<String> uniqueKeys = new HashSet<>();  // 用于检测文件内重复
+        Set<String> skippedCurrencies = new HashSet<>();  // 记录跳过的货币
 
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
@@ -342,6 +370,13 @@ public class RateServiceImpl implements RateService {
                     String dateStr = record.get(dateIdx).trim();
                     String currency = record.get(currencyIdx).trim().toUpperCase();
                     String rateStr = record.get(rateIdx).trim();
+
+                    // 检查货币是否已配置（未配置则跳过）
+                    if (!configuredCurrencies.contains(currency)) {
+                        skipCount++;
+                        skippedCurrencies.add(currency);
+                        continue;
+                    }
 
                     // Parse date
                     LocalDate rateDate = parseRateDate(dateStr);
@@ -436,10 +471,12 @@ public class RateServiceImpl implements RateService {
         result.put("successCount", successCount);
         result.put("existsCount", existsCount);
         result.put("failCount", failCount);
+        result.put("skipCount", skipCount);
+        result.put("skippedCurrencies", skippedCurrencies);
         result.put("errors", errors.size() > 10 ? errors.subList(0, 10) : errors);
 
-        log.info("CSV import completed: total={}, success={}, exists={}, fail={}",
-                totalCount, successCount, existsCount, failCount);
+        log.info("CSV import completed: total={}, success={}, exists={}, fail={}, skip={}, skippedCurrencies={}",
+                totalCount, successCount, existsCount, failCount, skipCount, skippedCurrencies);
 
         return result;
     }
@@ -448,21 +485,24 @@ public class RateServiceImpl implements RateService {
      * Import exchange rates from Excel file (matrix format)
      * Format: First column is date, other columns are currency pairs (e.g., USD/CNY, EUR/CNY)
      * Optimized: batch insert to avoid N+1 query problem
+     * - Skip currencies not configured in currency management
      * - Skip if date+currency already exists (no update)
      * - Batch insert new records
-     * - Return: totalCount, successCount, existsCount, failCount
+     * - Return: totalCount, successCount, existsCount, failCount, skipCount
      */
-    private Map<String, Object> importExcelData(MultipartFile file) {
+    private Map<String, Object> importExcelData(MultipartFile file, Set<String> configuredCurrencies) {
         Map<String, Object> result = new HashMap<>();
         List<String> errors = new ArrayList<>();
         int totalCount = 0;
         int successCount = 0;
         int failCount = 0;
+        int skipCount = 0;  // 跳过未配置货币的数量
         AtomicInteger existsCount = new AtomicInteger();
 
         // 收集待导入的数据
         List<ExchangeRate> ratesToImport = new ArrayList<>();
         Set<String> uniqueKeys = new HashSet<>();  // 用于检测文件内重复
+        Set<String> skippedCurrencies = new HashSet<>();  // 记录跳过的货币
 
         try {
             // Read Excel file with headers
@@ -492,7 +532,9 @@ public class RateServiceImpl implements RateService {
             }
 
             // Get currency column mappings (column index -> currency code)
+            // 只保留已配置的货币
             Map<Integer, String> currencyColumns = new HashMap<>();
+            Set<String> unconfiguredCurrenciesInHeader = new HashSet<>();
             for (Map.Entry<Integer, String> entry : headerRow.entrySet()) {
                 int colIndex = entry.getKey();
                 if (colIndex == 0) continue; // Skip date column
@@ -500,16 +542,24 @@ public class RateServiceImpl implements RateService {
                 String columnName = entry.getValue();
                 String currencyCode = parseCurrencyCode(columnName);
                 if (currencyCode != null) {
-                    currencyColumns.put(colIndex, currencyCode);
+                    // 检查货币是否已配置
+                    if (configuredCurrencies.contains(currencyCode.toUpperCase())) {
+                        currencyColumns.put(colIndex, currencyCode.toUpperCase());
+                    } else {
+                        unconfiguredCurrenciesInHeader.add(currencyCode);
+                    }
                 }
             }
 
             if (currencyColumns.isEmpty()) {
                 throw new BusinessException(ErrorCode.IMPORT_HEADER_NOT_FOUND,
-                        "No valid currency columns found. Expected format: USD/CNY, EUR/CNY, etc.");
+                        "No configured currency columns found. Found currencies in file: " + unconfiguredCurrenciesInHeader +
+                        ". Please configure these currencies first or use a file with configured currencies.");
             }
 
-            log.info("Found {} currency columns: {}", currencyColumns.size(), currencyColumns.values());
+            log.info("Found {} configured currency columns: {}, unconfigured currencies skipped: {}",
+                    currencyColumns.size(), currencyColumns.values(), unconfiguredCurrenciesInHeader);
+            skippedCurrencies.addAll(unconfiguredCurrenciesInHeader);
 
             // Process each row
             for (Map<Integer, String> row : dataList) {
@@ -636,10 +686,12 @@ public class RateServiceImpl implements RateService {
         result.put("successCount", successCount);
         result.put("existsCount", existsCount);
         result.put("failCount", failCount);
+        result.put("skipCount", skipCount);
+        result.put("skippedCurrencies", skippedCurrencies);
         result.put("errors", errors.size() > 10 ? errors.subList(0, 10) : errors);
 
-        log.info("Excel import completed: total={}, success={}, exists={}, fail={}",
-                totalCount, successCount, existsCount, failCount);
+        log.info("Excel import completed: total={}, success={}, exists={}, fail={}, skip={}, skippedCurrencies={}",
+                totalCount, successCount, existsCount, failCount, skipCount, skippedCurrencies);
 
         return result;
     }

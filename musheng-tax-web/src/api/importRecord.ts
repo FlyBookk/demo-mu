@@ -48,7 +48,8 @@ export function batchDeleteImportRecord(ids: number[]) {
  * 下载错误报告
  */
 export function downloadErrorReport(id: number) {
-  return request.download(`${BASE_URL}/${id}/error-report`)
+  const filename = `导入错误报告_${id}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/${id}/error-report`, filename)
 }
 
 /**

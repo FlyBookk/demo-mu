@@ -65,14 +65,16 @@ export function getModuleOperationStats(startTime?: string, endTime?: string) {
  * 导出操作日志
  */
 export function exportOperationLogs(params: OperationLogQuery) {
-  return request.download(`${BASE_URL}/operation/export`, params)
+  const filename = `操作日志_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/operation/export`, filename, params)
 }
 
 /**
  * 导出登录日志
  */
 export function exportLoginLogs(params: LoginLogQuery) {
-  return request.download(`${BASE_URL}/login/export`, params)
+  const filename = `登录日志_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/login/export`, filename, params)
 }
 
 /**

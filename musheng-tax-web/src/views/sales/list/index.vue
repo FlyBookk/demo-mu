@@ -100,7 +100,7 @@
       </a-form>
     </a-card>
 
-    <!-- 统计卡片 -->
+    <!-- 统计卡片（按汇率换算为人民币汇总） -->
     <a-row :gutter="16" class="stat-row">
       <a-col :span="6">
         <a-card class="stat-card">
@@ -111,23 +111,22 @@
       </a-col>
       <a-col :span="6">
         <a-card class="stat-card">
-          <a-statistic title="产品销售" :value="summary.totalProductSales" :precision="2" :value-style="{ color: '#52c41a' }">
-            <template #prefix><DollarOutlined /></template>
-            <template #suffix>{{ summary.currencyCode }}</template>
+          <a-statistic title="产品销售(CNY)" :value="summary.totalProductSalesCny" :precision="2" :value-style="{ color: '#52c41a' }">
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card class="stat-card">
-          <a-statistic title="销售费用" :value="summary.totalSellingFees" :precision="2" :value-style="{ color: '#faad14' }">
-            <template #prefix><PercentageOutlined /></template>
+          <a-statistic title="销售费用(CNY)" :value="summary.totalSellingFeesCny" :precision="2" :value-style="{ color: '#faad14' }">
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card class="stat-card">
-          <a-statistic title="FBA费用" :value="summary.totalFbaFees" :precision="2" :value-style="{ color: '#ff4d4f' }">
-            <template #prefix><ContainerOutlined /></template>
+          <a-statistic title="FBA费用(CNY)" :value="summary.totalFbaFeesCny" :precision="2" :value-style="{ color: '#ff4d4f' }">
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
@@ -218,20 +217,33 @@
         <a-descriptions-item label="数量">{{ detailData.quantity || 0 }}</a-descriptions-item>
         <a-descriptions-item label="货币">{{ detailData.currencyCode }}</a-descriptions-item>
         <a-descriptions-item label="配送方式">{{ detailData.fulfillment || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="产品销售">{{ formatAmount(detailData.productSales, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="产品税">{{ formatAmount(detailData.productSalesTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="运费收入">{{ formatAmount(detailData.shippingCredits, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="运费税">{{ formatAmount(detailData.shippingCreditsTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="促销折扣">{{ formatAmount(detailData.promotionalRebates, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="促销折扣税">{{ formatAmount(detailData.promotionalRebatesTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="销售费用">{{ formatAmount(detailData.sellingFees, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="FBA费用">{{ formatAmount(detailData.fbaFees, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="其他交易费">{{ formatAmount(detailData.otherTransactionFees, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="其他">{{ formatAmount(detailData.other, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="合计" :span="2">
-          <span class="highlight-amount">{{ formatAmount(detailData.total, detailData.currencyCode) }}</span>
+        <!-- 收入类金额 -->
+        <a-descriptions-item label="产品销售">{{ formatAmount(detailData.productSales) }}</a-descriptions-item>
+        <a-descriptions-item label="产品税">{{ formatAmount(detailData.productSalesTax) }}</a-descriptions-item>
+        <a-descriptions-item label="运费支出">{{ formatAmount(detailData.shippingCredits) }}</a-descriptions-item>
+        <a-descriptions-item label="运费税">{{ formatAmount(detailData.shippingCreditsTax) }}</a-descriptions-item>
+        <a-descriptions-item label="礼品包装费">{{ formatAmount(detailData.giftWrapCredits) }}</a-descriptions-item>
+        <a-descriptions-item label="礼品包装税">{{ formatAmount(detailData.giftWrapCreditsTax) }}</a-descriptions-item>
+        <a-descriptions-item label="监管费">{{ formatAmount(detailData.regulatoryFee) }}</a-descriptions-item>
+        <a-descriptions-item label="监管费税">{{ formatAmount(detailData.regulatoryFeeTax) }}</a-descriptions-item>
+        <a-descriptions-item label="促销折扣">{{ formatAmount(detailData.promotionalRebates) }}</a-descriptions-item>
+        <a-descriptions-item label="促销折扣税">{{ formatAmount(detailData.promotionalRebatesTax) }}</a-descriptions-item>
+        <!-- 平台代扣税 -->
+        <a-descriptions-item label="平台代扣税" :span="2">
+          <span class="warning-amount">{{ formatAmount(detailData.marketplaceWithheldTax) }}</span>
         </a-descriptions-item>
-        <a-descriptions-item label="导入时间" :span="2">{{ detailData.createTime }}</a-descriptions-item>
+        <!-- 费用类金额 -->
+        <a-descriptions-item label="销售费用">{{ formatAmount(detailData.sellingFees) }}</a-descriptions-item>
+        <a-descriptions-item label="FBA费用">{{ formatAmount(detailData.fbaFees) }}</a-descriptions-item>
+        <a-descriptions-item label="其他交易费">{{ formatAmount(detailData.otherTransactionFees) }}</a-descriptions-item>
+        <a-descriptions-item label="其他">{{ formatAmount(detailData.other) }}</a-descriptions-item>
+        <!-- 合计 -->
+        <a-descriptions-item label="合计" :span="2">
+          <span class="highlight-amount">{{ formatAmount(detailData.total) }}</span>
+        </a-descriptions-item>
+        <!-- 汇率信息 -->
+        <a-descriptions-item label="汇率">{{ detailData.exchangeRate ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="导入时间">{{ detailData.createTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
   </div>
@@ -286,9 +298,9 @@ function getTransactionCategoryLabel(category?: string): string {
   return transactionCategoryOptions.find(t => t.value === category)?.label || category || '-'
 }
 
-function formatAmount(amount: number | null | undefined, currency: string): string {
+function formatAmount(amount: number | null | undefined): string {
   const value = amount ?? 0
-  return `${currency || ''} ${value.toFixed(2)}`
+  return value.toFixed(2)
 }
 
 // ============= 搜索相关 =============
@@ -305,16 +317,16 @@ const loading = ref(false)
 const tableData = ref<SalesData[]>([])
 const selectedRowKeys = ref<number[]>([])
 
-// ============= 统计数据 =============
+// ============= 统计数据（人民币汇总） =============
 const summary = reactive<SalesSummary>({
   totalOrders: 0,
   totalQuantity: 0,
-  totalProductSales: 0,
-  totalSellingFees: 0,
-  totalFbaFees: 0,
-  totalOtherFees: 0,
-  totalAmount: 0,
-  currencyCode: 'USD'
+  totalProductSalesCny: 0,
+  totalSellingFeesCny: 0,
+  totalFbaFeesCny: 0,
+  totalOtherFeesCny: 0,
+  totalAmountCny: 0,
+  currencyCode: 'CNY'
 })
 
 const columns = [
@@ -384,6 +396,19 @@ const columns = [
     dataIndex: 'total',
     key: 'total',
     width: 120,
+    align: 'right' as const
+  },
+  {
+    title: '货币',
+    dataIndex: 'currencyCode',
+    key: 'currencyCode',
+    width: 80
+  },
+  {
+    title: '汇率',
+    dataIndex: 'exchangeRate',
+    key: 'exchangeRate',
+    width: 90,
     align: 'right' as const
   },
   {
@@ -598,6 +623,11 @@ onMounted(() => {
     font-size: $font-size-lg;
     font-weight: 600;
     color: $primary-color;
+  }
+
+  .warning-amount {
+    font-weight: 500;
+    color: $warning-color;
   }
 }
 </style>

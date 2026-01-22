@@ -19,11 +19,13 @@ public interface ShippingDataService {
      * @param siteCode       站点编码(可选)
      * @param trackingNumber 物流单号(可选)
      * @param orderId        订单号(可选)
+     * @param startDate      开始日期(发货日期，可选)
+     * @param endDate        结束日期(发货日期，可选)
      * @param page           页码
      * @param size           每页条数
      * @return 分页结果
      */
-    Page<ShippingData> list(String siteCode, String trackingNumber, String orderId, int page, int size);
+    Page<ShippingData> list(String siteCode, String trackingNumber, String orderId, String startDate, String endDate, int page, int size);
 
     /**
      * 根据ID获取配送数据

@@ -109,5 +109,6 @@ export function checkUsernameAvailable(username: string, excludeId?: number) {
  * 导出用户列表
  */
 export function exportUsers(params: UserQuery) {
-  return request.download(`${BASE_URL}/export`, params)
+  const filename = `用户列表_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }

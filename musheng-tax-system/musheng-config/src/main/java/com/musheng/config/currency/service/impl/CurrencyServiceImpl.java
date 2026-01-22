@@ -117,7 +117,6 @@ public class CurrencyServiceImpl implements CurrencyService {
         entity.setCurrencyCode(request.getCurrencyCode());
         entity.setCurrencyName(request.getCurrencyName());
         entity.setCurrencySymbol(request.getCurrencySymbol());
-        entity.setExchangeRate(request.getExchangeRate());
         entity.setDecimalPlaces(request.getDecimalPlaces());
         entity.setStatus(request.getStatus());
     }

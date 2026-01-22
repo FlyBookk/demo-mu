@@ -24,8 +24,7 @@ public class SalesImportRequest {
     @NotNull(message = "数据源类型不能为空")
     private SalesSourceType sourceType;
     
-    @Schema(description = "站点编码", required = true, example = "US")
-    @NotBlank(message = "站点编码不能为空")
+    @Schema(description = "站点编码（原始数据模式必填，ERP模式可选-系统自动识别）", example = "US")
     private String siteCode;
     
     @Schema(description = "字段映射模板ID", required = true)

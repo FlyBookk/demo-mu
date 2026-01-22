@@ -61,6 +61,8 @@ public class SalesDataServiceImpl implements SalesDataService {
     private final CsvParseServiceImpl csvParseService;
     private final ObjectMapper objectMapper;
     private final SalesDataParserFactory parserFactory;
+    private final com.musheng.business.rate.service.RateService rateService;
+    private final org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
     
     // 文件缓存（临时存储上传的文件信息）
     private final Map<String, UploadedFileCache> uploadedFileCache = new ConcurrentHashMap<>();
@@ -500,24 +502,83 @@ public class SalesDataServiceImpl implements SalesDataService {
         summary.put("totalOrders", dataList.size());
         summary.put("totalQuantity", dataList.stream()
                 .mapToInt(d -> d.getQuantity() != null ? d.getQuantity() : 0).sum());
-        summary.put("totalProductSales", dataList.stream()
-                .map(d -> d.getProductSales() != null ? d.getProductSales() : BigDecimal.ZERO)
+
+        // 按汇率转换为人民币后汇总（多站点数据统一货币）
+        summary.put("totalProductSalesCny", dataList.stream()
+                .map(d -> convertToCny(d.getProductSales(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalSellingFees", dataList.stream()
-                .map(d -> d.getSellingFees() != null ? d.getSellingFees() : BigDecimal.ZERO)
+        summary.put("totalSellingFeesCny", dataList.stream()
+                .map(d -> convertToCny(d.getSellingFees(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalFbaFees", dataList.stream()
-                .map(d -> d.getFbaFees() != null ? d.getFbaFees() : BigDecimal.ZERO)
+        summary.put("totalFbaFeesCny", dataList.stream()
+                .map(d -> convertToCny(d.getFbaFees(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalOtherFees", dataList.stream()
-                .map(d -> d.getOtherTransactionFees() != null ? d.getOtherTransactionFees() : BigDecimal.ZERO)
+        summary.put("totalOtherFeesCny", dataList.stream()
+                .map(d -> convertToCny(d.getOtherTransactionFees(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalAmount", dataList.stream()
-                .map(d -> d.getTotal() != null ? d.getTotal() : BigDecimal.ZERO)
+        summary.put("totalAmountCny", dataList.stream()
+                .map(d -> convertToCny(d.getTotal(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("currencyCode", dataList.isEmpty() ? "USD" : dataList.get(0).getCurrencyCode());
+
+        // 货币统一为人民币
+        summary.put("currencyCode", "CNY");
 
         return summary;
+    }
+
+    /**
+     * 将金额按汇率转换为人民币
+     * @param amount 原始金额
+     * @param exchangeRate 汇率（对人民币）
+     * @return 人民币金额
+     */
+    private BigDecimal convertToCny(BigDecimal amount, BigDecimal exchangeRate) {
+        if (amount == null) {
+            return BigDecimal.ZERO;
+        }
+        if (exchangeRate == null || exchangeRate.compareTo(BigDecimal.ZERO) == 0) {
+            // 如果没有汇率，返回0（避免错误累加）
+            log.warn("Missing exchange rate for conversion, amount={}", amount);
+            return BigDecimal.ZERO;
+        }
+        return amount.multiply(exchangeRate);
+    }
+
+    /**
+     * 填充汇率信息
+     * 根据交易日期获取当天汇率，如果是节假日/周末则取下一个工作日汇率
+     */
+    private void fillExchangeRate(SalesData data) {
+        if (data.getTransactionDate() == null || !StringUtils.hasText(data.getCurrencyCode())) {
+            log.debug("Skipping exchange rate fill: transactionDate={}, currencyCode={}",
+                    data.getTransactionDate(), data.getCurrencyCode());
+            return;
+        }
+
+        // 人民币不需要汇率转换
+        if ("CNY".equalsIgnoreCase(data.getCurrencyCode())) {
+            data.setExchangeRate(BigDecimal.ONE);
+            data.setExchangeRateDate(data.getTransactionDate().toLocalDate());
+            return;
+        }
+
+        try {
+            // 获取交易日期
+            java.time.LocalDate transactionDate = data.getTransactionDate().toLocalDate();
+            // 获取汇率（RateService会自动处理节假日/周末延迟）
+            BigDecimal rate = rateService.getRate(data.getCurrencyCode(), transactionDate.toString());
+            data.setExchangeRate(rate);
+            data.setExchangeRateDate(transactionDate);
+
+            log.debug("Exchange rate filled: currency={}, date={}, rate={}",
+                    data.getCurrencyCode(), transactionDate, rate);
+        } catch (Exception e) {
+            log.warn("Failed to get exchange rate for currency={}, date={}: {}",
+                    data.getCurrencyCode(), data.getTransactionDate(), e.getMessage());
+            // 不中断导入，只是汇率为空
+            data.setExchangeRate(null);
+            data.setExchangeRateDate(null);
+        }
     }
 
     @Override
@@ -946,10 +1007,12 @@ public class SalesDataServiceImpl implements SalesDataService {
             
             List<SalesData> dataList = parseResult.getDataList();
             
-            // 批量设置额外字段
+            // 批量设置额外字段和汇率
             for (SalesData data : dataList) {
                 data.setImportBatchId(importRecord.getId());
                 data.setSourceType(request.getSourceType().getCode());
+                // 填充汇率
+                fillExchangeRate(data);
             }
             
             // 批量检查重复（一次性查询所有可能重复的订单）
@@ -1349,22 +1412,41 @@ public class SalesDataServiceImpl implements SalesDataService {
             return 0;
         }
         
-        int successCount = 0;
-        
-        // 使用逐条插入，捕获单条失败（为保证数据完整性）
-        // 如果需要更高性能，可以使用 JDBC 批量插入
-        for (int i = 0; i < batchList.size(); i++) {
-            try {
-                salesDataMapper.insert(batchList.get(i));
-                successCount++;
-            } catch (Exception e) {
-                if (errors.size() < 100) {
-                    errors.add(String.format("第%d行: %s", startRow + i, e.getMessage()));
+        try {
+            // 使用 MyBatis-Plus 的批量插入（通过 SqlSession BATCH 模式）
+            try (org.apache.ibatis.session.SqlSession sqlSession = sqlSessionFactory.openSession(
+                    org.apache.ibatis.session.ExecutorType.BATCH, false)) {
+                
+                SalesDataMapper batchMapper = sqlSession.getMapper(SalesDataMapper.class);
+                
+                for (SalesData data : batchList) {
+                    batchMapper.insert(data);
+                }
+                
+                sqlSession.flushStatements();
+                sqlSession.commit();
+            }
+            
+            log.info("Batch insert {} records successfully", batchList.size());
+            return batchList.size();
+            
+        } catch (Exception e) {
+            log.error("Batch insert failed, falling back to single insert: {}", e.getMessage());
+            
+            // 批量失败时回退到逐条插入以保证部分成功
+            int successCount = 0;
+            for (int i = 0; i < batchList.size(); i++) {
+                try {
+                    salesDataMapper.insert(batchList.get(i));
+                    successCount++;
+                } catch (Exception ex) {
+                    if (errors.size() < 100) {
+                        errors.add(String.format("第%d行: %s", startRow + i, ex.getMessage()));
+                    }
                 }
             }
+            return successCount;
         }
-        
-        return successCount;
     }
     
     /**

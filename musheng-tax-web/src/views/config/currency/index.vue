@@ -154,17 +154,6 @@
           />
         </a-form-item>
 
-        <a-form-item label="汇率" name="exchangeRate">
-          <a-input-number
-            v-model:value="formData.exchangeRate"
-            :min="0"
-            :precision="6"
-            :step="0.01"
-            style="width: 100%"
-            placeholder="对人民币汇率"
-          />
-        </a-form-item>
-
         <a-form-item label="小数位数" name="decimalPlaces">
           <a-input-number
             v-model:value="formData.decimalPlaces"
@@ -236,13 +225,6 @@ const columns = [
     align: 'center' as const
   },
   {
-    title: '汇率',
-    dataIndex: 'exchangeRate',
-    key: 'exchangeRate',
-    width: 120,
-    align: 'right' as const
-  },
-  {
     title: '小数位数',
     dataIndex: 'decimalPlaces',
     key: 'decimalPlaces',
@@ -299,7 +281,6 @@ const formData = reactive<CurrencyForm>({
   currencyCode: '',
   currencyName: '',
   currencySymbol: '',
-  exchangeRate: 1,
   decimalPlaces: 2,
   status: 1
 })
@@ -317,9 +298,6 @@ const formRules = {
   currencySymbol: [
     { required: true, message: '请输入货币符号', trigger: 'blur' },
     { max: 10, message: '货币符号不能超过10个字符', trigger: 'blur' }
-  ],
-  exchangeRate: [
-    { required: true, message: '请输入汇率', trigger: 'blur' }
   ]
 }
 
@@ -384,7 +362,6 @@ function handleEdit(record: Currency) {
     currencyCode: record.currencyCode,
     currencyName: record.currencyName,
     currencySymbol: record.currencySymbol,
-    exchangeRate: record.exchangeRate || 1,
     decimalPlaces: record.decimalPlaces,
     status: record.status
   })
@@ -430,7 +407,6 @@ async function handleStatusChange(record: Currency, checked: boolean) {
       currencyCode: record.currencyCode,
       currencyName: record.currencyName,
       currencySymbol: record.currencySymbol,
-      exchangeRate: record.exchangeRate || 1,
       decimalPlaces: record.decimalPlaces,
       status: checked ? 1 : 0
     })
@@ -481,7 +457,6 @@ function resetForm() {
     currencyCode: '',
     currencyName: '',
     currencySymbol: '',
-    exchangeRate: 1,
     decimalPlaces: 2,
     status: 1
   })

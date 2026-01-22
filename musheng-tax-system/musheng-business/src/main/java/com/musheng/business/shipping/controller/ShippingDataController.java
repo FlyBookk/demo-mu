@@ -34,9 +34,11 @@ public class ShippingDataController {
             @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
             @Parameter(description = "物流单号") @RequestParam(required = false) String trackingNumber,
             @Parameter(description = "订单号") @RequestParam(required = false) String orderId,
+            @Parameter(description = "开始日期(发货日期)") @RequestParam(required = false) String startDate,
+            @Parameter(description = "结束日期(发货日期)") @RequestParam(required = false) String endDate,
             @Parameter(description = "页码(从1开始)") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") int size) {
-        Page<ShippingData> pageResult = shippingDataService.list(siteCode, trackingNumber, orderId, page, size);
+        Page<ShippingData> pageResult = shippingDataService.list(siteCode, trackingNumber, orderId, startDate, endDate, page, size);
         PageResult<ShippingData> result = PageResult.of(
                 pageResult.getRecords(),
                 pageResult.getTotal(),

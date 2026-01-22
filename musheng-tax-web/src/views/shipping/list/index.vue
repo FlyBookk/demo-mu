@@ -83,34 +83,26 @@
       </a-form>
     </a-card>
 
-    <!-- 统计卡片 -->
+    <!-- 统计卡片（按汇率换算为人民币汇总） -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
-          <a-statistic title="总发货数" :value="summary.totalShipments" :value-style="{ color: '#1890ff' }">
+          <a-statistic title="总发货数" :value="summary.totalOrders" :value-style="{ color: '#1890ff' }">
             <template #prefix><SendOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
-          <a-statistic title="商品价格" :value="summary.totalProductPrice" :precision="2" :value-style="{ color: '#52c41a' }">
-            <template #prefix><DollarOutlined /></template>
-            <template #suffix>{{ summary.currencyCode }}</template>
+          <a-statistic title="商品价格(CNY)" :value="summary.totalProductPriceCny" :precision="2" :value-style="{ color: '#52c41a' }">
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
-          <a-statistic title="运费收入" :value="summary.totalShippingPrice" :precision="2" :value-style="{ color: '#faad14' }">
-            <template #prefix><DollarOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic title="收入总额" :value="summary.totalRevenueTotal" :precision="2" :value-style="{ color: '#ff4d4f' }">
-            <template #prefix><AccountBookOutlined /></template>
+          <a-statistic title="运费支出(CNY)" :value="summary.totalShippingPriceCny" :precision="2" :value-style="{ color: '#faad14' }">
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
@@ -198,6 +190,8 @@
         </a-descriptions-item>
         <a-descriptions-item label="承运商">{{ detailData.carrier || '-' }}</a-descriptions-item>
         <a-descriptions-item label="物流单号">{{ detailData.trackingNumber || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="汇率">{{ detailData.exchangeRate || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="汇率日期">{{ detailData.exchangeRateDate || '-' }}</a-descriptions-item>
         <a-descriptions-item label="导入时间" :span="2">{{ detailData.createTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
@@ -217,9 +211,7 @@ import {
   CloudUploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  SendOutlined,
-  DollarOutlined,
-  AccountBookOutlined
+  SendOutlined
 } from '@ant-design/icons-vue'
 import {
   getShippingList,
@@ -253,15 +245,15 @@ const loading = ref(false)
 const tableData = ref<ShippingData[]>([])
 const selectedRowKeys = ref<number[]>([])
 
-// ============= 统计数据 =============
+// ============= 统计数据（人民币汇总） =============
 const summary = reactive<ShippingSummary>({
-  totalShipments: 0,
+  totalOrders: 0,
   totalQuantity: 0,
-  totalProductPrice: 0,
-  totalShippingPrice: 0,
-  totalRevenueTotal: 0,
-  totalShippingCost: 0,
-  currencyCode: 'USD'
+  totalProductPriceCny: 0,
+  totalShippingPriceCny: 0,
+  totalRevenueTotalCny: 0,
+  totalShippingCostCny: 0,
+  currencyCode: 'CNY'
 })
 
 const columns = [
@@ -314,10 +306,37 @@ const columns = [
     align: 'right' as const
   },
   {
-    title: '收入总额',
-    dataIndex: 'revenueTotal',
-    key: 'revenueTotal',
+    title: '运费税',
+    dataIndex: 'shippingTax',
+    key: 'shippingTax',
+    width: 90,
+    align: 'right' as const
+  },
+  {
+    title: '礼品包装价格',
+    dataIndex: 'giftWrapPrice',
+    key: 'giftWrapPrice',
     width: 110,
+    align: 'right' as const
+  },
+  {
+    title: '礼品包装税费',
+    dataIndex: 'giftWrapTax',
+    key: 'giftWrapTax',
+    width: 110,
+    align: 'right' as const
+  },
+  {
+    title: '货币',
+    dataIndex: 'currencyCode',
+    key: 'currencyCode',
+    width: 80
+  },
+  {
+    title: '汇率',
+    dataIndex: 'exchangeRate',
+    key: 'exchangeRate',
+    width: 90,
     align: 'right' as const
   },
   {
@@ -332,6 +351,12 @@ const columns = [
     key: 'trackingNumber',
     width: 150,
     ellipsis: true
+  },
+  {
+    title: '创建时间',
+    dataIndex: 'createTime',
+    key: 'createTime',
+    width: 160
   },
   {
     title: '操作',
@@ -380,6 +405,8 @@ async function fetchData() {
       orderId: searchForm.keyword || undefined,
       trackingNumber: undefined as string | undefined,
       siteCode: searchForm.siteCode,
+      startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
+      endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
       size: pagination.pageSize
     }

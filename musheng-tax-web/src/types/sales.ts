@@ -43,6 +43,9 @@ export interface SalesData {
   otherTransactionFees: number
   other: number
   total: number
+  // 汇率信息
+  exchangeRate?: number
+  exchangeRateDate?: string
   createTime: string
 }
 
@@ -68,15 +71,15 @@ export interface SalesImportParams {
   fileId: string
 }
 
-// 销售数据汇总
+// 销售数据汇总（人民币）
 export interface SalesSummary {
   totalOrders: number
   totalQuantity: number
-  totalProductSales: number
-  totalSellingFees: number
-  totalFbaFees: number
-  totalOtherFees: number
-  totalAmount: number
+  totalProductSalesCny: number
+  totalSellingFeesCny: number
+  totalFbaFeesCny: number
+  totalOtherFeesCny: number
+  totalAmountCny: number
   currencyCode: string
 }
 

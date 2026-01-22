@@ -9,7 +9,6 @@ export interface Currency {
   currencyCode: string      // 货币代码 USD/EUR/GBP/CAD
   currencyName: string      // 货币名称
   currencySymbol: string    // 货币符号 $, EUR, etc.
-  exchangeRate?: number     // 汇率
   decimalPlaces: number     // 小数位数
   status: number            // 状态 1-启用 0-禁用
   createTime: string
@@ -31,7 +30,6 @@ export interface CurrencyForm {
   currencyCode: string
   currencyName: string
   currencySymbol: string
-  exchangeRate: number
   decimalPlaces?: number
   status?: number
 }

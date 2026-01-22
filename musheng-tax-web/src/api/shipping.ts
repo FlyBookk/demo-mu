@@ -63,12 +63,14 @@ export function getShippingSummary(params: ShippingDataQuery) {
  * 导出配送数据
  */
 export function exportShippingData(params: ShippingDataQuery) {
-  return request.download(`${BASE_URL}/export`, params)
+  const filename = `配送数据_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }
 
 /**
  * 下载配送数据导入模板
  */
 export function downloadShippingTemplate(marketplaceId?: number) {
-  return request.download(`${BASE_URL}/template`, { marketplaceId })
+  const filename = `配送数据导入模板.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/template`, filename, { marketplaceId })
 }

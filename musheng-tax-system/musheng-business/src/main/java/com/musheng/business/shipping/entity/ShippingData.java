@@ -116,4 +116,16 @@ public class ShippingData extends BaseEntityWithoutUpdateTime {
      * 物流单号
      */
     private String trackingNumber;
+
+    /**
+     * 配送日期当天汇率（对人民币）
+     * 如果当天是节假日/周末，则取下一个工作日的汇率
+     */
+    private BigDecimal exchangeRate;
+
+    /**
+     * 汇率实际取值日期
+     * 如果配送日期是节假日，则为下一个工作日日期
+     */
+    private LocalDate exchangeRateDate;
 }

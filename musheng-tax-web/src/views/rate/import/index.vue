@@ -106,7 +106,20 @@
         <a-descriptions-item label="导入失败">
           <span class="error-text">{{ importResult.failCount }}</span>
         </a-descriptions-item>
+        <a-descriptions-item v-if="importResult.skipCount > 0" label="跳过(未配置货币)">
+          <span class="warning-text">{{ importResult.skipCount }}</span>
+        </a-descriptions-item>
       </a-descriptions>
+
+      <!-- 跳过的货币提示 -->
+      <div v-if="importResult.skippedCurrencies && importResult.skippedCurrencies.length > 0" style="margin-top: 16px">
+        <a-alert
+          type="warning"
+          show-icon
+          :message="`以下货币未配置，已跳过: ${importResult.skippedCurrencies.join(', ')}`"
+          description="如需导入这些货币的汇率，请先在【基础配置-货币管理】中添加相应货币"
+        />
+      </div>
 
       <!-- 错误详情 -->
       <div v-if="importResult.errors && importResult.errors.length > 0" style="margin-top: 16px">
@@ -149,6 +162,8 @@ const importResult = ref<{
   successCount: number
   existsCount: number
   failCount: number
+  skipCount?: number
+  skippedCurrencies?: string[]
   errors: string[]
 } | null>(null)
 

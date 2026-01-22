@@ -126,5 +126,6 @@ export function importRateData(file: File) {
  * 导出汇率数据
  */
 export function exportRateData(params: RateDataQuery) {
-  return request.download(`${BASE_URL}/export`, params)
+  const filename = `汇率数据_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }

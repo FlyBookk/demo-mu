@@ -216,4 +216,16 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
      * 合计
      */
     private BigDecimal total;
+
+    /**
+     * 交易日期当天汇率（对人民币）
+     * 如果当天是节假日/周末，则取下一个工作日的汇率
+     */
+    private BigDecimal exchangeRate;
+
+    /**
+     * 汇率实际取值日期
+     * 如果交易日期是节假日，则为下一个工作日日期
+     */
+    private java.time.LocalDate exchangeRateDate;
 }

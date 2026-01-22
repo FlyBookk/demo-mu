@@ -85,14 +85,16 @@ export function getAdvertisingStatByType(params: AdvertisingDataQuery) {
  * 导出广告数据
  */
 export function exportAdvertisingData(params: AdvertisingDataQuery) {
-  return request.download(`${BASE_URL}/export`, params)
+  const filename = `广告数据_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }
 
 /**
  * 下载广告数据导入模板
  */
 export function downloadAdvertisingTemplate(marketplaceId?: number) {
-  return request.download(`${BASE_URL}/template`, { marketplaceId })
+  const filename = `广告数据导入模板.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/template`, filename, { marketplaceId })
 }
 
 /**

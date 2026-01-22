@@ -30,6 +30,9 @@ export interface ShippingData {
   quantity?: number
   carrier?: string
   trackingNumber?: string
+  // 汇率信息
+  exchangeRate?: number
+  exchangeRateDate?: string
   createTime: string
 }
 
@@ -53,13 +56,13 @@ export interface ShippingImportParams {
   fileId: string
 }
 
-// 配送数据汇总
+// 配送数据汇总（人民币）
 export interface ShippingSummary {
-  totalShipments: number
+  totalOrders: number
   totalQuantity: number
-  totalProductPrice: number
-  totalShippingPrice: number
-  totalRevenueTotal: number
-  totalShippingCost: number
+  totalProductPriceCny: number
+  totalShippingPriceCny: number
+  totalRevenueTotalCny: number
+  totalShippingCostCny: number
   currencyCode: string
 }

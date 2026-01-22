@@ -6,39 +6,13 @@
       <p class="page-desc">支持亚马逊原始数据和ERP结算数据两种格式导入</p>
     </div>
 
-    <!-- 导入步骤 -->
+    <!-- 导入步骤 - 根据数据源类型动态显示 -->
     <a-card class="steps-card">
-      <a-steps :current="currentStep" :items="stepItems" size="small" />
+      <a-steps :current="currentStep" :items="dynamicStepItems" size="small" />
     </a-card>
 
-    <!-- 步骤1: 选择站点 -->
+    <!-- 步骤1: 选择数据源类型（放到第一步） -->
     <a-card v-show="currentStep === 0" class="step-card">
-      <div class="step-content">
-        <h3 class="step-title">选择站点</h3>
-        <p class="step-desc">请选择导入数据所属的亚马逊站点</p>
-        
-        <div class="site-grid">
-          <div
-            v-for="site in siteOptions"
-            :key="site.code"
-            :class="['site-item', { active: formState.siteCode === site.code }]"
-            @click="formState.siteCode = site.code"
-          >
-            <div class="site-code">{{ site.code }}</div>
-            <div class="site-name">{{ site.name }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="step-actions">
-        <a-button type="primary" :disabled="!formState.siteCode" @click="goToStep(1)">
-          下一步 <RightOutlined />
-        </a-button>
-      </div>
-    </a-card>
-
-    <!-- 步骤2: 选择数据源类型 -->
-    <a-card v-show="currentStep === 1" class="step-card">
       <div class="step-content">
         <h3 class="step-title">选择数据源类型</h3>
         <p class="step-desc">请选择要导入的数据格式</p>
@@ -73,6 +47,7 @@
               <li>每个国家单独文件，系统将自动识别站点</li>
               <li>文件前7-8行为说明信息，系统会自动跳过</li>
               <li>每行是一笔订单的完整信息</li>
+              <li>需要选择站点和数据季度</li>
             </ul>
           </template>
         </a-alert>
@@ -86,12 +61,39 @@
           <template #message>ERP结算数据说明</template>
           <template #description>
             <ul class="tip-list">
-              <li>多国家合并在一个文件中</li>
+              <li>多国家合并在一个文件中，系统自动识别站点</li>
               <li>每行是一笔费用明细（系统会自动聚合为订单维度）</li>
               <li>中文表头，无需跳过说明行</li>
+              <li>系统根据结算时间自动计算所属季度</li>
             </ul>
           </template>
         </a-alert>
+      </div>
+
+      <div class="step-actions">
+        <a-button type="primary" :disabled="!formState.sourceType" @click="handleSourceTypeNext">
+          下一步 <RightOutlined />
+        </a-button>
+      </div>
+    </a-card>
+
+    <!-- 步骤2（原始数据）: 选择站点 - 仅原始数据模式显示 -->
+    <a-card v-show="currentStep === 1 && formState.sourceType === 'ORIGINAL'" class="step-card">
+      <div class="step-content">
+        <h3 class="step-title">选择站点</h3>
+        <p class="step-desc">请选择导入数据所属的亚马逊站点</p>
+        
+        <div class="site-grid">
+          <div
+            v-for="site in siteOptions"
+            :key="site.code"
+            :class="['site-item', { active: formState.siteCode === site.code }]"
+            @click="formState.siteCode = site.code"
+          >
+            <div class="site-code">{{ site.code }}</div>
+            <div class="site-name">{{ site.name }}</div>
+          </div>
+        </div>
       </div>
 
       <div class="step-actions">
@@ -99,15 +101,15 @@
           <a-button @click="goToStep(0)">
             <LeftOutlined /> 上一步
           </a-button>
-          <a-button type="primary" :disabled="!formState.sourceType" @click="goToStep(2)">
+          <a-button type="primary" :disabled="!formState.siteCode" @click="handleSiteNext">
             下一步 <RightOutlined />
           </a-button>
         </a-space>
       </div>
     </a-card>
 
-    <!-- 步骤3: 选择映射模板 -->
-    <a-card v-show="currentStep === 2" class="step-card">
+    <!-- 步骤（原始数据=2，ERP=1）: 选择映射模板 -->
+    <a-card v-show="currentStep === getTemplateStep()" class="step-card">
       <div class="step-content">
         <h3 class="step-title">选择字段映射模板</h3>
         <p class="step-desc">选择与数据格式匹配的映射模板</p>
@@ -136,7 +138,8 @@
           <a-empty v-else description="暂无可用模板，请先创建字段映射模板" />
         </a-spin>
 
-        <a-form-item label="数据季度" class="quarter-form">
+        <!-- 季度选择 - 仅原始数据模式显示 -->
+        <a-form-item v-if="formState.sourceType === 'ORIGINAL'" label="数据季度" class="quarter-form">
           <a-date-picker
             v-model:value="formState.quarterDate"
             picker="quarter"
@@ -144,22 +147,35 @@
             style="width: 200px"
           />
         </a-form-item>
+
+        <!-- ERP模式提示 -->
+        <a-alert
+          v-if="formState.sourceType === 'ERP'"
+          type="info"
+          show-icon
+          class="erp-auto-tip"
+        >
+          <template #message>ERP数据导入说明</template>
+          <template #description>
+            系统将自动从数据中识别站点，并根据结算时间计算所属季度，无需手动选择。
+          </template>
+        </a-alert>
       </div>
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="goToStep(1)">
+          <a-button @click="handleTemplatePrev">
             <LeftOutlined /> 上一步
           </a-button>
-          <a-button type="primary" :disabled="!formState.templateId" @click="goToStep(3)">
+          <a-button type="primary" :disabled="!formState.templateId" @click="handleTemplateNext">
             下一步 <RightOutlined />
           </a-button>
         </a-space>
       </div>
     </a-card>
 
-    <!-- 步骤4: 上传文件 -->
-    <a-card v-show="currentStep === 3" class="step-card">
+    <!-- 上传文件步骤（原始数据=3，ERP=2） -->
+    <a-card v-show="currentStep === getUploadStep()" class="step-card">
       <div class="step-content">
         <h3 class="step-title">上传数据文件</h3>
         <p class="step-desc">上传CSV格式的销售数据文件</p>
@@ -191,7 +207,7 @@
               <a-descriptions-item label="表头行号">第 {{ uploadResult.headerRow }} 行</a-descriptions-item>
               <a-descriptions-item label="识别站点">
                 <a-tag v-if="uploadResult.detectedSiteCode" color="blue">{{ uploadResult.detectedSiteCode }}</a-tag>
-                <span v-else>-</span>
+                <span v-else>{{ formState.sourceType === 'ERP' ? '自动识别' : '-' }}</span>
               </a-descriptions-item>
               <a-descriptions-item label="源字段数" :span="3">{{ uploadResult.sourceFields?.length || 0 }} 个</a-descriptions-item>
             </a-descriptions>
@@ -211,7 +227,7 @@
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="goToStep(2)">
+          <a-button @click="handleUploadPrev">
             <LeftOutlined /> 上一步
           </a-button>
           <a-button 
@@ -226,8 +242,8 @@
       </div>
     </a-card>
 
-    <!-- 步骤5: 预览确认 -->
-    <a-card v-show="currentStep === 4" class="step-card">
+    <!-- 预览确认步骤（原始数据=4，ERP=3） -->
+    <a-card v-show="currentStep === getPreviewStep()" class="step-card">
       <div class="step-content">
         <h3 class="step-title">预览确认</h3>
         <p class="step-desc">请确认解析后的数据是否正确</p>
@@ -235,11 +251,12 @@
         <a-spin :spinning="previewing">
           <div v-if="previewResult" class="preview-section">
             <!-- 导入配置概览 -->
-            <a-descriptions title="导入配置" :column="4" size="small" bordered class="config-summary">
-              <a-descriptions-item label="站点">{{ formState.siteCode }}</a-descriptions-item>
+            <a-descriptions title="导入配置" :column="formState.sourceType === 'ERP' ? 2 : 4" size="small" bordered class="config-summary">
+              <a-descriptions-item v-if="formState.sourceType === 'ORIGINAL'" label="站点">{{ formState.siteCode }}</a-descriptions-item>
               <a-descriptions-item label="数据源">{{ getSourceTypeLabel() }}</a-descriptions-item>
               <a-descriptions-item label="模板">{{ getTemplateName() }}</a-descriptions-item>
-              <a-descriptions-item label="季度">{{ formState.quarterDate?.format('YYYY-Q') || '未指定' }}</a-descriptions-item>
+              <a-descriptions-item v-if="formState.sourceType === 'ORIGINAL'" label="季度">{{ formState.quarterDate?.format('YYYY-Q') || '未指定' }}</a-descriptions-item>
+              <a-descriptions-item v-if="formState.sourceType === 'ERP'" label="季度">根据结算时间自动计算</a-descriptions-item>
             </a-descriptions>
 
             <!-- 映射状态 -->
@@ -304,7 +321,7 @@
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="goToStep(3)">
+          <a-button @click="handlePreviewPrev">
             <LeftOutlined /> 上一步
           </a-button>
           <a-button 
@@ -397,13 +414,44 @@ const router = useRouter()
 
 // ============= 步骤相关 =============
 const currentStep = ref(0)
-const stepItems = [
+
+// 原始数据模式步骤
+const originalStepItems = [
+  { title: '数据源类型' },
   { title: '选择站点' },
+  { title: '选择模板' },
+  { title: '上传文件' },
+  { title: '预览确认' }
+]
+
+// ERP数据模式步骤（简化版）
+const erpStepItems = [
   { title: '数据源类型' },
   { title: '选择模板' },
   { title: '上传文件' },
   { title: '预览确认' }
 ]
+
+// 动态步骤列表
+const dynamicStepItems = computed(() => {
+  if (formState.sourceType === 'ERP') {
+    return erpStepItems
+  }
+  return originalStepItems
+})
+
+// 获取各步骤的索引（根据模式不同）
+function getTemplateStep(): number {
+  return formState.sourceType === 'ERP' ? 1 : 2
+}
+
+function getUploadStep(): number {
+  return formState.sourceType === 'ERP' ? 2 : 3
+}
+
+function getPreviewStep(): number {
+  return formState.sourceType === 'ERP' ? 3 : 4
+}
 
 // ============= 站点选项 =============
 const siteOptions = [
@@ -426,7 +474,7 @@ const sourceTypeOptions = [
   { 
     value: 'ERP' as SalesSourceType, 
     label: 'ERP结算数据',
-    description: '多国家合并文件，每行是费用明细'
+    description: '多国家合并文件，系统自动识别站点和季度'
   }
 ]
 
@@ -482,11 +530,57 @@ function goToStep(step: number) {
   currentStep.value = step
 }
 
+// 选择数据源类型（仅选择，不跳转）
 function handleSourceTypeChange(type: SalesSourceType) {
   formState.sourceType = type
   formState.templateId = null
-  // 加载对应类型的模板
+  // 清空站点（ERP模式不需要手动选择站点）
+  if (type === 'ERP') {
+    formState.siteCode = ''
+    formState.quarterDate = null
+  }
+}
+
+// 数据源类型选择后点击下一步
+function handleSourceTypeNext() {
+  if (formState.sourceType === 'ORIGINAL') {
+    // 原始数据模式：跳转到选择站点
+    goToStep(1)
+  } else {
+    // ERP模式：跳转到选择模板，并加载模板
+    fetchTemplates()
+    goToStep(1)  // ERP模式的模板步骤是1
+  }
+}
+
+// 站点选择后点击下一步（仅原始数据模式）
+function handleSiteNext() {
   fetchTemplates()
+  goToStep(2)  // 跳转到模板选择
+}
+
+// 模板选择上一步
+function handleTemplatePrev() {
+  if (formState.sourceType === 'ERP') {
+    goToStep(0)  // ERP模式返回数据源类型选择
+  } else {
+    goToStep(1)  // 原始数据模式返回站点选择
+  }
+}
+
+// 模板选择下一步
+function handleTemplateNext() {
+  goToStep(getUploadStep())
+}
+
+// 上传文件上一步
+function handleUploadPrev() {
+  goToStep(getTemplateStep())
+}
+
+// 预览上一步
+function handlePreviewPrev() {
+  goToStep(getUploadStep())
 }
 
 async function fetchTemplates() {
@@ -494,7 +588,9 @@ async function fetchTemplates() {
   
   loadingTemplates.value = true
   try {
-    const res = await getTemplatesByType('SALES', formState.sourceType, formState.siteCode)
+    // ERP模式不需要传站点
+    const siteCode = formState.sourceType === 'ERP' ? undefined : formState.siteCode
+    const res = await getTemplatesByType('SALES', formState.sourceType, siteCode)
     templateOptions.value = res.data || []
     // 自动选择默认模板
     const defaultTemplate = templateOptions.value.find(t => t.isDefault)
@@ -548,13 +644,13 @@ const handleUpload: UploadProps['customRequest'] = async (options) => {
     const res = await uploadSalesFile(
       file as File, 
       formState.sourceType!, 
-      formState.siteCode
+      formState.sourceType === 'ERP' ? undefined : formState.siteCode
     )
     uploadResult.value = res.data
     onSuccess?.(res.data)
     message.success('文件上传并解析成功')
     
-    // 如果检测到站点，更新表单
+    // 如果检测到站点，更新表单（仅原始数据模式）
     if (res.data.detectedSiteCode && formState.sourceType === 'ORIGINAL') {
       formState.siteCode = res.data.detectedSiteCode
     }
@@ -577,12 +673,12 @@ async function handlePreview() {
     const res = await previewSalesImport({
       fileId: uploadResult.value.fileId,
       sourceType: formState.sourceType!,
-      siteCode: formState.siteCode,
+      siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
       templateId: formState.templateId,
-      quarter: formState.quarterDate?.format('YYYY-Q')
+      quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q')
     })
     previewResult.value = res.data
-    goToStep(4)
+    goToStep(getPreviewStep())
   } catch (error: any) {
     message.error('预览失败: ' + (error.message || '未知错误'))
   } finally {
@@ -601,9 +697,9 @@ async function handleExecuteImport() {
     const res = await executeSalesImport({
       fileId: uploadResult.value.fileId,
       sourceType: formState.sourceType!,
-      siteCode: formState.siteCode,
+      siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
       templateId: formState.templateId,
-      quarter: formState.quarterDate?.format('YYYY-Q'),
+      quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q'),
       skipDuplicate: importOptions.skipDuplicate,
       overwriteDuplicate: importOptions.overwriteDuplicate
     })
@@ -872,6 +968,11 @@ onMounted(() => {
   .quarter-form {
     margin-top: 24px;
     max-width: 400px;
+  }
+
+  .erp-auto-tip {
+    margin-top: 24px;
+    max-width: 600px;
   }
 
   // 上传区域

@@ -84,14 +84,16 @@ export function getSalesStatByType(params: SalesDataQuery) {
  * 导出销售数据
  */
 export function exportSalesData(params: SalesDataQuery) {
-  return request.download(`${BASE_URL}/export`, params)
+  const filename = `销售数据_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }
 
 /**
  * 下载销售数据导入模板
  */
 export function downloadSalesTemplate(marketplaceId?: number) {
-  return request.download(`${BASE_URL}/template`, { marketplaceId })
+  const filename = `销售数据导入模板.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/template`, filename, { marketplaceId })
 }
 
 // ========== 双格式导入相关接口 ==========

@@ -5,8 +5,6 @@ import com.musheng.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.math.BigDecimal;
-
 /**
  * 货币实体
  */
@@ -29,11 +27,6 @@ public class Currency extends BaseEntity {
      * 货币符号($, €等)
      */
     private String currencySymbol;
-
-    /**
-     * 汇率
-     */
-    private BigDecimal exchangeRate;
 
     /**
      * 小数位数
