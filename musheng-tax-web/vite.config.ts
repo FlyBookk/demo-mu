@@ -20,6 +20,8 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // 允许 ngrok 等外部访问
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
