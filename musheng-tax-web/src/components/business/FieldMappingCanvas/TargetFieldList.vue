@@ -27,14 +27,13 @@
           <div class="field-header">
             <span class="field-name">
               <span v-if="field.required" class="required-mark">*</span>
-              {{ field.label }}
+              {{ field.field }} - {{ field.label }}
             </span>
             <a-tooltip v-if="field.description" :title="field.description">
               <InfoCircleOutlined class="info-icon" />
             </a-tooltip>
           </div>
           <div class="field-meta">
-            <span class="field-key">{{ field.field }}</span>
             <span class="field-type">{{ getDataTypeLabel(field.type) }}</span>
           </div>
           <div v-if="isMapped(field)" class="mapped-source">

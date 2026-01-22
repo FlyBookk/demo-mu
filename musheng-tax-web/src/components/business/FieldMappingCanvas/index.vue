@@ -154,7 +154,7 @@ const sourceFieldsWithStatus = computed<SourceField[]>(() => {
 // 带映射状态的目标字段
 const targetFieldsWithStatus = computed<TargetField[]>(() => {
   return props.targetFields.map(field => {
-    const mapping = mappings.value.find(m => m.target === field.name)
+    const mapping = mappings.value.find(m => m.target === field.field)
     return {
       ...field,
       mapped: !!mapping,
@@ -175,7 +175,7 @@ const mappingLines = computed<MappingLine[]>(() => {
 // 未映射必填字段数
 const unmappedRequiredCount = computed(() => {
   return props.targetFields.filter(
-    f => f.required && !mappings.value.some(m => m.target === f.name)
+    f => f.required && !mappings.value.some(m => m.target === f.field)
   ).length
 })
 
@@ -247,7 +247,7 @@ function handleDragStart(field: SourceField, event: MouseEvent) {
 function handleDrop(targetField: TargetField) {
   if (props.readonly) return
   if (dragSourceField.value) {
-    addMapping(dragSourceField.value.name, targetField.name)
+    addMapping(dragSourceField.value.name, targetField.field)
   }
   handleDragEnd()
 }
@@ -295,7 +295,7 @@ function handleAutoMap() {
 
     // 查找最匹配的目标字段
     const matchedTarget = props.targetFields.find(target => {
-      const targetLower = target.name.toLowerCase().replace(/[\s_\-]/g, '')
+      const targetLower = target.field.toLowerCase().replace(/[\s_\-]/g, '')
       const labelLower = target.label.toLowerCase().replace(/[\s_\-]/g, '')
 
       return (
@@ -308,8 +308,8 @@ function handleAutoMap() {
       )
     })
 
-    if (matchedTarget && !autoMappings.some(m => m.target === matchedTarget.name)) {
-      autoMappings.push({ source: source.name, target: matchedTarget.name })
+    if (matchedTarget && !autoMappings.some(m => m.target === matchedTarget.field)) {
+      autoMappings.push({ source: source.name, target: matchedTarget.field })
     }
   })
 
@@ -333,7 +333,7 @@ async function recalculateLines() {
 // 监听点击选择，建立映射
 watch([selectedSourceField, selectedTargetField], ([source, target]) => {
   if (source && target) {
-    addMapping(source.name, target.name)
+    addMapping(source.name, target.field)
   }
 })
 

@@ -58,6 +58,9 @@ public class TargetFieldsResponse {
 
         @Schema(description = "站点别名")
         private Map<String, String> siteAliases;
+
+        @Schema(description = "排序序号", example = "1")
+        private Integer sortOrder;
     }
 
     /**

@@ -121,7 +121,7 @@
           <WarningOutlined />
           <span>
             还有 {{ unmappedRequiredCount }} 个必填字段未映射：
-            {{ unmappedRequiredFields.map((f) => f.label).join('、') }}
+            {{ unmappedRequiredFields.map((f) => `${f.field} - ${f.label}`).join('、') }}
           </span>
         </div>
       </div>
@@ -246,9 +246,9 @@ const hasChanges = computed(() => {
 const unmappedRequiredFields = computed(() => {
   return targetFields.value.filter((field) => {
     if (!field.required) return false
-    const hasMMapping = mappings.value.some((m) => m.target === field.field)
+    const hasMapping = mappings.value.some((m) => m.target === field.field)
     const hasDefault = defaultValues.value.some((d) => d.field === field.field)
-    return !hasMMapping && !hasDefault
+    return !hasMapping && !hasDefault
   })
 })
 
@@ -449,7 +449,7 @@ const handleTargetSelect = (field: TargetField) => {
     // 点击已映射的目标字段（且没有选中源字段）-> 询问是否取消映射
     Modal.confirm({
       title: '取消映射',
-      content: `确定要取消 "${field.label}" 的映射关系吗？`,
+      content: `确定要取消 "${field.field} - ${field.label}" 的映射关系吗？`,
       okText: '确定',
       cancelText: '取消',
       onOk: () => {

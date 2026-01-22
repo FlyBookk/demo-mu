@@ -155,3 +155,14 @@ export function parseFileFields(file: File, headerRow: number = 1, sheetName?: s
 export function autoMatchFields(params: AutoMatchRequest) {
   return request.post<AutoMatchResponse>(`${BASE_URL}/auto-match`, params)
 }
+
+/**
+ * 刷新目标字段缓存
+ * 重新扫描实体类，刷新目标字段定义缓存
+ * @param dataType 数据类型（可选，不传则刷新全部）
+ */
+export function refreshTargetFieldsCache(dataType?: FieldMappingDataType) {
+  return request.post<void>(`${BASE_URL}/target-fields/refresh`, null, {
+    params: dataType ? { dataType } : undefined
+  })
+}

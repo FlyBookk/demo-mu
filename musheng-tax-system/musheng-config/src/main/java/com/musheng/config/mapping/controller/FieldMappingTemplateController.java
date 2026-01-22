@@ -9,6 +9,7 @@ import com.musheng.config.mapping.entity.FieldMappingTemplate;
 import com.musheng.config.mapping.service.FieldMappingTemplateService;
 import com.musheng.config.mapping.service.FileParseService;
 import com.musheng.config.mapping.service.TargetFieldMetadataService;
+import com.musheng.common.service.EntityFieldScanner;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +30,7 @@ public class FieldMappingTemplateController {
     private final FieldMappingTemplateService fieldMappingTemplateService;
     private final TargetFieldMetadataService targetFieldMetadataService;
     private final FileParseService fileParseService;
+    private final EntityFieldScanner entityFieldScanner;
 
     @OperationLog(module = "字段映射模板", operation = "创建模板")
     @Operation(summary = "创建模板", description = "创建字段映射模板")
@@ -154,5 +156,18 @@ public class FieldMappingTemplateController {
     public Result<AutoMatchResponse> autoMatch(@Valid @RequestBody AutoMatchRequest request) {
         AutoMatchResponse response = targetFieldMetadataService.autoMatch(request);
         return Result.success(response);
+    }
+
+    @OperationLog(module = "字段映射模板", operation = "刷新目标字段缓存")
+    @Operation(summary = "刷新目标字段缓存", description = "重新扫描实体类，刷新目标字段定义缓存")
+    @PostMapping("/target-fields/refresh")
+    public Result<Void> refreshTargetFieldsCache(
+            @Parameter(description = "数据类型（可选，不传则刷新全部）") @RequestParam(required = false) String dataType) {
+        if (dataType != null && !dataType.isEmpty()) {
+            entityFieldScanner.clearCache(dataType);
+        } else {
+            entityFieldScanner.clearCache();
+        }
+        return Result.success();
     }
 }

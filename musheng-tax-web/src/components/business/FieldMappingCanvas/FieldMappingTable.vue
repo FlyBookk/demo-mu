@@ -51,6 +51,7 @@
             allow-clear
             show-search
             :filter-option="filterOption"
+            option-label-prop="label"
             style="width: 100%"
             @change="(value: string | undefined) => handleMappingChange(field.name, value)"
           >
@@ -58,12 +59,14 @@
               v-for="target in availableTargets(field.name)"
               :key="target.field"
               :value="target.field"
+              :label="getTargetLabel(target.field)"
               :disabled="isTargetUsed(target.field, field.name)"
             >
               <div class="target-option">
                 <span v-if="target.required" class="required-mark">*</span>
+                <span class="target-field">{{ target.field }}</span>
+                <span class="target-separator">-</span>
                 <span class="target-label">{{ target.label }}</span>
-                <span class="target-field">({{ target.field }})</span>
               </div>
             </a-select-option>
           </a-select>
@@ -81,7 +84,7 @@
       <WarningOutlined />
       <span>以下必填字段未映射：</span>
       <a-tag v-for="t in unmappedRequiredTargets" :key="t.field" color="warning">
-        {{ t.label }}
+        {{ t.field }} - {{ t.label }}
       </a-tag>
     </div>
   </div>
@@ -111,6 +114,16 @@ const emit = defineEmits<{
 function getMappedTarget(sourceName: string): string | undefined {
   const mapping = props.mappings.find((m) => m.source === sourceName)
   return mapping?.target
+}
+
+// 根据目标字段名获取显示标签（英文 - 中文）
+function getTargetLabel(targetField: string): string {
+  const target = props.targetFields.find((t) => t.field === targetField)
+  if (target) {
+    return `${target.field} - ${target.label}`
+  }
+  // 如果找不到匹配的目标字段，直接返回原始值
+  return targetField
 }
 
 // 检查目标字段是否已被其他源字段使用
@@ -334,11 +347,16 @@ const unmappedRequiredTargets = computed(() => {
       font-weight: bold;
     }
 
-    .target-label {
+    .target-field {
       color: $text-color;
+      font-weight: 500;
     }
 
-    .target-field {
+    .target-separator {
+      color: $text-color-secondary;
+    }
+
+    .target-label {
       color: $text-color-secondary;
       font-size: 12px;
     }

@@ -28,7 +28,7 @@ export function useClickMapping() {
    */
   function handleTargetSelect(field: TargetField) {
     // 如果已选中相同字段，取消选中
-    if (selectedTargetField.value?.name === field.name) {
+    if (selectedTargetField.value?.field === field.field) {
       selectedTargetField.value = null
       return
     }

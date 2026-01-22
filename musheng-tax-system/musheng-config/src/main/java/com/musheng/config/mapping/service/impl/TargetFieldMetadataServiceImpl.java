@@ -12,6 +12,8 @@ import com.musheng.config.mapping.entity.TargetFieldMetadata;
 import com.musheng.config.mapping.mapper.ErpAggregateRuleMapper;
 import com.musheng.config.mapping.mapper.TargetFieldMetadataMapper;
 import com.musheng.config.mapping.service.TargetFieldMetadataService;
+import com.musheng.common.dto.TargetFieldInfo;
+import com.musheng.common.service.EntityFieldScanner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -31,6 +33,7 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
 
     private final TargetFieldMetadataMapper metadataMapper;
     private final ErpAggregateRuleMapper aggregateRuleMapper;
+    private final EntityFieldScanner entityFieldScanner;
 
     private static final Map<String, String> SOURCE_TYPE_NAMES = Map.of(
             "ORIGINAL", "亚马逊原始数据",
@@ -42,12 +45,12 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
     public TargetFieldsResponse getTargetFields(String dataType, String sourceType) {
         log.info("获取目标字段: dataType={}, sourceType={}", dataType, sourceType);
 
-        // 查询字段元数据
-        List<TargetFieldMetadata> metadataList = metadataMapper.selectByDataType(dataType, sourceType);
-
-        // 转换为VO
-        List<TargetFieldVO> fields = metadataList.stream()
-                .map(this::convertToVO)
+        // 从实体类扫描获取字段（动态、准确）
+        List<TargetFieldInfo> fieldInfos = entityFieldScanner.getTargetFields(dataType, sourceType);
+        
+        // 转换为 VO
+        List<TargetFieldVO> fields = fieldInfos.stream()
+                .map(this::convertInfoToVO)
                 .collect(Collectors.toList());
 
         // 构建响应
@@ -69,8 +72,8 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
     public AutoMatchResponse autoMatch(AutoMatchRequest request) {
         log.info("智能匹配: dataType={}, sourceFields={}", request.getDataType(), request.getSourceFields().size());
 
-        // 获取目标字段
-        List<TargetFieldMetadata> targetMetadata = metadataMapper.selectByDataType(
+        // 从实体类扫描获取目标字段
+        List<TargetFieldInfo> targetFieldInfos = entityFieldScanner.getTargetFields(
                 request.getDataType(),
                 request.getSourceType()
         );
@@ -83,9 +86,9 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
         for (String source : request.getSourceFields()) {
             if (matchedSources.contains(source)) continue;
 
-            MatchSuggestion suggestion = findBestMatch(
+            MatchSuggestion suggestion = findBestMatchFromInfo(
                     source,
-                    targetMetadata,
+                    targetFieldInfos,
                     matchedTargets,
                     request.getSiteCode()
             );
@@ -102,8 +105,8 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
                 .filter(s -> !matchedSources.contains(s))
                 .collect(Collectors.toList());
 
-        List<String> unmatchedTarget = targetMetadata.stream()
-                .map(TargetFieldMetadata::getFieldName)
+        List<String> unmatchedTarget = targetFieldInfos.stream()
+                .map(TargetFieldInfo::getField)
                 .filter(t -> !matchedTargets.contains(t))
                 .collect(Collectors.toList());
 
@@ -212,6 +215,75 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
     }
 
     /**
+     * 查找最佳匹配（基于 TargetFieldInfo）
+     */
+    private MatchSuggestion findBestMatchFromInfo(
+            String source,
+            List<TargetFieldInfo> targets,
+            Set<String> matchedTargets,
+            String siteCode
+    ) {
+        String normalizedSource = normalize(source);
+
+        for (TargetFieldInfo target : targets) {
+            if (matchedTargets.contains(target.getField())) continue;
+
+            // 1. 完全匹配
+            if (source.equals(target.getField())) {
+                return createSuggestion(source, target.getField(), 1.0, "exact");
+            }
+
+            // 2. 忽略大小写
+            if (source.equalsIgnoreCase(target.getField())) {
+                return createSuggestion(source, target.getField(), 0.95, "ignore_case");
+            }
+
+            // 3. 站点别名匹配
+            if (StringUtils.hasText(siteCode) && target.getSiteAliases() != null) {
+                String alias = target.getSiteAliases().get(siteCode);
+                if (alias != null && source.equalsIgnoreCase(alias)) {
+                    return createSuggestion(source, target.getField(), 0.92, "alias");
+                }
+                // 尝试 default 别名
+                String defaultAlias = target.getSiteAliases().get("default");
+                if (defaultAlias != null && source.equalsIgnoreCase(defaultAlias)) {
+                    return createSuggestion(source, target.getField(), 0.9, "alias");
+                }
+            }
+
+            // 4. 中文标签匹配
+            if (source.equals(target.getLabel())) {
+                return createSuggestion(source, target.getField(), 0.88, "label");
+            }
+
+            // 5. 规范化匹配
+            if (normalizedSource.equals(normalize(target.getField()))) {
+                return createSuggestion(source, target.getField(), 0.85, "normalized");
+            }
+
+            // 6. 包含匹配
+            String normalizedTarget = normalize(target.getField());
+            if (normalizedSource.length() > 3 && normalizedTarget.length() > 3) {
+                if (normalizedSource.contains(normalizedTarget) || normalizedTarget.contains(normalizedSource)) {
+                    return createSuggestion(source, target.getField(), 0.75, "contains");
+                }
+            }
+        }
+
+        // 7. 相似度匹配（Levenshtein距离）
+        for (TargetFieldInfo target : targets) {
+            if (matchedTargets.contains(target.getField())) continue;
+
+            double similarity = calculateSimilarity(normalizedSource, normalize(target.getField()));
+            if (similarity > 0.7) {
+                return createSuggestion(source, target.getField(), similarity * 0.8, "similar");
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 规范化字符串
      */
     private String normalize(String str) {
@@ -266,6 +338,23 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
         vo.setMaxLength(metadata.getMaxLength());
         vo.setPrecision(metadata.getPrecision());
         vo.setSiteAliases(metadata.getSiteAliases());
+        return vo;
+    }
+
+    /**
+     * 将 TargetFieldInfo 转换为 TargetFieldVO
+     */
+    private TargetFieldVO convertInfoToVO(TargetFieldInfo info) {
+        TargetFieldVO vo = new TargetFieldVO();
+        vo.setField(info.getField());
+        vo.setLabel(info.getLabel());
+        vo.setDescription(info.getDescription());
+        vo.setType(info.getType());
+        vo.setRequired(info.getRequired());
+        vo.setMaxLength(info.getMaxLength());
+        vo.setPrecision(info.getPrecision());
+        vo.setSiteAliases(info.getSiteAliases());
+        vo.setSortOrder(info.getSortOrder());
         return vo;
     }
 }
