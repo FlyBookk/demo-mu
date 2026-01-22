@@ -365,3 +365,7 @@
 /musheng-tax-system/musheng-config/target/classes/com/musheng/config/mapping/service/impl/TargetFieldMetadataServiceImpl.class
 /musheng-tax-system/musheng-config/target/classes/com/musheng/config/mapping/service/FileParseService.class
 /musheng-tax-system/musheng-config/target/classes/com/musheng/config/mapping/service/TargetFieldMetadataService.class
+/musheng-tax-system/musheng-common/target/classes/com/musheng/common/annotation/FieldMapping.class
+/musheng-tax-system/musheng-common/target/classes/com/musheng/common/dto/TargetFieldInfo.class
+/musheng-tax-system/musheng-common/target/classes/com/musheng/common/service/EntityFieldScanner.class
+/musheng-tax-system/musheng-business/target/classes/com/musheng/business/common/service/impl/EntityFieldScannerImpl.class

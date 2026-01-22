@@ -8,9 +8,7 @@ import com.musheng.config.mapping.dto.TargetFieldsResponse;
 import com.musheng.config.mapping.dto.TargetFieldsResponse.AggregateConfig;
 import com.musheng.config.mapping.dto.TargetFieldsResponse.TargetFieldVO;
 import com.musheng.config.mapping.entity.ErpAggregateRule;
-import com.musheng.config.mapping.entity.TargetFieldMetadata;
 import com.musheng.config.mapping.mapper.ErpAggregateRuleMapper;
-import com.musheng.config.mapping.mapper.TargetFieldMetadataMapper;
 import com.musheng.config.mapping.service.TargetFieldMetadataService;
 import com.musheng.common.dto.TargetFieldInfo;
 import com.musheng.common.service.EntityFieldScanner;
@@ -25,13 +23,13 @@ import java.util.stream.Collectors;
 
 /**
  * 目标字段元数据服务实现
+ * 通过 EntityFieldScanner 从实体类动态获取目标字段配置
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataService {
 
-    private final TargetFieldMetadataMapper metadataMapper;
     private final ErpAggregateRuleMapper aggregateRuleMapper;
     private final EntityFieldScanner entityFieldScanner;
 
@@ -86,7 +84,7 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
         for (String source : request.getSourceFields()) {
             if (matchedSources.contains(source)) continue;
 
-            MatchSuggestion suggestion = findBestMatchFromInfo(
+            MatchSuggestion suggestion = findBestMatch(
                     source,
                     targetFieldInfos,
                     matchedTargets,
@@ -149,75 +147,6 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
      * 查找最佳匹配
      */
     private MatchSuggestion findBestMatch(
-            String source,
-            List<TargetFieldMetadata> targets,
-            Set<String> matchedTargets,
-            String siteCode
-    ) {
-        String normalizedSource = normalize(source);
-
-        for (TargetFieldMetadata target : targets) {
-            if (matchedTargets.contains(target.getFieldName())) continue;
-
-            // 1. 完全匹配
-            if (source.equals(target.getFieldName())) {
-                return createSuggestion(source, target.getFieldName(), 1.0, "exact");
-            }
-
-            // 2. 忽略大小写
-            if (source.equalsIgnoreCase(target.getFieldName())) {
-                return createSuggestion(source, target.getFieldName(), 0.95, "ignore_case");
-            }
-
-            // 3. 站点别名匹配
-            if (StringUtils.hasText(siteCode) && target.getSiteAliases() != null) {
-                String alias = target.getSiteAliases().get(siteCode);
-                if (alias != null && source.equalsIgnoreCase(alias)) {
-                    return createSuggestion(source, target.getFieldName(), 0.92, "alias");
-                }
-                // 尝试 default 别名
-                String defaultAlias = target.getSiteAliases().get("default");
-                if (defaultAlias != null && source.equalsIgnoreCase(defaultAlias)) {
-                    return createSuggestion(source, target.getFieldName(), 0.9, "alias");
-                }
-            }
-
-            // 4. 中文标签匹配
-            if (source.equals(target.getFieldLabel())) {
-                return createSuggestion(source, target.getFieldName(), 0.88, "label");
-            }
-
-            // 5. 规范化匹配
-            if (normalizedSource.equals(normalize(target.getFieldName()))) {
-                return createSuggestion(source, target.getFieldName(), 0.85, "normalized");
-            }
-
-            // 6. 包含匹配
-            String normalizedTarget = normalize(target.getFieldName());
-            if (normalizedSource.length() > 3 && normalizedTarget.length() > 3) {
-                if (normalizedSource.contains(normalizedTarget) || normalizedTarget.contains(normalizedSource)) {
-                    return createSuggestion(source, target.getFieldName(), 0.75, "contains");
-                }
-            }
-        }
-
-        // 7. 相似度匹配（Levenshtein距离）
-        for (TargetFieldMetadata target : targets) {
-            if (matchedTargets.contains(target.getFieldName())) continue;
-
-            double similarity = calculateSimilarity(normalizedSource, normalize(target.getFieldName()));
-            if (similarity > 0.7) {
-                return createSuggestion(source, target.getFieldName(), similarity * 0.8, "similar");
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * 查找最佳匹配（基于 TargetFieldInfo）
-     */
-    private MatchSuggestion findBestMatchFromInfo(
             String source,
             List<TargetFieldInfo> targets,
             Set<String> matchedTargets,
@@ -326,19 +255,6 @@ public class TargetFieldMetadataServiceImpl implements TargetFieldMetadataServic
         suggestion.setConfidence(confidence);
         suggestion.setMatchType(matchType);
         return suggestion;
-    }
-
-    private TargetFieldVO convertToVO(TargetFieldMetadata metadata) {
-        TargetFieldVO vo = new TargetFieldVO();
-        vo.setField(metadata.getFieldName());
-        vo.setLabel(metadata.getFieldLabel());
-        vo.setDescription(metadata.getFieldDescription());
-        vo.setType(metadata.getFieldType());
-        vo.setRequired(metadata.getRequired());
-        vo.setMaxLength(metadata.getMaxLength());
-        vo.setPrecision(metadata.getPrecision());
-        vo.setSiteAliases(metadata.getSiteAliases());
-        return vo;
     }
 
     /**
