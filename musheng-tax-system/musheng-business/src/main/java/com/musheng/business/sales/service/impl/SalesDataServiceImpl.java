@@ -94,24 +94,37 @@ public class SalesDataServiceImpl implements SalesDataService {
     }
 
     @Override
-    public Page<SalesData> list(String siteCode, String transactionCategory, String transactionType, String orderId, int page, int size) {
+    public Page<SalesData> list(SalesQueryRequest request) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
-        if (StringUtils.hasText(siteCode)) {
-            wrapper.eq(SalesData::getSiteCode, siteCode);
+        if (StringUtils.hasText(request.getSiteCode())) {
+            wrapper.eq(SalesData::getSiteCode, request.getSiteCode());
         }
-        if (StringUtils.hasText(transactionCategory)) {
-            wrapper.eq(SalesData::getTransactionCategory, transactionCategory);
+        if (StringUtils.hasText(request.getTransactionCategory())) {
+            wrapper.eq(SalesData::getTransactionCategory, request.getTransactionCategory());
         }
-        if (StringUtils.hasText(transactionType)) {
-            wrapper.eq(SalesData::getTransactionType, transactionType);
+        if (StringUtils.hasText(request.getTransactionType())) {
+            wrapper.eq(SalesData::getTransactionType, request.getTransactionType());
         }
-        if (StringUtils.hasText(orderId)) {
-            wrapper.like(SalesData::getOrderId, orderId);
+        if (StringUtils.hasText(request.getKeyword())) {
+            // 关键字搜索：订单号、SKU、ASIN
+            wrapper.and(w -> w
+                    .like(SalesData::getOrderId, request.getKeyword())
+                    .or().like(SalesData::getSku, request.getKeyword())
+            );
+        }
+        // 日期范围过滤
+        if (StringUtils.hasText(request.getStartDate())) {
+            wrapper.ge(SalesData::getTransactionDate, request.getStartDate() + " 00:00:00");
+        }
+        if (StringUtils.hasText(request.getEndDate())) {
+            wrapper.le(SalesData::getTransactionDate, request.getEndDate() + " 23:59:59");
         }
 
-        wrapper.orderByDesc(SalesData::getCreateTime);
+        wrapper.orderByDesc(SalesData::getTransactionDate);
 
+        int page = request.getPage() != null ? request.getPage() : 1;
+        int size = request.getSize() != null ? request.getSize() : 20;
         return salesDataMapper.selectPage(new Page<>(page, size), wrapper);
     }
 

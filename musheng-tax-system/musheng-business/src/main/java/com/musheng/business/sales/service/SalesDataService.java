@@ -18,15 +18,10 @@ public interface SalesDataService {
     /**
      * 分页查询销售数据
      *
-     * @param siteCode            站点编码(可选)
-     * @param transactionCategory 交易分类(可选)
-     * @param transactionType     交易类型(可选)
-     * @param orderId             订单号(可选)
-     * @param page                页码
-     * @param size                每页条数
+     * @param request 查询请求
      * @return 分页结果
      */
-    Page<SalesData> list(String siteCode, String transactionCategory, String transactionType, String orderId, int page, int size);
+    Page<SalesData> list(SalesQueryRequest request);
 
     /**
      * 根据ID获取销售数据

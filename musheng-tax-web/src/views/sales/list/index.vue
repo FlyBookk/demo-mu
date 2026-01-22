@@ -455,9 +455,11 @@ async function fetchData() {
   loading.value = true
   try {
     const params = {
-      orderId: searchForm.keyword || undefined,
+      keyword: searchForm.keyword || undefined,
       siteCode: searchForm.siteCode,
       transactionCategory: searchForm.transactionCategory,
+      startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
+      endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
       size: pagination.pageSize
     }

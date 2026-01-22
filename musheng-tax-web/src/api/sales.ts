@@ -28,7 +28,7 @@ const BASE_URL = '/api/v1/business/sales'
  * 获取销售数据列表
  */
 export function getSalesList(params: SalesDataQuery) {
-  return request.get<PageResult<SalesData>>(BASE_URL, params)
+  return request.post<PageResult<SalesData>>(`${BASE_URL}/list`, params)
 }
 
 /**

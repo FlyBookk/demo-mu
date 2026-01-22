@@ -369,3 +369,4 @@
 /musheng-tax-system/musheng-common/target/classes/com/musheng/common/dto/TargetFieldInfo.class
 /musheng-tax-system/musheng-common/target/classes/com/musheng/common/service/EntityFieldScanner.class
 /musheng-tax-system/musheng-business/target/classes/com/musheng/business/common/service/impl/EntityFieldScannerImpl.class
+/musheng-tax-system/musheng-business/target/classes/com/musheng/business/sales/dto/SalesQueryRequest.class

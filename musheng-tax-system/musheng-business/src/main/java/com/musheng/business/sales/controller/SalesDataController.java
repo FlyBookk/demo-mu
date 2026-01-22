@@ -32,15 +32,9 @@ public class SalesDataController {
     private final SalesDataService salesDataService;
 
     @Operation(summary = "销售数据列表", description = "分页查询销售数据")
-    @GetMapping
-    public Result<PageResult<SalesData>> list(
-            @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
-            @Parameter(description = "交易分类(income/refund/fee/adjustment/other)") @RequestParam(required = false) String transactionCategory,
-            @Parameter(description = "交易类型") @RequestParam(required = false) String transactionType,
-            @Parameter(description = "订单号") @RequestParam(required = false) String orderId,
-            @Parameter(description = "页码(从1开始)") @RequestParam(defaultValue = "1") int page,
-            @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") int size) {
-        Page<SalesData> pageResult = salesDataService.list(siteCode, transactionCategory, transactionType, orderId, page, size);
+    @PostMapping("/list")
+    public Result<PageResult<SalesData>> list(@RequestBody SalesQueryRequest request) {
+        Page<SalesData> pageResult = salesDataService.list(request);
         PageResult<SalesData> result = PageResult.of(
                 pageResult.getRecords(),
                 pageResult.getTotal(),
