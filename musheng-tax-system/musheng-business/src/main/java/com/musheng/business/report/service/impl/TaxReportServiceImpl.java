@@ -57,10 +57,11 @@ public class TaxReportServiceImpl implements TaxReportService {
 
     @Override
     public DashboardData getDashboardData() {
-        log.info("Getting dashboard data");
+        long startTime = System.currentTimeMillis();
+        log.info("Getting dashboard data (lightweight)");
 
-        // 验证店铺已选择（getTaxSummary 内部会使用）
-        ShopContext.requireShopId();
+        Long shopId = ShopContext.requireShopId();
+        List<String> sites = List.of("US", "CA", "UK", "DE");
 
         // 计算最近4个季度范围
         LocalDate now = LocalDate.now();
@@ -70,98 +71,192 @@ public class TaxReportServiceImpl implements TaxReportService {
         for (int i = 0; i < 3; i++) {
             oldestQuarter = getPreviousQuarter(oldestQuarter);
         }
-
-        // 一次性查询所有4个季度的汇总数据
-        List<TaxReportSummary> allData = getTaxSummary(null, oldestQuarter, currentQuarter);
-
-        // 按季度分组
-        Map<String, List<TaxReportSummary>> dataByQuarter = allData.stream()
-                .collect(Collectors.groupingBy(TaxReportSummary::getYearQuarter));
-
-        // 获取当前和上季度数据
         String previousQuarter = getPreviousQuarter(currentQuarter);
-        List<TaxReportSummary> currentData = dataByQuarter.getOrDefault(currentQuarter, Collections.emptyList());
-        List<TaxReportSummary> previousData = dataByQuarter.getOrDefault(previousQuarter, Collections.emptyList());
 
-        // 汇总当前季度
-        BigDecimal totalRevenue = sumField(currentData, TaxReportSummary::getTotalRevenueCny);
-        BigDecimal totalRefund = sumField(currentData, TaxReportSummary::getRefundByShipmentCny);
-        // 净收入 = 收入 - 退款（简化计算，仅用于首页展示）
-        BigDecimal totalNetIncome = totalRevenue.subtract(totalRefund);
-        int totalOrders = currentData.stream()
-                .map(TaxReportSummary::getShippingOrderCount)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .sum();
+        // 计算日期范围
+        int oldYear = Integer.parseInt(oldestQuarter.substring(0, 4));
+        int oldQ = Integer.parseInt(oldestQuarter.substring(6, 7));
+        LocalDate minStartDate = getQuarterStartDate(oldYear, oldQ);
+        LocalDate maxEndDate = getQuarterEndDate(now.getYear(), currentQ);
 
-        // 汇总上季度（用于环比）
-        BigDecimal prevRevenue = sumField(previousData, TaxReportSummary::getTotalRevenueCny);
-        BigDecimal prevRefund = sumField(previousData, TaxReportSummary::getRefundByShipmentCny);
-        BigDecimal prevNetIncome = prevRevenue.subtract(prevRefund);
+        // ========== 轻量级查询：只查发货数据和退款数据 ==========
+        
+        // 1. 站点信息
+        Map<String, Marketplace> marketplaceMap = loadMarketplaceMap(sites);
 
-        // 构建结果
+        // 2. 发货数据（收入来源）- 使用聚合查询
+        LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
+        shippingWrapper.eq(ShippingData::getShopId, shopId)
+                .in(ShippingData::getSiteCode, sites)
+                .between(ShippingData::getShipDate, minStartDate, maxEndDate);
+        List<ShippingData> shippingData = shippingDataMapper.selectList(shippingWrapper);
+
+        // 3. 退款数据（只需要total和日期）
+        LambdaQueryWrapper<SalesData> refundWrapper = new LambdaQueryWrapper<>();
+        refundWrapper.eq(SalesData::getShopId, shopId)
+                .in(SalesData::getSiteCode, sites)
+                .eq(SalesData::getTransactionCategory, "refund")
+                .ge(SalesData::getTransactionDate, minStartDate.atStartOfDay())
+                .lt(SalesData::getTransactionDate, maxEndDate.plusMonths(2).atStartOfDay());
+        List<SalesData> refundData = salesDataMapper.selectList(refundWrapper);
+
+        log.debug("Dashboard data loaded in {}ms: shipping={}, refunds={}", 
+                System.currentTimeMillis() - startTime, shippingData.size(), refundData.size());
+
+        // ========== 构建订单→发货日期映射 ==========
+        Map<String, LocalDate> orderShipDateMap = new HashMap<>();
+        for (ShippingData s : shippingData) {
+            if (s.getOrderId() != null && s.getShipDate() != null) {
+                orderShipDateMap.merge(s.getOrderId(), s.getShipDate(), (a, b) -> b.isAfter(a) ? b : a);
+            }
+        }
+
+        // ========== 按站点+季度汇总 ==========
+        // 数据结构: siteCode -> quarter -> {revenue, refund, orders}
+        Map<String, Map<String, BigDecimal>> revenueMap = new HashMap<>();
+        Map<String, Map<String, BigDecimal>> refundMap = new HashMap<>();
+        Map<String, Map<String, Integer>> orderCountMap = new HashMap<>();
+
+        // 汇总发货收入
+        for (ShippingData s : shippingData) {
+            if (s.getShipDate() == null) continue;
+            String quarter = getQuarterFromDate(s.getShipDate());
+            String site = s.getSiteCode();
+            
+            BigDecimal revenue = s.getRevenueTotal();
+            if (revenue == null || revenue.compareTo(BigDecimal.ZERO) == 0) {
+                revenue = calculateShippingRevenue(s);
+            }
+            BigDecimal rate = s.getExchangeRate();
+            BigDecimal revenueCny = (rate != null && rate.compareTo(BigDecimal.ZERO) > 0) 
+                    ? revenue.multiply(rate) : revenue;
+
+            revenueMap.computeIfAbsent(site, k -> new HashMap<>())
+                    .merge(quarter, revenueCny, BigDecimal::add);
+            
+            if (s.getOrderId() != null) {
+                orderCountMap.computeIfAbsent(site, k -> new HashMap<>())
+                        .merge(quarter, 1, Integer::sum);
+            }
+        }
+
+        // 汇总退款（按发货归属）
+        for (SalesData r : refundData) {
+            String orderId = r.getOrderId();
+            LocalDate shipDate = orderShipDateMap.get(orderId);
+            if (shipDate == null) continue;
+            
+            String quarter = getQuarterFromDate(shipDate);
+            String site = r.getSiteCode();
+            
+            BigDecimal refundAmt = r.getTotal() != null ? r.getTotal().abs() : BigDecimal.ZERO;
+            BigDecimal rate = r.getExchangeRate();
+            BigDecimal refundCny = (rate != null && rate.compareTo(BigDecimal.ZERO) > 0)
+                    ? refundAmt.multiply(rate) : refundAmt;
+
+            refundMap.computeIfAbsent(site, k -> new HashMap<>())
+                    .merge(quarter, refundCny, BigDecimal::add);
+        }
+
+        // ========== 构建结果 ==========
         DashboardData dashboard = new DashboardData();
         dashboard.setCurrentQuarter(currentQuarter);
+
+        // 当前季度汇总
+        BigDecimal totalRevenue = sumFromMap(revenueMap, currentQuarter);
+        BigDecimal totalRefund = sumFromMap(refundMap, currentQuarter);
+        int totalOrders = sumOrdersFromMap(orderCountMap, currentQuarter);
+
+        // 上季度汇总
+        BigDecimal prevRevenue = sumFromMap(revenueMap, previousQuarter);
+        BigDecimal prevRefund = sumFromMap(refundMap, previousQuarter);
+
         dashboard.setTotalRevenueCny(totalRevenue.setScale(2, RoundingMode.HALF_UP));
         dashboard.setRefundCny(totalRefund.setScale(2, RoundingMode.HALF_UP));
-        dashboard.setNetIncomeCny(totalNetIncome.setScale(2, RoundingMode.HALF_UP));
+        dashboard.setNetIncomeCny(totalRevenue.subtract(totalRefund).setScale(2, RoundingMode.HALF_UP));
         dashboard.setShippingOrderCount(totalOrders);
 
-        // 计算环比增长率
+        // 环比增长率
         dashboard.setRevenueGrowthRate(calculateGrowthRate(totalRevenue, prevRevenue));
         dashboard.setRefundGrowthRate(calculateGrowthRate(totalRefund, prevRefund));
-        dashboard.setNetIncomeGrowthRate(calculateGrowthRate(totalNetIncome, prevNetIncome));
+        dashboard.setNetIncomeGrowthRate(calculateGrowthRate(
+                totalRevenue.subtract(totalRefund), 
+                prevRevenue.subtract(prevRefund)));
 
         // 各站点数据（当前季度）
-        List<DashboardData.SiteRevenue> siteRevenues = currentData.stream()
-                .collect(Collectors.groupingBy(TaxReportSummary::getSiteCode))
-                .entrySet().stream()
-                .map(entry -> {
-                    DashboardData.SiteRevenue sr = new DashboardData.SiteRevenue();
-                    sr.setSiteCode(entry.getKey());
-                    sr.setSiteName(entry.getValue().get(0).getSiteName());
-                    BigDecimal siteRevenue = sumField(entry.getValue(), TaxReportSummary::getTotalRevenueCny);
-                    BigDecimal siteRefund = sumField(entry.getValue(), TaxReportSummary::getRefundByShipmentCny);
-                    sr.setRevenue(siteRevenue);
-                    sr.setRefund(siteRefund);
-                    sr.setNetIncome(siteRevenue.subtract(siteRefund));
-                    return sr;
-                })
-                .sorted((a, b) -> b.getRevenue().compareTo(a.getRevenue()))
-                .collect(Collectors.toList());
+        List<DashboardData.SiteRevenue> siteRevenues = new ArrayList<>();
+        for (String site : sites) {
+            BigDecimal siteRev = getFromMap(revenueMap, site, currentQuarter);
+            BigDecimal siteRef = getFromMap(refundMap, site, currentQuarter);
+            
+            DashboardData.SiteRevenue sr = new DashboardData.SiteRevenue();
+            sr.setSiteCode(site);
+            Marketplace mp = marketplaceMap.get(site);
+            sr.setSiteName(mp != null ? mp.getSiteName() : site);
+            sr.setRevenue(siteRev.setScale(2, RoundingMode.HALF_UP));
+            sr.setRefund(siteRef.setScale(2, RoundingMode.HALF_UP));
+            sr.setNetIncome(siteRev.subtract(siteRef).setScale(2, RoundingMode.HALF_UP));
+            siteRevenues.add(sr);
+        }
+        siteRevenues.sort((a, b) -> b.getRevenue().compareTo(a.getRevenue()));
         dashboard.setSiteRevenues(siteRevenues);
 
-        // 季度趋势（从dataByQuarter直接计算，无需再次查询）
+        // 季度趋势
         List<DashboardData.QuarterTrend> trends = new ArrayList<>();
         String q = oldestQuarter;
         for (int i = 0; i < 4; i++) {
-            List<TaxReportSummary> qData = dataByQuarter.getOrDefault(q, Collections.emptyList());
             DashboardData.QuarterTrend trend = new DashboardData.QuarterTrend();
             trend.setQuarter(q);
-            BigDecimal qRevenue = sumField(qData, TaxReportSummary::getTotalRevenueCny);
-            BigDecimal qRefund = sumField(qData, TaxReportSummary::getRefundByShipmentCny);
-            trend.setRevenue(qRevenue);
-            trend.setRefund(qRefund);
-            trend.setNetIncome(qRevenue.subtract(qRefund));
+            BigDecimal qRev = sumFromMap(revenueMap, q);
+            BigDecimal qRef = sumFromMap(refundMap, q);
+            trend.setRevenue(qRev.setScale(2, RoundingMode.HALF_UP));
+            trend.setRefund(qRef.setScale(2, RoundingMode.HALF_UP));
+            trend.setNetIncome(qRev.subtract(qRef).setScale(2, RoundingMode.HALF_UP));
             trends.add(trend);
-            // 下一个季度
             q = getNextQuarter(q);
         }
         dashboard.setQuarterTrends(trends);
 
+        log.info("Dashboard data completed in {}ms", System.currentTimeMillis() - startTime);
         return dashboard;
+    }
+
+    /**
+     * 从日期获取季度字符串
+     */
+    private String getQuarterFromDate(LocalDate date) {
+        int quarter = (date.getMonthValue() - 1) / 3 + 1;
+        return date.getYear() + "-Q" + quarter;
+    }
+
+    /**
+     * 从Map汇总所有站点的季度数据
+     */
+    private BigDecimal sumFromMap(Map<String, Map<String, BigDecimal>> map, String quarter) {
+        return map.values().stream()
+                .map(m -> m.getOrDefault(quarter, BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 从Map获取特定站点季度数据
+     */
+    private BigDecimal getFromMap(Map<String, Map<String, BigDecimal>> map, String site, String quarter) {
+        return map.getOrDefault(site, Collections.emptyMap()).getOrDefault(quarter, BigDecimal.ZERO);
+    }
+
+    /**
+     * 从Map汇总订单数
+     */
+    private int sumOrdersFromMap(Map<String, Map<String, Integer>> map, String quarter) {
+        return map.values().stream()
+                .mapToInt(m -> m.getOrDefault(quarter, 0))
+                .sum();
     }
 
     /**
      * 汇总字段
      */
-    private BigDecimal sumField(List<TaxReportSummary> list, java.util.function.Function<TaxReportSummary, BigDecimal> getter) {
-        return list.stream()
-                .map(getter)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
     /**
      * 获取下一个季度
      */
