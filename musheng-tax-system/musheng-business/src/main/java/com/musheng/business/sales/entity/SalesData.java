@@ -31,48 +31,16 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
     private String sourceType;
     
     /**
-     * 店铺名称(ERP数据使用)
+     * 店铺名称(ERP数据使用，预留字段)
      */
-    @FieldMapping(label = "店铺名称", description = "ERP数据的店铺名称", order = 5)
+    @FieldMapping(label = "店铺名称", description = "店铺名称（预留）", order = 5)
     private String storeName;
-    
-    /**
-     * 结算状态(ERP数据使用)
-     */
-    @FieldMapping(label = "结算状态", description = "ERP数据结算状态", order = 6)
-    private String settlementStatus;
-    
-    /**
-     * 转账状态(ERP数据使用)
-     */
-    @FieldMapping(label = "转账状态", description = "ERP数据转账状态", order = 7)
-    private String transferStatus;
-    
-    /**
-     * 结算类型(ORDER/REFUND/SERVICE_FEE/REMOVAL/ADJUSTMENT等)
-     * ERP数据：根据"来源"字段自动转换的标准化结算类型
-     * 注：ERP的"来源"值存储在 transactionType 字段
-     */
-    @FieldMapping(label = "结算类型", description = "ERP数据结算类型分类", order = 8)
-    private String settlementCategory;
 
     /**
      * 交易日期时间
      */
     @FieldMapping(label = "交易日期", description = "交易发生时间", required = true, order = 1)
     private LocalDateTime transactionDate;
-
-    /**
-     * 原始日期字符串
-     */
-    @FieldMapping(label = "原始日期字符串", ignore = true)
-    private String originalDateStr;
-
-    /**
-     * 原始时区
-     */
-    @FieldMapping(label = "原始时区", ignore = true)
-    private String originalTimezone;
 
     /**
      * 结算编号
@@ -135,40 +103,10 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
     private String currencyCode;
 
     /**
-     * 账户类型(仅US有)
-     */
-    @FieldMapping(label = "账户类型", description = "仅US站点有", maxLength = 50, order = 13)
-    private String accountType;
-
-    /**
      * 配送方式
      */
-    @FieldMapping(label = "配送方式", description = "FBA/FBM", maxLength = 50, order = 14)
+    @FieldMapping(label = "配送方式", description = "FBA/FBM", maxLength = 50, order = 13)
     private String fulfillment;
-
-    /**
-     * 订单城市
-     */
-    @FieldMapping(label = "订单城市", description = "买家城市", maxLength = 100, order = 15)
-    private String orderCity;
-
-    /**
-     * 订单省/州
-     */
-    @FieldMapping(label = "订单省/州", description = "买家省/州", maxLength = 100, order = 16)
-    private String orderState;
-
-    /**
-     * 订单邮编
-     */
-    @FieldMapping(label = "订单邮编", description = "买家邮编", maxLength = 20, order = 17)
-    private String orderPostal;
-
-    /**
-     * 税收模式
-     */
-    @FieldMapping(label = "税收模式", description = "税收征收模式", maxLength = 50, order = 18)
-    private String taxCollectionModel;
 
     /**
      * 产品销售额

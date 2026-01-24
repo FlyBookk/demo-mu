@@ -102,30 +102,37 @@
 
     <!-- 统计卡片（按汇率换算为人民币汇总） -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
+      <a-col :flex="1">
         <a-card class="stat-card">
           <a-statistic title="总订单数" :value="summary.totalOrders" :value-style="{ color: '#1890ff' }">
             <template #prefix><ShoppingOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :flex="1">
         <a-card class="stat-card">
           <a-statistic title="产品销售(CNY)" :value="summary.totalProductSalesCny" :precision="2" :value-style="{ color: '#52c41a' }">
             <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :flex="1">
         <a-card class="stat-card">
           <a-statistic title="销售费用(CNY)" :value="summary.totalSellingFeesCny" :precision="2" :value-style="{ color: '#faad14' }">
             <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :flex="1">
         <a-card class="stat-card">
           <a-statistic title="FBA费用(CNY)" :value="summary.totalFbaFeesCny" :precision="2" :value-style="{ color: '#ff4d4f' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :flex="1">
+        <a-card class="stat-card">
+          <a-statistic title="合计(CNY)" :value="summary.totalAmountCny" :precision="2" :value-style="{ color: summary.totalAmountCny >= 0 ? '#1890ff' : '#ff4d4f' }">
             <template #prefix>¥</template>
           </a-statistic>
         </a-card>
@@ -140,7 +147,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 1800 }"
+        :scroll="{ x: 2000 }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -163,6 +170,11 @@
             <a-tag :color="getTransactionCategoryColor(record.transactionCategory)">
               {{ getTransactionCategoryLabel(record.transactionCategory) }}
             </a-tag>
+          </template>
+
+          <!-- 交易说明（从映射表获取） -->
+          <template v-else-if="column.key === 'categoryDesc'">
+            {{ getCategoryDesc(record.transactionType) }}
           </template>
 
           <!-- 合计金额 -->
@@ -276,8 +288,10 @@ import {
   exportSalesData
 } from '@/api/sales'
 import { getEnabledMarketplaces } from '@/api/marketplace'
+import { getTransactionTypeMappingList } from '@/api/transactionType'
 import type { SalesData, SalesSummary } from '@/types/sales'
 import type { Marketplace } from '@/types/marketplace'
+import type { TransactionTypeMapping } from '@/types/transactionType'
 
 const router = useRouter()
 
@@ -290,12 +304,21 @@ const transactionCategoryOptions = [
   { value: 'other', label: '其他', color: 'default' }
 ]
 
+// 交易类型映射缓存（originalType -> categoryDesc）
+const transactionTypeMappingCache = ref<Map<string, string>>(new Map())
+
 function getTransactionCategoryColor(category?: string): string {
   return transactionCategoryOptions.find(t => t.value === category)?.color || 'default'
 }
 
 function getTransactionCategoryLabel(category?: string): string {
   return transactionCategoryOptions.find(t => t.value === category)?.label || category || '-'
+}
+
+// 根据交易类型获取分类说明
+function getCategoryDesc(transactionType?: string): string {
+  if (!transactionType) return '-'
+  return transactionTypeMappingCache.value.get(transactionType) || transactionType
 }
 
 function formatAmount(amount: number | null | undefined): string {
@@ -349,6 +372,13 @@ const columns = [
     dataIndex: 'transactionCategory',
     key: 'transactionCategory',
     width: 100
+  },
+  {
+    title: '交易说明',
+    dataIndex: 'transactionType',
+    key: 'categoryDesc',
+    width: 150,
+    ellipsis: true
   },
   {
     title: '交易日期',
@@ -451,6 +481,23 @@ async function fetchMarketplaces() {
   }
 }
 
+// 获取交易类型映射并缓存
+async function fetchTransactionTypeMappings() {
+  try {
+    const res = await getTransactionTypeMappingList({ status: 1, size: 1000 })
+    const mappings = res.data?.records || []
+    const cache = new Map<string, string>()
+    mappings.forEach((m: TransactionTypeMapping) => {
+      if (m.originalType && m.categoryDesc) {
+        cache.set(m.originalType, m.categoryDesc)
+      }
+    })
+    transactionTypeMappingCache.value = cache
+  } catch (error) {
+    console.error('获取交易类型映射失败:', error)
+  }
+}
+
 async function fetchData() {
   loading.value = true
   try {
@@ -477,6 +524,7 @@ async function fetchData() {
 async function fetchSummary() {
   try {
     const params = {
+      keyword: searchForm.keyword || undefined,
       siteCode: searchForm.siteCode,
       transactionCategory: searchForm.transactionCategory,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
@@ -575,6 +623,7 @@ function handleBatchDelete() {
 // 初始化
 onMounted(() => {
   fetchMarketplaces()
+  fetchTransactionTypeMappings()
   fetchData()
   fetchSummary()
 })

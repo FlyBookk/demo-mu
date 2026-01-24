@@ -290,7 +290,6 @@ public class SalesDataServiceImpl implements SalesDataService {
         // Parse date
         String dateStr = getMappedValue(rowData, fieldMapping, "date_time");
         if (StringUtils.hasText(dateStr)) {
-            salesData.setOriginalDateStr(dateStr);
             LocalDateTime dateTime = csvParseService.parseDate(dateStr, siteCode);
             if (dateTime != null) {
                 salesData.setTransactionDate(dateTime);
@@ -302,10 +301,6 @@ public class SalesDataServiceImpl implements SalesDataService {
         salesData.setSku(getMappedValue(rowData, fieldMapping, "sku"));
         salesData.setDescription(getMappedValue(rowData, fieldMapping, "description"));
         salesData.setFulfillment(getMappedValue(rowData, fieldMapping, "fulfillment"));
-        salesData.setOrderCity(getMappedValue(rowData, fieldMapping, "order_city"));
-        salesData.setOrderState(getMappedValue(rowData, fieldMapping, "order_state"));
-        salesData.setOrderPostal(getMappedValue(rowData, fieldMapping, "order_postal"));
-        salesData.setTaxCollectionModel(getMappedValue(rowData, fieldMapping, "tax_collection_model"));
 
         // Parse quantity
         String quantityStr = getMappedValue(rowData, fieldMapping, "quantity");
@@ -483,9 +478,16 @@ public class SalesDataServiceImpl implements SalesDataService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String siteCode, String transactionCategory, String startDate, String endDate) {
+    public Map<String, Object> getSummary(String keyword, String siteCode, String transactionCategory, String startDate, String endDate) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
+        // 关键字搜索（订单号/SKU）
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w
+                    .like(SalesData::getOrderId, keyword)
+                    .or()
+                    .like(SalesData::getSku, keyword));
+        }
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
         }

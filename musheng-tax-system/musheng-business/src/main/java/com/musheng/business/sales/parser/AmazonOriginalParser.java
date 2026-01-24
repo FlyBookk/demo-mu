@@ -385,12 +385,7 @@ public class AmazonOriginalParser implements SalesDataParser {
         data.setDescription(getMappedValue(record, headerMap, fieldMapping, "description"));
         data.setSettlementId(getMappedValue(record, headerMap, fieldMapping, "settlementId"));
         data.setMarketplace(getMappedValue(record, headerMap, fieldMapping, "marketplace"));
-        data.setAccountType(getMappedValue(record, headerMap, fieldMapping, "accountType"));
         data.setFulfillment(getMappedValue(record, headerMap, fieldMapping, "fulfillment"));
-        data.setOrderCity(getMappedValue(record, headerMap, fieldMapping, "orderCity"));
-        data.setOrderState(getMappedValue(record, headerMap, fieldMapping, "orderState"));
-        data.setOrderPostal(getMappedValue(record, headerMap, fieldMapping, "orderPostal"));
-        data.setTaxCollectionModel(getMappedValue(record, headerMap, fieldMapping, "taxCollectionModel"));
         
         // 交易类型
         String transactionType = getMappedValue(record, headerMap, fieldMapping, "transactionType");
@@ -404,8 +399,6 @@ public class AmazonOriginalParser implements SalesDataParser {
         
         // 日期字段
         String dateStr = getMappedValue(record, headerMap, fieldMapping, "transactionDate");
-        data.setOriginalDateStr(dateStr);
-        data.setOriginalTimezone(DateConverter.extractTimezone(dateStr));
         LocalDateTime parsedDate = DateConverter.parse(dateStr, siteCode);
         // 如果日期解析失败，使用当前时间作为默认值（确保数据库插入不会失败）
         data.setTransactionDate(parsedDate != null ? parsedDate : LocalDateTime.now());

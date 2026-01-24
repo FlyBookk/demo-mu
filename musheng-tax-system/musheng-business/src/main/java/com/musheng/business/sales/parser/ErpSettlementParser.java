@@ -628,13 +628,8 @@ public class ErpSettlementParser implements SalesDataParser {
         data.setQuantity(aggregate.getQuantity());
         data.setTransactionDate(aggregate.getSettlementTime());
         
-        // 设置结算类型（来源值存储在 transactionType 中，不再单独设置 source）
-        data.setSettlementCategory(aggregate.getSettlementCategory());
-        
-        // ERP特有字段
+        // ERP特有字段（仅保留店铺名称）
         data.setStoreName(aggregate.getStoreName());
-        data.setSettlementStatus(aggregate.getSettlementStatus());
-        data.setTransferStatus(aggregate.getTransferStatus());
         
         // 金额字段
         data.setProductSales(aggregate.getProductSales());
@@ -728,7 +723,6 @@ public class ErpSettlementParser implements SalesDataParser {
         map.put("transactionDate", data.getTransactionDate());
         map.put("siteCode", data.getSiteCode());
         map.put("transactionType", data.getTransactionType());
-        map.put("settlementCategory", data.getSettlementCategory());
         map.put("transactionCategory", data.getTransactionCategory());
         map.put("quantity", data.getQuantity());
         map.put("productSales", data.getProductSales());

@@ -7,12 +7,12 @@
 export interface SalesData {
   id: number
   importBatchId?: number
+  sourceType?: string            // 数据源类型(ORIGINAL/ERP)
+  storeName?: string             // 店铺名称（预留字段）
   transactionDate: string
-  originalDateStr?: string
-  originalTimezone?: string
   settlementId?: string
   transactionType: string
-  transactionCategory: string  // income/refund/fee/adjustment/other
+  transactionCategory: string    // income/refund/fee/adjustment/other
   orderId: string
   sku?: string
   description?: string
@@ -20,21 +20,16 @@ export interface SalesData {
   siteCode: string
   marketplace: string
   currencyCode: string
-  accountType?: string
   fulfillment?: string
-  orderCity?: string
-  orderState?: string
-  orderPostal?: string
-  taxCollectionModel?: string
-  // 金额字段
+  // 金额字段（全部保留）
   productSales: number
   productSalesTax: number
   shippingCredits: number
   shippingCreditsTax: number
   giftWrapCredits: number
   giftWrapCreditsTax: number
-  regulatoryFee: number
-  regulatoryFeeTax: number
+  regulatoryFee: number          // 监管费(仅CA/US)
+  regulatoryFeeTax: number       // 监管费税(仅CA/US)
   promotionalRebates: number
   promotionalRebatesTax: number
   marketplaceWithheldTax: number
@@ -43,11 +38,6 @@ export interface SalesData {
   otherTransactionFees: number
   other: number
   total: number
-  // ERP特有字段
-  storeName?: string           // 店铺名称（ERP数据）
-  settlementStatus?: string    // 结算状态（ERP数据）
-  transferStatus?: string      // 转账状态（ERP数据）
-  settlementCategory?: string  // 结算类型（ORDER/REFUND等，ERP数据）
   // 汇率信息
   exchangeRate?: number
   exchangeRateDate?: string

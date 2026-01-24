@@ -63,7 +63,7 @@ public interface SalesDataService {
      * @param endDate             结束日期(可选)
      * @return 汇总数据
      */
-    Map<String, Object> getSummary(String siteCode, String transactionCategory, String startDate, String endDate);
+    Map<String, Object> getSummary(String keyword, String siteCode, String transactionCategory, String startDate, String endDate);
 
     /**
      * 按交易类型分组统计
