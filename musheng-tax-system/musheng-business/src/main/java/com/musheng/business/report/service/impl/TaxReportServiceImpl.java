@@ -234,34 +234,57 @@ public class TaxReportServiceImpl implements TaxReportService {
             return Collections.emptyList();
         }
 
-        // ========== 批量加载所有数据（减少数据库查询次数） ==========
+        // ========== 优化后的批量加载（减少数据库查询次数） ==========
+        long startTime = System.currentTimeMillis();
 
-        // 1. 加载基础数据
+        // 1. 加载站点基础数据（小表，快速）
         Map<String, Marketplace> marketplaceMap = loadMarketplaceMap(sites);
-        Map<String, Map<String, LocalDate>> refundShipDateMap = loadRefundShipDates(sites, shopId);
 
-        // 2. 批量查询发货数据
+        // 2. 批量查询发货数据（按日期范围）
         LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
         shippingWrapper.eq(ShippingData::getShopId, shopId)
                 .in(ShippingData::getSiteCode, sites)
                 .between(ShippingData::getShipDate, minStartDate, maxEndDate);
         List<ShippingData> allShippingData = shippingDataMapper.selectList(shippingWrapper);
 
-        // 3. 批量查询销售数据（income/refund类型，用于收入和退款计算）
+        // 3. 构建订单号→发货日期/汇率映射（从已查询的发货数据中提取，避免重复查询）
+        Map<String, Map<String, LocalDate>> refundShipDateMap = new HashMap<>();
+        Map<String, Map<String, BigDecimal>> orderRateMapBySite = new HashMap<>();
+        for (ShippingData shipping : allShippingData) {
+            String site = shipping.getSiteCode();
+            String orderId = shipping.getOrderId();
+            if (orderId == null) continue;
+
+            refundShipDateMap.computeIfAbsent(site, k -> new HashMap<>())
+                    .merge(orderId, shipping.getShipDate(), (a, b) -> b.isAfter(a) ? b : a);
+            if (shipping.getExchangeRate() != null) {
+                orderRateMapBySite.computeIfAbsent(site, k -> new HashMap<>())
+                        .put(orderId, shipping.getExchangeRate());
+            }
+        }
+
+        // 4. 扩展日期范围查询销售数据（退款可能在发货后2个月内结算）
+        LocalDate extendedEndDate = maxEndDate.plusMonths(2);
+        
+        // 5. 批量查询销售数据（income/refund类型，添加日期过滤）
         LambdaQueryWrapper<SalesData> salesWrapper = new LambdaQueryWrapper<>();
         salesWrapper.eq(SalesData::getShopId, shopId)
                 .in(SalesData::getSiteCode, sites)
-                .in(SalesData::getTransactionCategory, List.of("income", "refund"));
+                .in(SalesData::getTransactionCategory, List.of("income", "refund"))
+                .ge(SalesData::getTransactionDate, minStartDate.minusMonths(1).atStartOfDay())
+                .lt(SalesData::getTransactionDate, extendedEndDate.plusDays(1).atStartOfDay());
         List<SalesData> allSalesData = salesDataMapper.selectList(salesWrapper);
 
-        // 4. 批量查询其他费用数据（非income/refund类型）
+        // 6. 批量查询其他费用数据（非income/refund类型，按日期过滤）
         LambdaQueryWrapper<SalesData> otherWrapper = new LambdaQueryWrapper<>();
         otherWrapper.eq(SalesData::getShopId, shopId)
                 .in(SalesData::getSiteCode, sites)
-                .notIn(SalesData::getTransactionCategory, List.of("income", "refund"));
+                .notIn(SalesData::getTransactionCategory, List.of("income", "refund"))
+                .ge(SalesData::getTransactionDate, minStartDate.atStartOfDay())
+                .lt(SalesData::getTransactionDate, maxEndDate.plusDays(1).atStartOfDay());
         List<SalesData> allOtherData = salesDataMapper.selectList(otherWrapper);
 
-        // 5. 批量查询广告数据
+        // 7. 批量查询广告数据
         LambdaQueryWrapper<AdvertisingData> adWrapper = new LambdaQueryWrapper<>();
         adWrapper.eq(AdvertisingData::getShopId, shopId)
                 .in(AdvertisingData::getSiteCode, sites)
@@ -273,10 +296,11 @@ public class TaxReportServiceImpl implements TaxReportService {
                                 .ge(AdvertisingData::getBillingEndDate, maxEndDate)));
         List<AdvertisingData> allAdData = advertisingDataMapper.selectList(adWrapper);
 
-        log.debug("Batch loaded: shipping={}, sales(income/refund)={}, other={}, ads={}",
+        log.info("Data loaded in {}ms: shipping={}, sales={}, other={}, ads={}",
+                System.currentTimeMillis() - startTime,
                 allShippingData.size(), allSalesData.size(), allOtherData.size(), allAdData.size());
 
-        // ========== 按站点分组 ==========
+        // ========== 按站点分组（内存操作，快速） ==========
         Map<String, List<ShippingData>> shippingBySite = allShippingData.stream()
                 .collect(Collectors.groupingBy(ShippingData::getSiteCode));
         Map<String, List<SalesData>> salesBySite = allSalesData.stream()
@@ -295,11 +319,13 @@ public class TaxReportServiceImpl implements TaxReportService {
             List<SalesData> siteOther = otherBySite.getOrDefault(site, Collections.emptyList());
             List<AdvertisingData> siteAds = adBySite.getOrDefault(site, Collections.emptyList());
             Map<String, LocalDate> siteRefundShipDates = refundShipDateMap.getOrDefault(site, Collections.emptyMap());
+            Map<String, BigDecimal> siteOrderRates = orderRateMapBySite.getOrDefault(site, Collections.emptyMap());
 
             for (String quarterStr : quarters) {
                 TaxReportSummary summary = calculateTaxSummaryFromMemory(
                         site, quarterStr, marketplaceMap.get(site),
-                        siteShipping, siteSales, siteOther, siteAds, siteRefundShipDates
+                        siteShipping, siteSales, siteOther, siteAds, 
+                        siteRefundShipDates, siteOrderRates
                 );
                 if (summary != null) {
                     results.add(summary);
@@ -307,6 +333,7 @@ public class TaxReportServiceImpl implements TaxReportService {
             }
         }
 
+        log.info("Tax summary calculation completed in {}ms", System.currentTimeMillis() - startTime);
         return results;
     }
 
@@ -326,7 +353,8 @@ public class TaxReportServiceImpl implements TaxReportService {
             List<SalesData> allSalesData,
             List<SalesData> allOtherData,
             List<AdvertisingData> allAds,
-            Map<String, LocalDate> refundShipDateMap) {
+            Map<String, LocalDate> refundShipDateMap,
+            Map<String, BigDecimal> orderRateMap) {
 
         // 解析季度日期范围
         int year = Integer.parseInt(yearQuarter.substring(0, 4));
@@ -337,22 +365,14 @@ public class TaxReportServiceImpl implements TaxReportService {
         String siteName = marketplace != null ? marketplace.getSiteName() : siteCode;
         String currencyCode = SITE_CURRENCY_MAP.getOrDefault(siteCode, "USD");
 
-        // ========== 1. 筛选本季度发货数据，构建订单号→汇率映射 ==========
-        List<ShippingData> shippingList = allShipping.stream()
-                .filter(s -> s.getShipDate() != null
-                        && !s.getShipDate().isBefore(startDate)
-                        && !s.getShipDate().isAfter(endDate))
-                .collect(Collectors.toList());
-
+        // ========== 1. 筛选本季度发货数据，收集订单号 ==========
         Set<String> shippingOrderIds = new HashSet<>();
-        Map<String, BigDecimal> orderRateMap = new HashMap<>();  // 订单号→配送汇率
-
-        for (ShippingData shipping : shippingList) {
-            if (shipping.getOrderId() != null) {
+        for (ShippingData shipping : allShipping) {
+            if (shipping.getShipDate() != null 
+                    && !shipping.getShipDate().isBefore(startDate)
+                    && !shipping.getShipDate().isAfter(endDate)
+                    && shipping.getOrderId() != null) {
                 shippingOrderIds.add(shipping.getOrderId());
-                if (shipping.getExchangeRate() != null) {
-                    orderRateMap.put(shipping.getOrderId(), shipping.getExchangeRate());
-                }
             }
         }
 
@@ -814,66 +834,6 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .collect(Collectors.toMap(Marketplace::getSiteCode, m -> m, (a, b) -> a));
     }
 
-    /**
-     * 预加载退款订单的发货日期
-     */
-    private Map<String, Map<String, LocalDate>> loadRefundShipDates(List<String> sites, Long shopId) {
-        // 查询所有站点的退款订单
-        LambdaQueryWrapper<SalesData> refundWrapper = new LambdaQueryWrapper<>();
-        refundWrapper.eq(SalesData::getShopId, shopId)  // 店铺数据隔离
-                .in(SalesData::getSiteCode, sites)
-                .eq(SalesData::getTransactionCategory, "refund")
-                .isNotNull(SalesData::getOrderId);
-        List<SalesData> allRefunds = salesDataMapper.selectList(refundWrapper);
-
-        if (allRefunds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        // 收集所有退款订单的 orderId（按站点分组）
-        Map<String, Set<String>> siteOrderIds = allRefunds.stream()
-                .collect(Collectors.groupingBy(
-                        SalesData::getSiteCode,
-                        Collectors.mapping(SalesData::getOrderId, Collectors.toSet())
-                ));
-
-        // 批量查询发货日期
-        Map<String, Map<String, LocalDate>> result = new HashMap<>();
-
-        for (Map.Entry<String, Set<String>> entry : siteOrderIds.entrySet()) {
-            String site = entry.getKey();
-            Set<String> orderIds = entry.getValue();
-
-            if (orderIds.isEmpty()) continue;
-
-            List<String> orderIdList = new ArrayList<>(orderIds);
-            Map<String, LocalDate> siteShipDates = new HashMap<>();
-
-            int batchSize = 500;
-            for (int i = 0; i < orderIdList.size(); i += batchSize) {
-                List<String> batch = orderIdList.subList(i, Math.min(i + batchSize, orderIdList.size()));
-
-                LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
-                shippingWrapper.eq(ShippingData::getShopId, shopId)  // 店铺数据隔离
-                        .eq(ShippingData::getSiteCode, site)
-                        .in(ShippingData::getOrderId, batch);
-                List<ShippingData> shippingList = shippingDataMapper.selectList(shippingWrapper);
-
-                for (ShippingData shipping : shippingList) {
-                    String orderId = shipping.getOrderId();
-                    LocalDate shipDate = shipping.getShipDate();
-                    if (shipDate != null) {
-                        siteShipDates.merge(orderId, shipDate, (existing, newDate) ->
-                                newDate.isAfter(existing) ? newDate : existing);
-                    }
-                }
-            }
-
-            result.put(site, siteShipDates);
-        }
-
-        return result;
-    }
 
     /**
      * 获取季度范围列表
