@@ -24,19 +24,20 @@ spring:
       connection-timeout: 20000
       max-lifetime: 1200000
 
-  # Redis Configuration
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      database: 0
-      lettuce:
-        pool:
-          max-active: 20
-          max-idle: 10
-          min-idle: 5
-          max-wait: -1ms
+  # Redis Configuration (仅当 sa-token.cache.type=redis 时需要配置)
+  # 当使用 Caffeine 本地缓存时，以下配置不会生效，可以不配置
+#  data:
+#    redis:
+#      host: ${REDIS_HOST:localhost}
+#      port: ${REDIS_PORT:6379}
+#      password: ${REDIS_PASSWORD:}
+#      database: 0
+#      lettuce:
+#        pool:
+#          max-active: 20
+#          max-idle: 10
+#          min-idle: 5
+#          max-wait: -1ms
 
   # File Upload Configuration
   servlet:
@@ -82,6 +83,12 @@ sa-token:
   is-share: true
   token-style: uuid
   is-log: true
+  # 缓存配置
+  cache:
+    # 缓存类型: caffeine (本地缓存，默认) 或 redis (分布式缓存)
+    # caffeine: 适合单机部署的内部系统，无需外部依赖，服务重启后登录状态丢失
+    # redis: 适合集群部署，需要配置 Redis 连接信息，支持会话共享
+    type: caffeine
 
 # Knife4j API Documentation Configuration
 springdoc:

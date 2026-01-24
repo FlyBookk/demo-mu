@@ -1,0 +1,4 @@
+# Sa-Token 缓存类型自动配置过滤器
+# 根据 sa-token.cache.type 配置动态排除 Redis 自动配置
+org.springframework.boot.autoconfigure.AutoConfigurationImportFilter=\
+  com.musheng.system.config.CacheTypeAutoConfigurationExcludeFilter

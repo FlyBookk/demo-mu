@@ -28,21 +28,32 @@
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-spring-boot3-starter</artifactId>
         </dependency>
+        
+        <!-- Sa-Token Redis 集成 (可选，通过配置开关控制) -->
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-redis-jackson</artifactId>
+            <optional>true</optional>
         </dependency>
 
-        <!-- Redis -->
+        <!-- Redis (可选，通过配置开关控制) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
         </dependency>
 
-        <!-- Connection Pool -->
+        <!-- Connection Pool (Redis 连接池) -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Caffeine 本地缓存 (默认缓存方案) -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
 
         <!-- Spring Security Crypto (for BCrypt) -->
