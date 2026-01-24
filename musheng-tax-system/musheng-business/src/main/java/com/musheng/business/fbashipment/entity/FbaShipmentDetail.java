@@ -20,6 +20,12 @@ import java.time.LocalDateTime;
 public class FbaShipmentDetail extends BaseEntity {
 
     /**
+     * 店铺ID（用于数据隔离）
+     */
+    @Schema(description = "店铺ID")
+    private Long shopId;
+
+    /**
      * 货件名称(货件批次名称)
      */
     @Schema(description = "货件名称")

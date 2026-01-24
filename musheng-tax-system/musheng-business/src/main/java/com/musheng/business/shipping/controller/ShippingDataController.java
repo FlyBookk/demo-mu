@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.shipping.entity.ShippingData;
 import com.musheng.business.shipping.service.ShippingDataService;
 import com.musheng.common.annotation.OperationLog;
+import com.musheng.common.annotation.RequireShop;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +25,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/business/shipping")
 @RequiredArgsConstructor
+@RequireShop  // 整个控制器都需要店铺上下文
 public class ShippingDataController {
 
     private final ShippingDataService shippingDataService;

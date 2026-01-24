@@ -19,6 +19,12 @@ import java.time.LocalDateTime;
 public class SalesData extends BaseEntityWithoutUpdateTime {
 
     /**
+     * 店铺ID（用于数据隔离）
+     */
+    @FieldMapping(label = "店铺ID", ignore = true)
+    private Long shopId;
+
+    /**
      * 导入批次ID
      */
     @FieldMapping(label = "导入批次ID", ignore = true)

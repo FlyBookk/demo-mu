@@ -22,6 +22,12 @@ import java.time.LocalDate;
 public class AdvertisingData extends BaseEntity {
 
     /**
+     * 店铺ID（用于数据隔离）
+     */
+    @FieldMapping(label = "店铺ID", ignore = true)
+    private Long shopId;
+
+    /**
      * 店铺名称
      */
     @FieldMapping(label = "店铺名称", description = "店铺名称", required = true, maxLength = 100, order = 1)

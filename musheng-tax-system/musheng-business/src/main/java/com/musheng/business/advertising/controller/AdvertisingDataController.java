@@ -7,6 +7,7 @@ import com.musheng.business.advertising.dto.AdvertisingDataRequest;
 import com.musheng.business.advertising.entity.AdvertisingData;
 import com.musheng.business.advertising.service.AdvertisingDataService;
 import com.musheng.common.annotation.OperationLog;
+import com.musheng.common.annotation.RequireShop;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/v1/advertising")
 @RequiredArgsConstructor
+@RequireShop  // 整个控制器都需要店铺上下文
 public class AdvertisingDataController {
 
     private final AdvertisingDataService advertisingDataService;

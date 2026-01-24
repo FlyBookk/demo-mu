@@ -26,6 +26,7 @@ import com.musheng.config.mapping.mapper.FieldMappingTemplateMapper;
 import com.musheng.config.mapping.mapper.TransactionTypeMappingMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
+import com.musheng.common.context.ShopContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -97,6 +98,10 @@ public class SalesDataServiceImpl implements SalesDataService {
     public Page<SalesData> list(SalesQueryRequest request) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
+        // 店铺数据隔离 - 必须按当前店铺过滤
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(SalesData::getShopId, shopId);
+
         if (StringUtils.hasText(request.getSiteCode())) {
             wrapper.eq(SalesData::getSiteCode, request.getSiteCode());
         }
@@ -149,8 +154,12 @@ public class SalesDataServiceImpl implements SalesDataService {
         int successCount = 0;
         int failCount = 0;
 
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
+        
         // Create import record
         ImportRecord importRecord = new ImportRecord();
+        importRecord.setShopId(shopId);  // 设置店铺ID
         importRecord.setBatchNo(generateBatchNo());
         importRecord.setDataType("sales");
         importRecord.setFileName(file.getOriginalFilename());
@@ -203,6 +212,7 @@ public class SalesDataServiceImpl implements SalesDataService {
                             if (salesData != null) {
                                 // Check for duplicate
                                 if (!isDuplicate(salesData)) {
+                                    salesData.setShopId(shopId);  // 设置店铺ID
                                     salesData.setImportBatchId(importRecord.getId());
                                     salesDataMapper.insert(salesData);
                                     successCount++;
@@ -481,6 +491,10 @@ public class SalesDataServiceImpl implements SalesDataService {
     public Map<String, Object> getSummary(String keyword, String siteCode, String transactionCategory, String startDate, String endDate) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(SalesData::getShopId, shopId);
+
         // 关键字搜索（订单号/SKU）
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w
@@ -600,6 +614,10 @@ public class SalesDataServiceImpl implements SalesDataService {
     public List<Map<String, Object>> getStatByType(String siteCode, String startDate, String endDate) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(SalesData::getShopId, shopId);
+
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
         }
@@ -649,6 +667,10 @@ public class SalesDataServiceImpl implements SalesDataService {
     public void exportData(String siteCode, String transactionCategory, String startDate, String endDate,
                            jakarta.servlet.http.HttpServletResponse response) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(SalesData::getShopId, shopId);
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
@@ -964,11 +986,15 @@ public class SalesDataServiceImpl implements SalesDataService {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
         }
         
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
+        
         // 生成批次号
         String batchNo = generateBatchNo();
         
         // 创建导入记录
         ImportRecord importRecord = new ImportRecord();
+        importRecord.setShopId(shopId);  // 设置店铺ID
         importRecord.setBatchNo(batchNo);
         importRecord.setDataType("sales");
         importRecord.setFileName(fileCache.fileName);
@@ -1021,9 +1047,10 @@ public class SalesDataServiceImpl implements SalesDataService {
             progress.setTotalCount(totalCount);
             
             List<SalesData> dataList = parseResult.getDataList();
-            
+
             // 批量设置额外字段和汇率
             for (SalesData data : dataList) {
+                data.setShopId(shopId);  // 设置店铺ID
                 data.setImportBatchId(importRecord.getId());
                 data.setSourceType(request.getSourceType().getCode());
                 // 填充汇率

@@ -163,6 +163,13 @@
         </div>
       </div>
 
+      <!-- 导入确认弹窗 -->
+      <ImportConfirmModal
+        ref="importConfirmRef"
+        data-type="advertising"
+        @confirm="doExecuteImport"
+      />
+
       <!-- 步骤3: 导入结果 -->
       <div v-if="currentStep === 2" class="step-content">
         <a-result
@@ -266,6 +273,7 @@ import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { DownloadOutlined, PlusOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import { importAdvertisingData, downloadAdvertisingTemplate } from '@/api/advertising'
+import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import type {
   AdvertisingImportRequest,
   AdvertisingImportResponse
@@ -303,6 +311,7 @@ const previewData = ref<AdvertisingImportRequest[]>([])
 
 // 导入状态
 const importing = ref(false)
+const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // 导入结果
 const importResult = ref<AdvertisingImportResponse>({
@@ -507,15 +516,24 @@ const convertManualRowToImportRequest = (row: ManualRow): AdvertisingImportReque
   }
 }
 
-// 执行导入
-const handleImport = async () => {
+// 点击开始导入 - 弹出确认窗口
+const handleImport = () => {
+  // 弹出确认窗口
+  importConfirmRef.value?.show()
+}
+
+// 确认导入后执行
+const doExecuteImport = async () => {
   importing.value = true
+  importConfirmRef.value?.setLoading(true)
+  
   try {
     const response = await importAdvertisingData({
       data: previewData.value
     })
 
     importResult.value = response
+    importConfirmRef.value?.hide()
     currentStep.value = 2
 
     if (response.failedCount === 0) {
@@ -525,6 +543,7 @@ const handleImport = async () => {
     }
   } catch (error) {
     message.error('导入失败: ' + (error as Error).message)
+    importConfirmRef.value?.setLoading(false)
   } finally {
     importing.value = false
   }

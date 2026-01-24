@@ -61,8 +61,6 @@ public class ReportServiceImpl implements ReportService {
         log.info("Getting summary report: siteCode={}, yearQuarter={}, startQuarter={}, endQuarter={}",
                 siteCode, yearQuarter, startQuarter, endQuarter);
 
-        List<ReportSummary> results = new ArrayList<>();
-
         // Determine quarters to process
         List<String> quarters = getQuartersInRange(startQuarter, endQuarter, yearQuarter);
 
@@ -70,9 +68,75 @@ public class ReportServiceImpl implements ReportService {
         List<String> sites = StringUtils.hasText(siteCode) ?
                 List.of(siteCode) : List.of("US", "CA", "UK", "DE");
 
+        return calculateSummaryBatch(sites, quarters);
+    }
+
+    @Override
+    public List<ReportSummary> getSummaryBySite(String yearQuarter) {
+        log.info("Getting summary report by site: yearQuarter={}", yearQuarter);
+
+        List<String> sites = List.of("US", "CA", "UK", "DE");
+        List<String> quarters = List.of(yearQuarter);
+
+        return calculateSummaryBatch(sites, quarters);
+    }
+
+    @Override
+    public List<ReportSummary> getSummaryByQuarter(String siteCode, String startQuarter, String endQuarter) {
+        log.info("Getting summary report by quarter: siteCode={}, startQuarter={}, endQuarter={}",
+                siteCode, startQuarter, endQuarter);
+
+        List<String> sites = List.of(siteCode);
+        List<String> quarters = getQuartersInRange(startQuarter, endQuarter, null);
+
+        return calculateSummaryBatch(sites, quarters);
+    }
+
+    /**
+     * 批量计算汇总报表 - 预加载基础数据，避免 N+1 查询
+     */
+    private List<ReportSummary> calculateSummaryBatch(List<String> sites, List<String> quarters) {
+        List<ReportSummary> results = new ArrayList<>();
+
+        // ========== 1. 预加载 Marketplace 数据 ==========
+        Map<String, Marketplace> marketplaceMap = loadMarketplaceMap(sites);
+
+        // ========== 2. 计算所有季度的日期范围 ==========
+        LocalDate minStartDate = null;
+        LocalDate maxEndDate = null;
+        Map<String, LocalDate[]> quarterDateRanges = new HashMap<>();
+
+        for (String quarter : quarters) {
+            int year = Integer.parseInt(quarter.substring(0, 4));
+            int q = Integer.parseInt(quarter.substring(6, 7));
+            LocalDate startDate = getQuarterStartDate(year, q);
+            LocalDate endDate = getQuarterEndDate(year, q);
+            quarterDateRanges.put(quarter, new LocalDate[]{startDate, endDate});
+
+            if (minStartDate == null || startDate.isBefore(minStartDate)) {
+                minStartDate = startDate;
+            }
+            if (maxEndDate == null || endDate.isAfter(maxEndDate)) {
+                maxEndDate = endDate;
+            }
+        }
+
+        // ========== 3. 预加载所有退款订单的发货日期 ==========
+        Map<String, Map<String, LocalDate>> refundShipDateMap = loadRefundShipDates(sites);
+
+        // ========== 4. 预加载汇率数据 ==========
+        Set<String> currencies = sites.stream()
+                .map(site -> SITE_CURRENCY_MAP.getOrDefault(site, "USD"))
+                .collect(Collectors.toSet());
+        Map<String, BigDecimal> rateCache = loadExchangeRates(currencies, maxEndDate);
+
+        // ========== 5. 循环计算每个站点和季度的汇总 ==========
         for (String site : sites) {
             for (String quarter : quarters) {
-                ReportSummary summary = calculateSummary(site, quarter);
+                LocalDate[] dateRange = quarterDateRanges.get(quarter);
+                ReportSummary summary = calculateSummaryWithPreloadedData(
+                        site, quarter, dateRange[0], dateRange[1],
+                        marketplaceMap, refundShipDateMap.getOrDefault(site, Collections.emptyMap()), rateCache);
                 if (summary != null) {
                     results.add(summary);
                 }
@@ -82,61 +146,120 @@ public class ReportServiceImpl implements ReportService {
         return results;
     }
 
-    @Override
-    public List<ReportSummary> getSummaryBySite(String yearQuarter) {
-        log.info("Getting summary report by site: yearQuarter={}", yearQuarter);
-
-        List<ReportSummary> results = new ArrayList<>();
-        List<String> sites = List.of("US", "CA", "UK", "DE");
-
-        for (String site : sites) {
-            ReportSummary summary = calculateSummary(site, yearQuarter);
-            if (summary != null) {
-                results.add(summary);
-            }
-        }
-
-        return results;
-    }
-
-    @Override
-    public List<ReportSummary> getSummaryByQuarter(String siteCode, String startQuarter, String endQuarter) {
-        log.info("Getting summary report by quarter: siteCode={}, startQuarter={}, endQuarter={}",
-                siteCode, startQuarter, endQuarter);
-
-        List<ReportSummary> results = new ArrayList<>();
-        List<String> quarters = getQuartersInRange(startQuarter, endQuarter, null);
-
-        for (String quarter : quarters) {
-            ReportSummary summary = calculateSummary(siteCode, quarter);
-            if (summary != null) {
-                results.add(summary);
-            }
-        }
-
-        return results;
+    /**
+     * 预加载 Marketplace 数据
+     */
+    private Map<String, Marketplace> loadMarketplaceMap(List<String> sites) {
+        LambdaQueryWrapper<Marketplace> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Marketplace::getSiteCode, sites);
+        List<Marketplace> marketplaces = marketplaceMapper.selectList(wrapper);
+        return marketplaces.stream()
+                .collect(Collectors.toMap(Marketplace::getSiteCode, m -> m, (a, b) -> a));
     }
 
     /**
-     * Calculate summary for a specific site and quarter
-     * Implements refund attribution by shipping date (BUG-004)
+     * 预加载所有退款订单的发货日期 - 避免 N+1 查询
+     * 返回 Map<siteCode, Map<orderId, shipDate>>
      */
-    private ReportSummary calculateSummary(String siteCode, String yearQuarter) {
+    private Map<String, Map<String, LocalDate>> loadRefundShipDates(List<String> sites) {
+        // 1. 查询所有站点的退款订单
+        LambdaQueryWrapper<SalesData> refundWrapper = new LambdaQueryWrapper<>();
+        refundWrapper.in(SalesData::getSiteCode, sites)
+                .eq(SalesData::getTransactionCategory, "refund")
+                .isNotNull(SalesData::getOrderId);
+        List<SalesData> allRefunds = salesDataMapper.selectList(refundWrapper);
+
+        if (allRefunds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // 2. 收集所有退款订单的 orderId（按站点分组）
+        Map<String, Set<String>> siteOrderIds = allRefunds.stream()
+                .collect(Collectors.groupingBy(
+                        SalesData::getSiteCode,
+                        Collectors.mapping(SalesData::getOrderId, Collectors.toSet())
+                ));
+
+        // 3. 批量查询这些订单的发货日期
+        Map<String, Map<String, LocalDate>> result = new HashMap<>();
+
+        for (Map.Entry<String, Set<String>> entry : siteOrderIds.entrySet()) {
+            String siteCode = entry.getKey();
+            Set<String> orderIds = entry.getValue();
+
+            if (orderIds.isEmpty()) {
+                continue;
+            }
+
+            // 分批查询，避免 IN 子句过长
+            List<String> orderIdList = new ArrayList<>(orderIds);
+            Map<String, LocalDate> siteShipDates = new HashMap<>();
+
+            int batchSize = 500;
+            for (int i = 0; i < orderIdList.size(); i += batchSize) {
+                List<String> batch = orderIdList.subList(i, Math.min(i + batchSize, orderIdList.size()));
+
+                LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
+                shippingWrapper.eq(ShippingData::getSiteCode, siteCode)
+                        .in(ShippingData::getOrderId, batch);
+                List<ShippingData> shippingList = shippingDataMapper.selectList(shippingWrapper);
+
+                // 每个订单取最新的发货日期
+                for (ShippingData shipping : shippingList) {
+                    String orderId = shipping.getOrderId();
+                    LocalDate shipDate = shipping.getShipDate();
+                    if (shipDate != null) {
+                        siteShipDates.merge(orderId, shipDate, (existing, newDate) ->
+                                newDate.isAfter(existing) ? newDate : existing);
+                    }
+                }
+            }
+
+            result.put(siteCode, siteShipDates);
+        }
+
+        return result;
+    }
+
+    /**
+     * 预加载汇率数据
+     */
+    private Map<String, BigDecimal> loadExchangeRates(Set<String> currencies, LocalDate date) {
+        Map<String, BigDecimal> rateCache = new HashMap<>();
+        for (String currency : currencies) {
+            if ("CNY".equals(currency)) {
+                rateCache.put(currency, BigDecimal.ONE);
+            } else {
+                try {
+                    BigDecimal rate = rateService.getRate(currency, date.toString());
+                    rateCache.put(currency, rate);
+                } catch (Exception e) {
+                    log.warn("Exchange rate not found for {} on {}, using 1:1", currency, date);
+                    rateCache.put(currency, BigDecimal.ONE);
+                }
+            }
+        }
+        return rateCache;
+    }
+
+    /**
+     * 使用预加载数据计算汇总（优化版本，避免 N+1 查询）
+     */
+    private ReportSummary calculateSummaryWithPreloadedData(
+            String siteCode,
+            String yearQuarter,
+            LocalDate startDate,
+            LocalDate endDate,
+            Map<String, Marketplace> marketplaceMap,
+            Map<String, LocalDate> refundShipDateMap,
+            Map<String, BigDecimal> rateCache) {
+
         log.debug("Calculating summary for site={}, quarter={}", siteCode, yearQuarter);
 
-        // Get site info
-        LambdaQueryWrapper<Marketplace> siteWrapper = new LambdaQueryWrapper<>();
-        siteWrapper.eq(Marketplace::getSiteCode, siteCode);
-        Marketplace marketplace = marketplaceMapper.selectOne(siteWrapper);
-
+        // 从预加载数据获取站点信息
+        Marketplace marketplace = marketplaceMap.get(siteCode);
         String siteName = marketplace != null ? marketplace.getSiteName() : siteCode;
         String currencyCode = SITE_CURRENCY_MAP.getOrDefault(siteCode, "USD");
-
-        // Parse quarter to get date range
-        int year = Integer.parseInt(yearQuarter.substring(0, 4));
-        int quarter = Integer.parseInt(yearQuarter.substring(6, 7));
-        LocalDate startDate = getQuarterStartDate(year, quarter);
-        LocalDate endDate = getQuarterEndDate(year, quarter);
 
         // Query sales data for this quarter by transaction_date
         LambdaQueryWrapper<SalesData> salesWrapper = new LambdaQueryWrapper<>();
@@ -145,41 +268,28 @@ public class ReportServiceImpl implements ReportService {
                 .lt(SalesData::getTransactionDate, endDate.plusDays(1).atStartOfDay());
         List<SalesData> salesList = salesDataMapper.selectList(salesWrapper);
 
-        // Query shipping data for this quarter (for shipping cost and refund attribution)
+        // Query shipping data for this quarter (for shipping cost)
         LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
         shippingWrapper.eq(ShippingData::getSiteCode, siteCode)
                 .between(ShippingData::getShipDate, startDate, endDate);
         List<ShippingData> shippingList = shippingDataMapper.selectList(shippingWrapper);
 
-        // Build shipping date map (order_id -> ship_date) for refund attribution
-        Map<String, LocalDate> orderShipDateMap = shippingList.stream()
-                .collect(Collectors.toMap(
-                        ShippingData::getOrderId,
-                        ShippingData::getShipDate,
-                        (existing, replacement) -> existing // Keep first if duplicate
-                ));
-
-        // Query refunds from ALL quarters (we'll filter by shipping date)
+        // Query refunds for this site
         LambdaQueryWrapper<SalesData> refundWrapper = new LambdaQueryWrapper<>();
         refundWrapper.eq(SalesData::getSiteCode, siteCode)
                 .eq(SalesData::getTransactionCategory, "refund");
         List<SalesData> allRefunds = salesDataMapper.selectList(refundWrapper);
 
-        // Filter refunds that belong to this quarter based on original order's shipping date
+        // 使用预加载的发货日期数据过滤退款（无 N+1 查询）
         List<SalesData> refundsForThisQuarter = allRefunds.stream()
                 .filter(refund -> {
                     String orderId = refund.getOrderId();
-                    // Try to find shipping date for this order
-                    LocalDate shipDate = orderShipDateMap.get(orderId);
-                    if (shipDate == null) {
-                        // If no shipping data found, check shipping table directly
-                        shipDate = findShippingDateForOrder(orderId, siteCode);
-                    }
+                    // 从预加载的 map 中获取发货日期
+                    LocalDate shipDate = refundShipDateMap.get(orderId);
                     if (shipDate != null) {
-                        // Check if shipping date falls in this quarter
                         return !shipDate.isBefore(startDate) && !shipDate.isAfter(endDate);
                     }
-                    // If no shipping date found, fall back to transaction date
+                    // 如果没有发货日期，回退到交易日期
                     if (refund.getTransactionDate() != null) {
                         LocalDate transactionDate = refund.getTransactionDate().toLocalDate();
                         return !transactionDate.isBefore(startDate) && !transactionDate.isAfter(endDate);
@@ -213,7 +323,7 @@ public class ReportServiceImpl implements ReportService {
         summary.setYearQuarter(yearQuarter);
         summary.setCurrencyCode(currencyCode);
 
-        // Calculate income (sales) totals - use total field for all income transactions
+        // Calculate income (sales) totals
         BigDecimal totalSalesAmount = salesList.stream()
                 .filter(s -> "income".equals(s.getTransactionCategory()))
                 .map(SalesData::getTotal)
@@ -224,94 +334,54 @@ public class ReportServiceImpl implements ReportService {
         BigDecimal refundAmount = refundsForThisQuarter.stream()
                 .map(SalesData::getTotal)
                 .filter(Objects::nonNull)
-                .map(BigDecimal::abs) // Refunds are typically negative, take absolute value
+                .map(BigDecimal::abs)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Net sales = income - refunds
         BigDecimal netSalesAmount = totalSalesAmount.subtract(refundAmount);
         summary.setTotalSalesAmount(netSalesAmount);
 
-        // Calculate shipping costs (original currency)
+        // Calculate shipping costs
         BigDecimal totalShippingCost = shippingList.stream()
                 .map(ShippingData::getShippingCost)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setTotalShippingCost(totalShippingCost);
 
-        // Calculate advertising costs (original currency)
+        // Calculate advertising costs
         BigDecimal totalAdCost = adList.stream()
                 .map(AdvertisingData::getCost)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setTotalAdvertisingCost(totalAdCost);
 
-        // Convert to CNY using exchange rate (system uses CNY as target)
-        try {
-            // Get exchange rate for the quarter end date
-            BigDecimal rate = getExchangeRate(currencyCode, endDate);
+        // 使用预加载的汇率数据
+        BigDecimal rate = rateCache.getOrDefault(currencyCode, BigDecimal.ONE);
 
-            BigDecimal salesCny = netSalesAmount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal shippingCny = totalShippingCost.multiply(rate).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal adCny = totalAdCost.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal salesCny = netSalesAmount.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal shippingCny = totalShippingCost.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal adCny = totalAdCost.multiply(rate).setScale(2, RoundingMode.HALF_UP);
 
-            summary.setTotalSalesAmountEur(salesCny);
-            summary.setTotalShippingCostEur(shippingCny);
-            summary.setTotalAdvertisingCostEur(adCny);
+        summary.setTotalSalesAmountEur(salesCny);
+        summary.setTotalShippingCostEur(shippingCny);
+        summary.setTotalAdvertisingCostEur(adCny);
 
-            // Calculate net amount (sales - shipping - advertising)
-            BigDecimal netAmount = salesCny.subtract(shippingCny).subtract(adCny);
-            summary.setNetAmountEur(netAmount);
+        // Calculate net amount (sales - shipping - advertising)
+        BigDecimal netAmount = salesCny.subtract(shippingCny).subtract(adCny);
+        summary.setNetAmountEur(netAmount);
 
-            // Calculate VAT (assuming 19% for DE, 20% for UK, 0% for others)
-            BigDecimal vatRate = getVatRate(siteCode);
-            BigDecimal vatAmount = netAmount.multiply(vatRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            summary.setVatAmountEur(vatAmount);
+        // Calculate VAT
+        BigDecimal vatRate = getVatRate(siteCode);
+        BigDecimal vatAmount = netAmount.multiply(vatRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        summary.setVatAmountEur(vatAmount);
 
-        } catch (Exception e) {
-            log.warn("Failed to get exchange rate for {}: {}", currencyCode, e.getMessage());
-            // Use 1:1 if rate not available
-            summary.setTotalSalesAmountEur(netSalesAmount);
-            summary.setTotalShippingCostEur(totalShippingCost);
-            summary.setTotalAdvertisingCostEur(totalAdCost);
-            summary.setNetAmountEur(netSalesAmount.subtract(totalShippingCost).subtract(totalAdCost));
-            summary.setVatAmountEur(BigDecimal.ZERO);
-        }
-
-        // Count transactions (including refunds attributed to this quarter)
+        // Count transactions
         summary.setTransactionCount(salesList.size() + refundsForThisQuarter.size());
 
         log.debug("Summary calculated: site={}, quarter={}, sales={}, refunds={}, shipping={}, ads={}",
                 siteCode, yearQuarter, totalSalesAmount, refundAmount, totalShippingCost, totalAdCost);
 
         return summary;
-    }
-
-    /**
-     * Find shipping date for a specific order
-     */
-    private LocalDate findShippingDateForOrder(String orderId, String siteCode) {
-        LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ShippingData::getOrderId, orderId)
-                .eq(ShippingData::getSiteCode, siteCode)
-                .orderByDesc(ShippingData::getShipDate)
-                .last("LIMIT 1");
-        ShippingData shipping = shippingDataMapper.selectOne(wrapper);
-        return shipping != null ? shipping.getShipDate() : null;
-    }
-
-    /**
-     * Get exchange rate with fallback (target is always CNY)
-     */
-    private BigDecimal getExchangeRate(String currencyCode, LocalDate date) {
-        if ("CNY".equals(currencyCode)) {
-            return BigDecimal.ONE;
-        }
-        try {
-            return rateService.getRate(currencyCode, date.toString());
-        } catch (Exception e) {
-            log.warn("Exchange rate not found for {} on {}", currencyCode, date);
-            return BigDecimal.ONE; // Default to 1:1
-        }
     }
 
     /**

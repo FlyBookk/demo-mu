@@ -27,6 +27,7 @@ public enum ErrorCode {
     TOKEN_INVALID(20006, "Token无效"),
     TOKEN_EXPIRED(20007, "Token已过期"),
     PASSWORD_ERROR(20008, "密码错误"),
+    SHOP_NOT_SELECTED(20009, "请先选择店铺"),
 
     // ============== 数据导入错误 (3xxxx) ==============
     IMPORT_FILE_EMPTY(30001, "导入文件为空"),

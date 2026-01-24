@@ -336,6 +336,15 @@
       </div>
     </a-card>
 
+    <!-- 导入确认弹窗 -->
+    <ImportConfirmModal
+      ref="importConfirmRef"
+      :file-name="uploadResult?.fileName"
+      data-type="sales"
+      @confirm="doExecuteImport"
+      @cancel="handleImportCancel"
+    />
+
     <!-- 导入结果弹窗 -->
     <a-modal
       v-model:open="showResultModal"
@@ -396,6 +405,7 @@ import {
   DatabaseOutlined,
   CheckCircleFilled
 } from '@ant-design/icons-vue'
+import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import {
   uploadSalesFile,
   previewSalesImport,
@@ -512,6 +522,9 @@ const importOptions = reactive({
   skipDuplicate: true,
   overwriteDuplicate: false
 })
+
+// 导入确认弹窗引用
+const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // ============= 预览表格列 =============
 const previewColumns = computed(() => {
@@ -686,31 +699,47 @@ async function handlePreview() {
   }
 }
 
-async function handleExecuteImport() {
+// 点击开始导入 - 弹出确认窗口
+function handleExecuteImport() {
   if (!uploadResult.value || !formState.templateId) {
     message.warning('请先完成上传和配置')
     return
   }
+  
+  // 弹出确认窗口
+  importConfirmRef.value?.show()
+}
 
+// 确认导入后执行
+async function doExecuteImport() {
   importing.value = true
+  importConfirmRef.value?.setLoading(true)
+  
   try {
     const res = await executeSalesImport({
-      fileId: uploadResult.value.fileId,
+      fileId: uploadResult.value!.fileId,
       sourceType: formState.sourceType!,
       siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
-      templateId: formState.templateId,
+      templateId: formState.templateId!,
       quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q'),
       skipDuplicate: importOptions.skipDuplicate,
       overwriteDuplicate: importOptions.overwriteDuplicate
     })
     importResult.value = res.data
     showResultModal.value = true
+    importConfirmRef.value?.hide()
     message.success('导入任务已提交')
   } catch (error: any) {
     message.error('导入失败: ' + (error.message || '未知错误'))
+    importConfirmRef.value?.setLoading(false)
   } finally {
     importing.value = false
   }
+}
+
+// 取消导入
+function handleImportCancel() {
+  // 用户取消导入，无需额外处理
 }
 
 function getResultStatus(): 'success' | 'error' | 'info' | 'warning' {

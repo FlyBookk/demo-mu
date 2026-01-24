@@ -10,6 +10,7 @@ import com.musheng.business.advertising.dto.AdvertisingDataRequest;
 import com.musheng.business.advertising.entity.AdvertisingData;
 import com.musheng.business.advertising.mapper.AdvertisingDataMapper;
 import com.musheng.business.advertising.service.AdvertisingDataService;
+import com.musheng.common.context.ShopContext;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,9 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
     public AdvertisingData create(AdvertisingDataRequest request) {
         AdvertisingData entity = new AdvertisingData();
         copyProperties(request, entity);
+
+        // 设置店铺ID
+        entity.setShopId(ShopContext.requireShopId());
 
         // Set created by
         if (StpUtil.isLogin()) {
@@ -95,6 +99,10 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
     public Page<AdvertisingData> list(String siteCode, String yearMonth, int page, int size) {
         LambdaQueryWrapper<AdvertisingData> wrapper = new LambdaQueryWrapper<>();
 
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(AdvertisingData::getShopId, shopId);
+
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(AdvertisingData::getSiteCode, siteCode);
         }
@@ -138,6 +146,9 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
         if (StpUtil.isLogin()) {
             currentUserId = StpUtil.getLoginIdAsLong();
         }
+        
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
 
         for (AdvertisingDataImportRequest item : uniqueMap.values()) {
             try {
@@ -146,6 +157,7 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
 
                 // 转换为实体
                 AdvertisingData entity = convertToEntity(item);
+                entity.setShopId(shopId);  // 设置店铺ID
                 entity.setImportBatchId(importBatchId);
                 entity.setCreateBy(currentUserId);
 

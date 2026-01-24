@@ -14,6 +14,7 @@ import com.musheng.config.importrecord.mapper.ImportRecordMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 import com.musheng.business.rate.service.RateService;
+import com.musheng.common.context.ShopContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -51,6 +52,10 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId,
                                    String startDate, String endDate, int page, int size) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
+
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(ShippingData::getShopId, shopId);
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(ShippingData::getSiteCode, siteCode);
@@ -106,8 +111,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         int failCount = 0;
         int duplicateCount = 0;
 
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
+        
         // Create import record
         ImportRecord importRecord = new ImportRecord();
+        importRecord.setShopId(shopId);  // 设置店铺ID
         importRecord.setBatchNo(generateBatchNo());
         importRecord.setDataType("shipping");
         importRecord.setFileName(file.getOriginalFilename());
@@ -159,6 +168,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                         ShippingData shippingData = parseShippingRecord(record, headers, totalCount, marketplaceMap, headerLanguage);
 
                         if (shippingData != null) {
+                            shippingData.setShopId(shopId);  // 设置店铺ID
                             shippingData.setImportBatchId(importRecord.getId());
                             parsedRecords.add(shippingData);
                         }

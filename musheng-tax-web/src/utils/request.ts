@@ -47,13 +47,24 @@ const service: AxiosInstance = axios.create({
   }
 })
 
+// 店铺ID存储键（与 shop.ts store 保持一致）
+const SHOP_STORAGE_KEY = 'currentShopId'
+
 // 请求拦截器
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // 添加认证Token
     const token = getToken()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    
+    // 添加店铺ID（用于数据隔离）
+    const shopId = localStorage.getItem(SHOP_STORAGE_KEY)
+    if (shopId && config.headers) {
+      config.headers['X-Shop-Id'] = shopId
+    }
+    
     return config
   },
   (error) => {

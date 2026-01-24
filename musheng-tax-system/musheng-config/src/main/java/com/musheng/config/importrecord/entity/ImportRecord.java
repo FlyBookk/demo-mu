@@ -16,6 +16,11 @@ import java.time.LocalDateTime;
 public class ImportRecord extends BaseEntityMinimal {
 
     /**
+     * 店铺ID（业务数据导入关联店铺，汇率导入不关联）
+     */
+    private Long shopId;
+
+    /**
      * 导入批次号
      */
     private String batchNo;

@@ -105,6 +105,15 @@ export const routes: RouteRecordRaw[] = [
             }
           },
           {
+            path: 'shop',
+            name: 'Shop',
+            component: () => import('@/views/config/shop/index.vue'),
+            meta: {
+              title: '店铺管理',
+              permission: 'config:shop'
+            }
+          },
+          {
             path: 'import-record',
             name: 'ImportRecord',
             component: () => import('@/views/config/importRecord/index.vue'),

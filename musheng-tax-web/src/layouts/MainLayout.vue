@@ -45,6 +45,10 @@
         </div>
 
         <div class="header-right">
+          <!-- 店铺选择器 -->
+          <ShopSelector class="shop-selector-wrapper" />
+          
+          <!-- 用户下拉 -->
           <a-dropdown>
             <div class="user-info">
               <a-avatar :size="32">
@@ -107,6 +111,7 @@ import {
 import type { MenuProps, ItemType } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import { useAppStore } from '@/stores/modules/app'
+import ShopSelector from '@/components/business/ShopSelector/index.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -153,6 +158,7 @@ const menuItems = computed<ItemType[]>(() => {
       children: [
         { key: 'Currency', label: '货币管理' },
         { key: 'Marketplace', label: '站点管理' },
+        { key: 'Shop', label: '店铺管理' },
         { key: 'TransactionType', label: '交易类型映射' },
         { key: 'FieldMapping', label: '字段映射模板' },
         { key: 'ImportRecord', label: '导入记录' }
@@ -351,6 +357,14 @@ watch(
     }
 
     .header-right {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      
+      .shop-selector-wrapper {
+        margin-right: $spacing-sm;
+      }
+      
       .user-info {
         display: flex;
         align-items: center;

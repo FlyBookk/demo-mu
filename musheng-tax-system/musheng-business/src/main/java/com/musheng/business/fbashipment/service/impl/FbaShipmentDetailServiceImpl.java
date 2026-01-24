@@ -7,6 +7,7 @@ import com.musheng.business.common.service.csv.CsvParseServiceImpl;
 import com.musheng.business.fbashipment.entity.FbaShipmentDetail;
 import com.musheng.business.fbashipment.mapper.FbaShipmentDetailMapper;
 import com.musheng.business.fbashipment.service.FbaShipmentDetailService;
+import com.musheng.common.context.ShopContext;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import com.musheng.config.importrecord.entity.ImportRecord;
@@ -43,6 +44,10 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
     @Override
     public Page<FbaShipmentDetail> list(String status, String shipmentId, String receivingAddress, int page, int size) {
         LambdaQueryWrapper<FbaShipmentDetail> wrapper = new LambdaQueryWrapper<>();
+
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(FbaShipmentDetail::getShopId, shopId);
 
         if (StringUtils.hasText(status)) {
             wrapper.eq(FbaShipmentDetail::getStatus, status);
@@ -81,8 +86,12 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
         int failCount = 0;
         int duplicateCount = 0;
 
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
+        
         // 创建导入记录
         ImportRecord importRecord = new ImportRecord();
+        importRecord.setShopId(shopId);  // 设置店铺ID
         importRecord.setBatchNo(generateBatchNo());
         importRecord.setDataType("fba_shipment");
         importRecord.setFileName(file.getOriginalFilename());
@@ -127,6 +136,7 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
                         FbaShipmentDetail detail = parseRecord(record, headers, totalCount);
 
                         if (detail != null) {
+                            detail.setShopId(shopId);  // 设置店铺ID
                             detail.setImportBatchId(importRecord.getId());
                             parsedRecords.add(detail);
                         }
@@ -355,6 +365,9 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long add(FbaShipmentDetail fbaShipmentDetail) {
+        // 设置店铺ID
+        fbaShipmentDetail.setShopId(ShopContext.requireShopId());
+        
         // 检查货件编号是否重复
         LambdaQueryWrapper<FbaShipmentDetail> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FbaShipmentDetail::getShipmentId, fbaShipmentDetail.getShipmentId());
@@ -416,6 +429,10 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
                                           String startDate, String endDate) {
         LambdaQueryWrapper<FbaShipmentDetail> wrapper = new LambdaQueryWrapper<>();
 
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(FbaShipmentDetail::getShopId, shopId);
+
         if (StringUtils.hasText(status)) {
             wrapper.eq(FbaShipmentDetail::getStatus, status);
         }
@@ -457,6 +474,10 @@ public class FbaShipmentDetailServiceImpl implements FbaShipmentDetailService {
     public void exportData(String status, String receivingAddress, String startDate, String endDate,
                           jakarta.servlet.http.HttpServletResponse response) {
         LambdaQueryWrapper<FbaShipmentDetail> wrapper = new LambdaQueryWrapper<>();
+
+        // 店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(FbaShipmentDetail::getShopId, shopId);
 
         if (StringUtils.hasText(status)) {
             wrapper.eq(FbaShipmentDetail::getStatus, status);

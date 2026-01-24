@@ -48,6 +48,14 @@
       </div>
     </a-card>
 
+    <!-- 导入确认弹窗 -->
+    <ImportConfirmModal
+      ref="importConfirmRef"
+      :file-name="uploadedFileInfo?.fileName"
+      data-type="fba-shipment"
+      @confirm="doExecuteImport"
+    />
+
     <!-- 步骤2: 导入结果 -->
     <a-card v-show="currentStep === 1" class="step-card">
       <a-result
@@ -118,6 +126,7 @@ import {
   CloudUploadOutlined
 } from '@ant-design/icons-vue'
 import { request } from '@/utils/request'
+import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import type { FbaShipmentImportResult } from '@/types/fbaShipment'
 
 const router = useRouter()
@@ -137,6 +146,7 @@ const uploadedFileInfo = ref<{ fileName: string; fileSize: number } | null>(null
 // ============= 导入相关 =============
 const importing = ref(false)
 const importResult = ref<FbaShipmentImportResult | null>(null)
+const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // ============= 方法 =============
 function formatFileSize(bytes: number): string {
@@ -175,17 +185,26 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   return false
 }
 
-async function handleStartImport() {
+// 点击开始导入 - 弹出确认窗口
+function handleStartImport() {
   if (!uploadedFile.value) {
     message.warning('请先上传文件')
     return
   }
+  
+  // 弹出确认窗口
+  importConfirmRef.value?.show()
+}
 
+// 确认导入后执行
+async function doExecuteImport() {
   importing.value = true
+  importConfirmRef.value?.setLoading(true)
+  
   try {
     // 使用 request.upload 上传文件（自动添加token）
     const formData = new FormData()
-    formData.append('file', uploadedFile.value)
+    formData.append('file', uploadedFile.value!)
 
     const result = await request.upload<any>('/api/v1/business/fba-shipment/import', formData)
 
@@ -199,11 +218,13 @@ async function handleStartImport() {
       batchNo: result.data.batchNo
     }
 
+    importConfirmRef.value?.hide()
     currentStep.value = 1
     message.success('导入完成')
   } catch (error: any) {
     console.error('导入失败:', error)
     message.error(error.message || '导入失败')
+    importConfirmRef.value?.setLoading(false)
   } finally {
     importing.value = false
   }

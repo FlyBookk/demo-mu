@@ -6,6 +6,23 @@ import type { Router } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import { useAppStore } from '@/stores/modules/app'
+import { useShopStore } from '@/stores/modules/shop'
+
+/**
+ * 需要选择店铺才能访问的业务模块路由名称
+ */
+const BUSINESS_ROUTES = [
+  // 销售数据
+  'Sales', 'SalesImport', 'SalesList',
+  // 配送数据
+  'Shipping', 'ShippingImport', 'ShippingList',
+  // FBA货件明细
+  'FbaShipment', 'FbaShipmentImport', 'FbaShipmentList',
+  // 广告数据
+  'Advertising', 'AdvertisingImport', 'AdvertisingAdd', 'AdvertisingList',
+  // 汇总报表
+  'Report', 'ReportSummary', 'ReportDownload'
+]
 
 /**
  * 设置路由守卫
@@ -57,6 +74,24 @@ export function setupRouterGuards(router: Router) {
       message.error('没有访问权限')
       next({ path: '/dashboard' })
       return
+    }
+
+    // 店铺选择检查（业务模块必须选择店铺）
+    const routeName = to.name as string
+    if (BUSINESS_ROUTES.includes(routeName)) {
+      const shopStore = useShopStore()
+      
+      // 确保店铺列表已加载
+      if (!shopStore.initialized) {
+        await shopStore.fetchShopList()
+      }
+      
+      // 检查是否已选择店铺
+      if (!shopStore.hasSelectedShop) {
+        message.warning('请先在顶部选择店铺后再访问业务数据')
+        next({ path: '/dashboard' })
+        return
+      }
     }
 
     next()

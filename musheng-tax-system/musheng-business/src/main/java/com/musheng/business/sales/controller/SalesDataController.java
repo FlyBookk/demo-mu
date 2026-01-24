@@ -5,6 +5,7 @@ import com.musheng.business.sales.dto.*;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.service.SalesDataService;
 import com.musheng.common.annotation.OperationLog;
+import com.musheng.common.annotation.RequireShop;
 import com.musheng.common.enums.SalesSourceType;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
@@ -27,6 +28,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/business/sales")
 @RequiredArgsConstructor
+@RequireShop  // 整个控制器都需要店铺上下文
 public class SalesDataController {
 
     private final SalesDataService salesDataService;
