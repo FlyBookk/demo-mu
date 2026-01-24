@@ -393,11 +393,10 @@ const defaultPermissionTree: TreeProps['treeData'] = [
     ]
   },
   {
-    title: '汇总报表',
+    title: '报税汇总',
     key: 'report',
     children: [
-      { title: '汇总查询', key: 'report:summary' },
-      { title: '报表下载', key: 'report:download' }
+      { title: '报税汇总', key: 'report:taxSummary' }
     ]
   },
   {

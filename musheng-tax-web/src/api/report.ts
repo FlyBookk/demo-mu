@@ -1,85 +1,123 @@
 /**
- * 汇总报表API接口
- * 接口路径与后端对齐，使用/api/v1前缀
+ * 报税汇总API接口
  */
 
 import { request } from '@/utils/request'
-import type {
-  ReportSummary,
-  ReportQuery,
-  ReportExportParams,
-  ReportTrend,
-  ReportComparison,
-  MarketplaceReportSummary,
-  QuarterReportDetail
-} from '@/types/report'
 
 const BASE_URL = '/api/v1/business/reports'
 
+// ============= 首页仪表盘 =============
+
 /**
- * 查询报表汇总
- * @param params 查询参数: siteCode, yearQuarter, startQuarter, endQuarter
+ * 站点收入
  */
-export function getReportSummary(params: Record<string, string | undefined>) {
-  // 过滤掉undefined的参数
-  const cleanParams: Record<string, string> = {}
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      cleanParams[key] = value
-    }
-  })
-  return request.get<ReportSummary[]>(`${BASE_URL}/summary`, cleanParams)
+export interface SiteRevenue {
+  siteCode: string
+  siteName: string
+  revenue: number
+  refund: number
+  netIncome: number
 }
 
 /**
- * 按站点获取报表汇总
+ * 季度趋势
  */
-export function getReportSummaryBySite(yearQuarter: string) {
-  return request.get<ReportSummary[]>(`${BASE_URL}/summary/by-site`, { yearQuarter })
+export interface QuarterTrend {
+  quarter: string
+  revenue: number
+  refund: number
+  netIncome: number
 }
 
 /**
- * 按季度获取报表汇总
+ * 首页仪表盘数据
  */
-export function getReportSummaryByQuarter(siteCode: string, startQuarter?: string, endQuarter?: string) {
-  return request.get<ReportSummary[]>(`${BASE_URL}/summary/by-quarter`, { siteCode, startQuarter, endQuarter })
+export interface DashboardData {
+  currentQuarter: string
+  totalRevenueCny: number
+  refundCny: number
+  netIncomeCny: number
+  shippingOrderCount: number
+  revenueGrowthRate: number
+  refundGrowthRate: number
+  netIncomeGrowthRate: number
+  siteRevenues: SiteRevenue[]
+  quarterTrends: QuarterTrend[]
 }
 
 /**
- * 导出汇总报表
+ * 获取首页仪表盘数据
  */
-export function exportReportSummary(params: ReportQuery) {
-  const filename = `汇总报表_${new Date().toISOString().slice(0, 10)}.xlsx`
-  return request.downloadAndSave(`${BASE_URL}/summary/export`, filename, params)
+export function getDashboardData() {
+  return request.get<DashboardData>(`${BASE_URL}/dashboard`)
+}
+
+// ============= 报税汇总接口 =============
+
+/**
+ * 报税汇总数据
+ */
+export interface TaxReportSummary {
+  siteCode: string
+  siteName: string
+  yearQuarter: string
+  currencyCode: string
+  // 收入（按发货）
+  totalRevenue: number
+  totalRevenueCny: number
+  shippingOrderCount: number
+  // 退款-按结算
+  refundBySettlement: number
+  refundBySettlementCny: number
+  refundCountBySettlement: number
+  // 退款-按发货
+  refundByShipment: number
+  refundByShipmentCny: number
+  refundCountByShipment: number
+  // 净收入
+  netIncomeBySettlement: number
+  netIncomeByShipment: number
+  // 费用
+  totalServiceFee: number
+  totalServiceFeeCny: number
+  advertisingCost: number
+  advertisingCostCny: number
+  // 成本
+  totalCost: number
+  purchaseAmount: number
 }
 
 /**
- * 导出明细报表
+ * 费用分类明细
  */
-export function exportReportDetail(siteCode: string, yearQuarter: string, reportType?: string) {
-  const filename = `明细报表_${siteCode}_${yearQuarter}.xlsx`
-  return request.downloadAndSave(`${BASE_URL}/detail/export`, filename, { siteCode, yearQuarter, reportType })
+export interface FeeBreakdown {
+  siteCode: string
+  yearQuarter: string
+  feeType: string
+  feeCategory: string
+  amount: number
+  amountCny: number
+  transactionCount: number
 }
 
 /**
- * 获取各站点报表汇总（通过按站点分组查询）
+ * 查询报税汇总
  */
-export function getMarketplaceReportSummary(yearQuarter: string) {
-  return request.get<ReportSummary[]>(`${BASE_URL}/summary/by-site`, { yearQuarter })
+export function getTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+  return request.get<TaxReportSummary[]>(`${BASE_URL}/tax-summary`, params)
 }
 
 /**
- * 导出汇总报表
+ * 查询费用分类明细
  */
-export function exportReport(params: ReportExportParams) {
-  const filename = `汇总报表_${new Date().toISOString().slice(0, 10)}.xlsx`
-  return request.downloadAndSave(`${BASE_URL}/summary/export`, filename, params)
+export function getFeeBreakdown(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+  return request.get<FeeBreakdown[]>(`${BASE_URL}/fee-breakdown`, params)
 }
 
 /**
- * 导出明细报表（VAT报表）
+ * 导出报税汇总
  */
-export function exportVatReport(siteCode: string, yearQuarter: string) {
-  const filename = `VAT报表_${siteCode}_${yearQuarter}.xlsx`
-  return request.downloadAndSave(`${BASE_URL}/detail/export`, filename, { siteCode, yearQuarter, reportType: 'all' })
+export function exportTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+  const filename = `报税汇总_${new Date().toISOString().slice(0, 10)}.xlsx`
+  return request.downloadAndSave(`${BASE_URL}/tax-summary/export`, filename, params)
 }

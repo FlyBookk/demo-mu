@@ -45,14 +45,16 @@ public class RateSyncServiceImpl implements RateSyncService {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 1. 获取所有启用的货币
-            List<Currency> enabledCurrencies = currencyService.getEnabled();
+            // 1. 获取所有启用的货币（排除CNY，CNY是基准货币）
+            List<Currency> enabledCurrencies = currencyService.getEnabled().stream()
+                    .filter(c -> !"CNY".equals(c.getCurrencyCode()))
+                    .collect(Collectors.toList());
             if (enabledCurrencies.isEmpty()) {
                 return RateSyncResultDTO.builder()
                         .success(false)
                         .startDate(startDate)
                         .endDate(endDate)
-                        .message("No enabled currencies found")
+                        .message("No enabled currencies found (excluding CNY)")
                         .build();
             }
 
@@ -165,14 +167,17 @@ public class RateSyncServiceImpl implements RateSyncService {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 验证货币编码是否存在且启用
-            List<Currency> enabledCurrencies = currencyService.getEnabled();
+            // 验证货币编码是否存在且启用（排除CNY）
+            List<Currency> enabledCurrencies = currencyService.getEnabled().stream()
+                    .filter(c -> !"CNY".equals(c.getCurrencyCode()))
+                    .collect(Collectors.toList());
             List<String> enabledCodes = enabledCurrencies.stream()
                     .map(Currency::getCurrencyCode)
                     .collect(Collectors.toList());
 
-            // 过滤出有效的货币编码
+            // 过滤出有效的货币编码（排除CNY）
             List<String> validCodes = currencyCodes.stream()
+                    .filter(code -> !"CNY".equals(code))
                     .filter(enabledCodes::contains)
                     .collect(Collectors.toList());
 

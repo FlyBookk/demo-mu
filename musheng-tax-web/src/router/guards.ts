@@ -20,8 +20,8 @@ const BUSINESS_ROUTES = [
   'FbaShipment', 'FbaShipmentImport', 'FbaShipmentList',
   // 广告数据
   'Advertising', 'AdvertisingImport', 'AdvertisingAdd', 'AdvertisingList',
-  // 汇总报表
-  'Report', 'ReportSummary', 'ReportDownload'
+  // 报税汇总
+  'Report', 'TaxSummary'
 ]
 
 /**

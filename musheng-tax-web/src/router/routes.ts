@@ -289,32 +289,23 @@ export const routes: RouteRecordRaw[] = [
         ]
       },
 
-      // ========== 汇总报表 ==========
+      // ========== 报税汇总 ==========
       {
         path: 'report',
         name: 'Report',
-        redirect: '/report/summary',
+        redirect: '/report/tax-summary',
         meta: {
-          title: '汇总报表',
+          title: '报税汇总',
           icon: 'BarChartOutlined'
         },
         children: [
           {
-            path: 'summary',
-            name: 'ReportSummary',
-            component: () => import('@/views/report/summary/index.vue'),
+            path: 'tax-summary',
+            name: 'TaxSummary',
+            component: () => import('@/views/report/tax-summary/index.vue'),
             meta: {
-              title: '汇总查询',
-              permission: 'report:summary'
-            }
-          },
-          {
-            path: 'download',
-            name: 'ReportDownload',
-            component: () => import('@/views/report/download/index.vue'),
-            meta: {
-              title: '报表下载',
-              permission: 'report:download'
+              title: '报税汇总',
+              permission: 'report:taxSummary'
             }
           }
         ]

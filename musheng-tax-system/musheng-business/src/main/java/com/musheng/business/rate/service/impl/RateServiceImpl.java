@@ -312,11 +312,13 @@ public class RateServiceImpl implements RateService {
     }
 
     /**
-     * 获取已配置的货币代码集合（状态为启用）
+     * 获取已配置的货币代码集合（状态为启用，排除CNY）
+     * CNY 是基准货币，所有汇率都是外币兑换CNY，CNY本身不应该有汇率记录
      */
     private Set<String> getConfiguredCurrencyCodes() {
         LambdaQueryWrapper<Currency> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Currency::getStatus, 1);  // 只取启用状态的货币
+        wrapper.eq(Currency::getStatus, 1)  // 只取启用状态的货币
+               .ne(Currency::getCurrencyCode, "CNY");  // 排除CNY
         List<Currency> currencies = currencyMapper.selectList(wrapper);
         return currencies.stream()
                 .map(Currency::getCurrencyCode)

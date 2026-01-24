@@ -212,10 +212,9 @@ const menuItems = computed<ItemType[]>(() => {
     {
       key: 'Report',
       icon: () => h(BarChartOutlined),
-      label: '汇总报表',
+      label: '报税汇总',
       children: [
-        { key: 'ReportSummary', label: '汇总查询' },
-        { key: 'ReportDownload', label: '报表下载' }
+        { key: 'TaxSummary', label: '报税汇总' }
       ]
     }
   ]
