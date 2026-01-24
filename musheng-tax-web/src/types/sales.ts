@@ -43,6 +43,11 @@ export interface SalesData {
   otherTransactionFees: number
   other: number
   total: number
+  // ERP特有字段
+  storeName?: string           // 店铺名称（ERP数据）
+  settlementStatus?: string    // 结算状态（ERP数据）
+  transferStatus?: string      // 转账状态（ERP数据）
+  settlementCategory?: string  // 结算类型（ORDER/REFUND等，ERP数据）
   // 汇率信息
   exchangeRate?: number
   exchangeRateDate?: string
