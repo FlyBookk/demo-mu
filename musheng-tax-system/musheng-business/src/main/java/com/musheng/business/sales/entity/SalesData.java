@@ -47,6 +47,14 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
      */
     @FieldMapping(label = "转账状态", description = "ERP数据转账状态", order = 7)
     private String transferStatus;
+    
+    /**
+     * 结算类型(ORDER/REFUND/SERVICE_FEE/REMOVAL/ADJUSTMENT等)
+     * ERP数据：根据"来源"字段自动转换的标准化结算类型
+     * 注：ERP的"来源"值存储在 transactionType 字段
+     */
+    @FieldMapping(label = "结算类型", description = "ERP数据结算类型分类", order = 8)
+    private String settlementCategory;
 
     /**
      * 交易日期时间

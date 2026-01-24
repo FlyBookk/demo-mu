@@ -1,6 +1,7 @@
 package com.musheng.business.sales.parser;
 
 import com.musheng.business.sales.entity.SalesData;
+import com.musheng.common.enums.ErpSourceType;
 import com.musheng.common.enums.SalesSourceType;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -67,24 +68,86 @@ public class ErpSettlementParser implements SalesDataParser {
         ERP_HEADER_MAPPING.put("品名", "productName");
         ERP_HEADER_MAPPING.put("FNSKU", "fnsku");
         
-        // ERP交易类型到SalesData金额字段的映射
+        // ========== ERP交易类型到SalesData金额字段的映射 ==========
+        
+        // === 商品销售收入 (productSales) ===
         ERP_TYPE_TO_FIELD.put("Principal", "productSales");
+        
+        // === 商品销售税 (productSalesTax) ===
         ERP_TYPE_TO_FIELD.put("Tax", "productSalesTax");
+        ERP_TYPE_TO_FIELD.put("TaxAmount", "productSalesTax");
+        ERP_TYPE_TO_FIELD.put("TaxAmountAdjustment", "productSalesTax");
+        ERP_TYPE_TO_FIELD.put("BaseTax", "productSalesTax");
+        
+        // === 运费收入 (shippingCredits) ===
         ERP_TYPE_TO_FIELD.put("ShippingCharge", "shippingCredits");
+        ERP_TYPE_TO_FIELD.put("ShippingDiscount", "shippingCredits");
+        ERP_TYPE_TO_FIELD.put("ShippingChargeback", "shippingCredits");
+        
+        // === 运费税 (shippingCreditsTax) ===
         ERP_TYPE_TO_FIELD.put("ShippingTax", "shippingCreditsTax");
-        ERP_TYPE_TO_FIELD.put("Commission", "sellingFees");
-        ERP_TYPE_TO_FIELD.put("FBAPerUnitFulfillmentFee", "fbaFees");
-        ERP_TYPE_TO_FIELD.put("FBAWeightBasedFee", "fbaFees");
-        ERP_TYPE_TO_FIELD.put("DigitalServicesFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("ShippingDiscountTax", "shippingCreditsTax");
+        
+        // === 礼品包装 (giftWrapCredits / giftWrapCreditsTax) ===
+        ERP_TYPE_TO_FIELD.put("GiftWrap", "giftWrapCredits");
+        ERP_TYPE_TO_FIELD.put("GiftwrapChargeback", "giftWrapCredits");
+        ERP_TYPE_TO_FIELD.put("GiftWrapTax", "giftWrapCreditsTax");
+        
+        // === 促销折扣 (promotionalRebates / promotionalRebatesTax) ===
         ERP_TYPE_TO_FIELD.put("PromotionDiscount", "promotionalRebates");
         ERP_TYPE_TO_FIELD.put("PromotionDiscountTax", "promotionalRebatesTax");
+        
+        // === 平台代扣税 (marketplaceWithheldTax) ===
         ERP_TYPE_TO_FIELD.put("MarketplaceFacilitatorVAT-Principal", "marketplaceWithheldTax");
         ERP_TYPE_TO_FIELD.put("MarketplaceFacilitatorTax-Principal", "marketplaceWithheldTax");
-        ERP_TYPE_TO_FIELD.put("GiftWrap", "giftWrapCredits");
-        ERP_TYPE_TO_FIELD.put("GiftWrapTax", "giftWrapCreditsTax");
+        ERP_TYPE_TO_FIELD.put("MarketplaceFacilitatorVAT-Shipping", "marketplaceWithheldTax");
+        ERP_TYPE_TO_FIELD.put("MarketplaceFacilitatorTax-Shipping", "marketplaceWithheldTax");
+        ERP_TYPE_TO_FIELD.put("MarketplaceFacilitatorTax-Other", "marketplaceWithheldTax");
+        ERP_TYPE_TO_FIELD.put("TaxWithheld", "marketplaceWithheldTax");
+        ERP_TYPE_TO_FIELD.put("TaxWithheldAdjustment", "marketplaceWithheldTax");
+        
+        // === 销售费用/佣金 (sellingFees) ===
+        ERP_TYPE_TO_FIELD.put("Commission", "sellingFees");
         ERP_TYPE_TO_FIELD.put("RefundCommission", "sellingFees");
+        
+        // === FBA费用 (fbaFees) ===
+        ERP_TYPE_TO_FIELD.put("FBAPerUnitFulfillmentFee", "fbaFees");
+        ERP_TYPE_TO_FIELD.put("FBAWeightBasedFee", "fbaFees");
+        ERP_TYPE_TO_FIELD.put("FBACustomerReturnPerUnitFee", "fbaFees");
+        ERP_TYPE_TO_FIELD.put("FBAStorageFee", "fbaFees");
+        ERP_TYPE_TO_FIELD.put("FBALongTermStorageFee", "fbaFees");
+        ERP_TYPE_TO_FIELD.put("FBADisposalFee", "fbaFees");
+        
+        // === 其他交易费用 (otherTransactionFees) ===
+        ERP_TYPE_TO_FIELD.put("DigitalServicesFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("DigitalServicesFeeFBA", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("CouponRedemptionFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("CouponParticipationFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("CouponPerformanceFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("DealParticipationFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("DealPerformanceFee", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("Subscription", "otherTransactionFees");
+        ERP_TYPE_TO_FIELD.put("VineFee", "otherTransactionFees");
+        
+        // === 其他金额 (other) ===
         ERP_TYPE_TO_FIELD.put("Revenue", "other");
+        ERP_TYPE_TO_FIELD.put("RevenueAdjustment", "other");
         ERP_TYPE_TO_FIELD.put("FeeAmount", "other");
+        ERP_TYPE_TO_FIELD.put("feeAmount", "other");  // 小写版本
+        ERP_TYPE_TO_FIELD.put("baseValue", "other");
+        ERP_TYPE_TO_FIELD.put("REVERSAL_REIMBURSEMENT", "other");
+        ERP_TYPE_TO_FIELD.put("COMPENSATED_CLAWBACK", "other");
+        ERP_TYPE_TO_FIELD.put("WAREHOUSE_LOST", "other");
+        ERP_TYPE_TO_FIELD.put("WAREHOUSE_DAMAGE", "other");
+        ERP_TYPE_TO_FIELD.put("REMOVAL_ORDER_LOST", "other");
+        ERP_TYPE_TO_FIELD.put("FREE_REPLACEMENT_REFUND_ITEMS", "other");
+        ERP_TYPE_TO_FIELD.put("INCORRECT_FEES_NON_ITEMIZED", "other");
+        ERP_TYPE_TO_FIELD.put("RestockingFee", "other");
+        ERP_TYPE_TO_FIELD.put("Goodwill", "other");
+        ERP_TYPE_TO_FIELD.put("ReserveDebit", "other");
+        ERP_TYPE_TO_FIELD.put("ReserveCredit", "other");
+        ERP_TYPE_TO_FIELD.put("BuyerRecharge", "other");
+        ERP_TYPE_TO_FIELD.put("Debt Adjustment", "other");
     }
     
     @Override
@@ -368,7 +431,13 @@ public class ErpSettlementParser implements SalesDataParser {
     private ErpRow parseErpRow(CSVRecord record, Map<String, Integer> headerMap, ParseContext context) {
         ErpRow row = new ErpRow();
         
-        row.setSettlementId(getFieldValue(record, headerMap, "结算编号"));
+        // 使用 Settlement ID（亚马逊原始结算ID）作为 settlementId，便于与原始数据统一去重
+        // 如果没有 Settlement ID，则使用 结算编号（ERP系统ID）作为备用
+        String amazonSettlementId = getFieldValue(record, headerMap, "Settlement ID");
+        String erpSettlementId = getFieldValue(record, headerMap, "结算编号");
+        row.setSettlementId(amazonSettlementId != null && !amazonSettlementId.isEmpty() 
+                ? amazonSettlementId : erpSettlementId);
+        
         row.setOrderId(cleanOrderId(getFieldValue(record, headerMap, "订单号")));
         row.setStoreName(getFieldValue(record, headerMap, "店铺"));
         row.setSiteCode(getFieldValue(record, headerMap, "国家"));
@@ -380,6 +449,7 @@ public class ErpSettlementParser implements SalesDataParser {
         row.setProductName(getFieldValue(record, headerMap, "品名"));
         row.setSettlementStatus(getFieldValue(record, headerMap, "结算状态"));
         row.setTransferStatus(getFieldValue(record, headerMap, "转账状态"));
+        row.setSource(getFieldValue(record, headerMap, "来源"));
         
         // 解析金额
         String amountStr = getFieldValue(record, headerMap, "金额");
@@ -426,9 +496,12 @@ public class ErpSettlementParser implements SalesDataParser {
     
     /**
      * 构建聚合key
+     * 新增来源维度，同一订单在不同来源下分别聚合
+     * 格式：source|orderId|siteCode|sku
      */
     private String buildAggregateKey(ErpRow row) {
-        return String.format("%s|%s|%s", 
+        return String.format("%s|%s|%s|%s", 
+                row.getSource() != null ? row.getSource() : "",
                 row.getOrderId() != null ? row.getOrderId() : "",
                 row.getSiteCode() != null ? row.getSiteCode() : "",
                 row.getSku() != null ? row.getSku() : "");
@@ -452,6 +525,11 @@ public class ErpSettlementParser implements SalesDataParser {
         aggregate.setSettlementStatus(firstRow.getSettlementStatus());
         aggregate.setTransferStatus(firstRow.getTransferStatus());
         aggregate.setQuantity(firstRow.getQuantity());
+        
+        // 设置来源和结算类型
+        aggregate.setSource(firstRow.getSource());
+        ErpSourceType sourceType = ErpSourceType.fromSourceValue(firstRow.getSource());
+        aggregate.setSettlementCategory(sourceType.getSettlementCategory());
         
         // 初始化金额字段
         aggregate.setProductSales(BigDecimal.ZERO);
@@ -550,6 +628,14 @@ public class ErpSettlementParser implements SalesDataParser {
         data.setQuantity(aggregate.getQuantity());
         data.setTransactionDate(aggregate.getSettlementTime());
         
+        // 设置结算类型（来源值存储在 transactionType 中，不再单独设置 source）
+        data.setSettlementCategory(aggregate.getSettlementCategory());
+        
+        // ERP特有字段
+        data.setStoreName(aggregate.getStoreName());
+        data.setSettlementStatus(aggregate.getSettlementStatus());
+        data.setTransferStatus(aggregate.getTransferStatus());
+        
         // 金额字段
         data.setProductSales(aggregate.getProductSales());
         data.setProductSalesTax(aggregate.getProductSalesTax());
@@ -581,16 +667,22 @@ public class ErpSettlementParser implements SalesDataParser {
                 .add(aggregate.getOther());
         data.setTotal(total);
         
-        // 确定交易分类（根据金额正负判断）
-        if (data.getProductSales().compareTo(BigDecimal.ZERO) > 0) {
+        // 确定交易分类（基于结算类型和来源）
+        ErpSourceType sourceType = ErpSourceType.fromSourceValue(aggregate.getSource());
+        if (sourceType.isOrder()) {
             data.setTransactionCategory("income");
-        } else if (data.getProductSales().compareTo(BigDecimal.ZERO) < 0) {
+        } else if (sourceType.isRefund()) {
             data.setTransactionCategory("refund");
-        } else {
+        } else if (sourceType.isFee()) {
             data.setTransactionCategory("fee");
+        } else if (sourceType.isAdjustment()) {
+            data.setTransactionCategory("adjustment");
+        } else {
+            data.setTransactionCategory("other");
         }
         
-        data.setTransactionType("ERP_SETTLEMENT");
+        // 交易类型设置为来源值，便于追溯
+        data.setTransactionType(aggregate.getSource() != null ? aggregate.getSource() : "ERP_SETTLEMENT");
         
         return data;
     }
@@ -635,6 +727,8 @@ public class ErpSettlementParser implements SalesDataParser {
         map.put("sku", data.getSku());
         map.put("transactionDate", data.getTransactionDate());
         map.put("siteCode", data.getSiteCode());
+        map.put("transactionType", data.getTransactionType());
+        map.put("settlementCategory", data.getSettlementCategory());
         map.put("transactionCategory", data.getTransactionCategory());
         map.put("quantity", data.getQuantity());
         map.put("productSales", data.getProductSales());
@@ -664,6 +758,8 @@ public class ErpSettlementParser implements SalesDataParser {
         private String productName;
         private String settlementStatus;
         private String transferStatus;
+        /** ERP来源（Shipment/Refund/ServiceFee等） */
+        private String source;
     }
     
     /**
@@ -684,6 +780,10 @@ public class ErpSettlementParser implements SalesDataParser {
         private String settlementStatus;
         private String transferStatus;
         private Integer quantity;
+        /** ERP来源（Shipment/Refund/ServiceFee等） */
+        private String source;
+        /** 结算类型（ORDER/REFUND/SERVICE_FEE等） */
+        private String settlementCategory;
         
         // 聚合后的金额字段
         private BigDecimal productSales;
