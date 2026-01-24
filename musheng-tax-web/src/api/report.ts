@@ -55,7 +55,7 @@ export function getDashboardData() {
 // ============= 报税汇总接口 =============
 
 /**
- * 报税汇总数据
+ * 报税汇总数据 V2
  */
 export interface TaxReportSummary {
   siteCode: string
@@ -66,25 +66,37 @@ export interface TaxReportSummary {
   totalRevenue: number
   totalRevenueCny: number
   shippingOrderCount: number
-  // 退款-按结算
-  refundBySettlement: number
-  refundBySettlementCny: number
-  refundCountBySettlement: number
-  // 退款-按发货
+  // 退款-按发货归属
   refundByShipment: number
   refundByShipmentCny: number
   refundCountByShipment: number
-  // 净收入
-  netIncomeBySettlement: number
-  netIncomeByShipment: number
-  // 费用
+  // 退款-按结算时间
+  refundBySettlement: number
+  refundBySettlementCny: number
+  refundCountBySettlement: number
+  // 消费税
+  consumptionTax: number
+  consumptionTaxCny: number
+  // 佣金/服务费明细
+  sellingFees: number
+  sellingFeesCny: number
+  fbaFees: number
+  fbaFeesCny: number
+  otherTransactionFees: number
+  otherTransactionFeesCny: number
+  otherAmount: number
+  otherAmountCny: number
   totalServiceFee: number
   totalServiceFeeCny: number
+  // 其他费
+  miscFees: number
+  miscFeesCny: number
+  miscFeesCount: number
+  // 广告费
   advertisingCost: number
   advertisingCostCny: number
-  // 成本
+  // 总成本
   totalCost: number
-  purchaseAmount: number
 }
 
 /**

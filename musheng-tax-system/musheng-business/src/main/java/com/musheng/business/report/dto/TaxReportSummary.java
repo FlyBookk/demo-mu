@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 
 /**
  * 报税汇总数据 - 税务申报用
+ * V2版本：按新的费用计算逻辑
  */
 @Data
 @Schema(description = "报税汇总数据")
@@ -42,17 +43,7 @@ public class TaxReportSummary implements Serializable {
 
     // ========== 退款数据（双维度） ==========
 
-    // 维度一：按结算时间统计
-    @Schema(description = "退款金额-按结算时间（原币）")
-    private BigDecimal refundBySettlement;
-
-    @Schema(description = "退款金额-按结算时间（人民币）")
-    private BigDecimal refundBySettlementCny;
-
-    @Schema(description = "退款笔数-按结算时间")
-    private Integer refundCountBySettlement;
-
-    // 维度二：按发货订单归属
+    // 维度一：按发货订单归属（主要报税维度）
     @Schema(description = "退款金额-按发货归属（原币）")
     private BigDecimal refundByShipment;
 
@@ -62,21 +53,68 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "退款笔数-按发货归属")
     private Integer refundCountByShipment;
 
-    // ========== 净收入（两个维度） ==========
+    // 维度二：按结算时间统计（辅助参考）
+    @Schema(description = "退款金额-按结算时间（原币）")
+    private BigDecimal refundBySettlement;
 
-    @Schema(description = "净收入-按结算维度（人民币）")
-    private BigDecimal netIncomeBySettlement;
+    @Schema(description = "退款金额-按结算时间（人民币）")
+    private BigDecimal refundBySettlementCny;
 
-    @Schema(description = "净收入-按发货维度（人民币）")
-    private BigDecimal netIncomeByShipment;
+    @Schema(description = "退款笔数-按结算时间")
+    private Integer refundCountBySettlement;
 
-    // ========== 费用汇总 ==========
+    // ========== 消费税（平台代扣税） ==========
 
-    @Schema(description = "亚马逊服务费合计（原币）")
+    @Schema(description = "消费税/平台代扣税（原币）")
+    private BigDecimal consumptionTax;
+
+    @Schema(description = "消费税/平台代扣税（人民币）")
+    private BigDecimal consumptionTaxCny;
+
+    // ========== 佣金/服务费（拆分明细） ==========
+
+    @Schema(description = "销售费用（原币）")
+    private BigDecimal sellingFees;
+
+    @Schema(description = "销售费用（人民币）")
+    private BigDecimal sellingFeesCny;
+
+    @Schema(description = "FBA费用（原币）")
+    private BigDecimal fbaFees;
+
+    @Schema(description = "FBA费用（人民币）")
+    private BigDecimal fbaFeesCny;
+
+    @Schema(description = "其他交易费（原币）")
+    private BigDecimal otherTransactionFees;
+
+    @Schema(description = "其他交易费（人民币）")
+    private BigDecimal otherTransactionFeesCny;
+
+    @Schema(description = "其他（原币）")
+    private BigDecimal otherAmount;
+
+    @Schema(description = "其他（人民币）")
+    private BigDecimal otherAmountCny;
+
+    @Schema(description = "佣金/服务费合计（原币）= sellingFees + fbaFees + otherTransactionFees + otherAmount")
     private BigDecimal totalServiceFee;
 
-    @Schema(description = "亚马逊服务费合计（人民币）")
+    @Schema(description = "佣金/服务费合计（人民币）")
     private BigDecimal totalServiceFeeCny;
+
+    // ========== 其他费（非收入/退款类型） ==========
+
+    @Schema(description = "其他费（原币）- 非收入/退款类型的total汇总")
+    private BigDecimal miscFees;
+
+    @Schema(description = "其他费（人民币）")
+    private BigDecimal miscFeesCny;
+
+    @Schema(description = "其他费笔数")
+    private Integer miscFeesCount;
+
+    // ========== 广告费 ==========
 
     @Schema(description = "广告费（原币）")
     private BigDecimal advertisingCost;
@@ -84,11 +122,8 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "广告费（人民币）")
     private BigDecimal advertisingCostCny;
 
-    // ========== 成本计算 ==========
+    // ========== 成本汇总 ==========
 
-    @Schema(description = "总成本（人民币）= 服务费 + 广告费 + 采购金额")
+    @Schema(description = "总成本（人民币）= 佣金/服务费 + 其他费 + 广告费")
     private BigDecimal totalCost;
-
-    @Schema(description = "采购金额（人民币）= 净收入 × 96% - 服务费 - 广告费")
-    private BigDecimal purchaseAmount;
 }

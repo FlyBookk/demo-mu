@@ -62,7 +62,7 @@
 
     <!-- 汇总统计卡片 -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
+      <a-col :span="4">
         <a-card class="stat-card">
           <a-statistic
             title="收入总额(人民币)"
@@ -73,10 +73,10 @@
           />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="4">
         <a-card class="stat-card">
           <a-statistic
-            title="退款-发货归属(人民币)"
+            title="退款-发货归属"
             :value="totalStats.refundByShipmentCny"
             :precision="2"
             prefix="¥"
@@ -84,23 +84,45 @@
           />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="4">
         <a-card class="stat-card">
           <a-statistic
-            title="净收入-发货维度(人民币)"
-            :value="totalStats.netIncomeByShipment"
+            title="消费税"
+            :value="totalStats.consumptionTaxCny"
             :precision="2"
             prefix="¥"
-            :value-style="{ color: '#1890ff' }"
+            :value-style="{ color: '#fa8c16' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic
+            title="佣金/服务费"
+            :value="totalStats.totalServiceFeeCny"
+            :precision="2"
+            prefix="¥"
+            :value-style="{ color: '#eb2f96' }"
+          />
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic
+            title="其他费"
+            :value="totalStats.miscFeesCny"
+            :precision="2"
+            prefix="¥"
+            :value-style="{ color: '#722ed1' }"
+          />
+        </a-card>
+      </a-col>
+      <a-col :span="4">
         <a-card class="stat-card">
           <a-statistic
             title="发货订单数"
             :value="totalStats.shippingOrderCount"
-            :value-style="{ color: '#722ed1' }"
+            :value-style="{ color: '#1890ff' }"
           />
         </a-card>
       </a-col>
@@ -134,24 +156,27 @@
             <span class="amount negative">¥{{ formatNumber(record.refundByShipmentCny) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.refundCountByShipment }}笔</a-tag>
           </template>
-          <template v-else-if="column.key === 'netIncomeBySettlement'">
-            <span class="amount" :class="record.netIncomeBySettlement >= 0 ? 'positive' : 'negative'">
-              ¥{{ formatNumber(record.netIncomeBySettlement) }}
-            </span>
+          <template v-else-if="column.key === 'consumptionTaxCny'">
+            <span class="amount negative">¥{{ formatNumber(record.consumptionTaxCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'netIncomeByShipment'">
-            <span class="amount highlight" :class="record.netIncomeByShipment >= 0 ? 'positive' : 'negative'">
-              ¥{{ formatNumber(record.netIncomeByShipment) }}
-            </span>
+          <template v-else-if="column.key === 'sellingFeesCny'">
+            <span class="amount negative">¥{{ formatNumber(record.sellingFeesCny) }}</span>
+          </template>
+          <template v-else-if="column.key === 'fbaFeesCny'">
+            <span class="amount negative">¥{{ formatNumber(record.fbaFeesCny) }}</span>
           </template>
           <template v-else-if="column.key === 'totalServiceFeeCny'">
             <span class="amount negative">¥{{ formatNumber(record.totalServiceFeeCny) }}</span>
           </template>
+          <template v-else-if="column.key === 'miscFeesCny'">
+            <span class="amount negative">¥{{ formatNumber(record.miscFeesCny) }}</span>
+            <a-tag size="small" style="margin-left: 4px">{{ record.miscFeesCount }}笔</a-tag>
+          </template>
           <template v-else-if="column.key === 'advertisingCostCny'">
             <span class="amount negative">¥{{ formatNumber(record.advertisingCostCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'purchaseAmount'">
-            <span class="amount">¥{{ formatNumber(record.purchaseAmount) }}</span>
+          <template v-else-if="column.key === 'totalCost'">
+            <span class="amount negative">¥{{ formatNumber(record.totalCost) }}</span>
           </template>
         </template>
       </a-table>
@@ -172,7 +197,7 @@
     </a-row>
 
     <!-- 费用明细表格 -->
-    <a-card title="费用分类明细" class="data-card" style="margin-top: 16px">
+    <a-card title="其他费分类明细" class="data-card" style="margin-top: 16px">
       <a-table
         :columns="feeColumns"
         :data-source="feeData"
@@ -240,24 +265,28 @@ const totalStats = computed(() => {
   return {
     totalRevenueCny: data.reduce((sum, item) => sum + (item.totalRevenueCny || 0), 0),
     refundByShipmentCny: data.reduce((sum, item) => sum + (item.refundByShipmentCny || 0), 0),
-    netIncomeByShipment: data.reduce((sum, item) => sum + (item.netIncomeByShipment || 0), 0),
+    consumptionTaxCny: data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0),
+    totalServiceFeeCny: data.reduce((sum, item) => sum + (item.totalServiceFeeCny || 0), 0),
+    miscFeesCny: data.reduce((sum, item) => sum + (item.miscFeesCny || 0), 0),
     shippingOrderCount: data.reduce((sum, item) => sum + (item.shippingOrderCount || 0), 0)
   }
 })
 
-// 表格列定义
+// 表格列定义 - V2版本
 const summaryColumns = [
   { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 150, fixed: 'left' },
   { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
   { title: '收入(人民币)', dataIndex: 'totalRevenueCny', key: 'totalRevenueCny', width: 140, align: 'right' },
   { title: '订单数', dataIndex: 'shippingOrderCount', key: 'shippingOrderCount', width: 80, align: 'right' },
-  { title: '退款-结算', dataIndex: 'refundBySettlementCny', key: 'refundBySettlementCny', width: 160, align: 'right' },
-  { title: '退款-发货归属', dataIndex: 'refundByShipmentCny', key: 'refundByShipmentCny', width: 160, align: 'right' },
-  { title: '净收入-结算', dataIndex: 'netIncomeBySettlement', key: 'netIncomeBySettlement', width: 140, align: 'right' },
-  { title: '净收入-发货', dataIndex: 'netIncomeByShipment', key: 'netIncomeByShipment', width: 140, align: 'right' },
-  { title: '服务费', dataIndex: 'totalServiceFeeCny', key: 'totalServiceFeeCny', width: 120, align: 'right' },
+  { title: '退款-发货归属', dataIndex: 'refundByShipmentCny', key: 'refundByShipmentCny', width: 150, align: 'right' },
+  { title: '退款-结算', dataIndex: 'refundBySettlementCny', key: 'refundBySettlementCny', width: 150, align: 'right' },
+  { title: '消费税', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 120, align: 'right' },
+  { title: '销售费用', dataIndex: 'sellingFeesCny', key: 'sellingFeesCny', width: 120, align: 'right' },
+  { title: 'FBA费用', dataIndex: 'fbaFeesCny', key: 'fbaFeesCny', width: 120, align: 'right' },
+  { title: '佣金/服务费', dataIndex: 'totalServiceFeeCny', key: 'totalServiceFeeCny', width: 130, align: 'right' },
+  { title: '其他费', dataIndex: 'miscFeesCny', key: 'miscFeesCny', width: 140, align: 'right' },
   { title: '广告费', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 120, align: 'right' },
-  { title: '采购金额', dataIndex: 'purchaseAmount', key: 'purchaseAmount', width: 120, align: 'right' }
+  { title: '总成本', dataIndex: 'totalCost', key: 'totalCost', width: 120, align: 'right' }
 ]
 
 const feeColumns = [
