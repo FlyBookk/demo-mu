@@ -105,6 +105,9 @@ public class SalesDataServiceImpl implements SalesDataService {
         if (StringUtils.hasText(request.getSiteCode())) {
             wrapper.eq(SalesData::getSiteCode, request.getSiteCode());
         }
+        if (StringUtils.hasText(request.getSettlementId())) {
+            wrapper.eq(SalesData::getSettlementId, request.getSettlementId());
+        }
         if (StringUtils.hasText(request.getTransactionCategory())) {
             wrapper.eq(SalesData::getTransactionCategory, request.getTransactionCategory());
         }
@@ -488,7 +491,7 @@ public class SalesDataServiceImpl implements SalesDataService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String keyword, String siteCode, String transactionCategory, String startDate, String endDate) {
+    public Map<String, Object> getSummary(String keyword, String siteCode, String settlementId, String transactionCategory, String startDate, String endDate) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -504,6 +507,9 @@ public class SalesDataServiceImpl implements SalesDataService {
         }
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
+        }
+        if (StringUtils.hasText(settlementId)) {
+            wrapper.eq(SalesData::getSettlementId, settlementId);
         }
         if (StringUtils.hasText(transactionCategory)) {
             wrapper.eq(SalesData::getTransactionCategory, transactionCategory);

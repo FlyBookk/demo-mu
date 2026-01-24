@@ -13,6 +13,9 @@ public class SalesQueryRequest {
     @Schema(description = "站点编码")
     private String siteCode;
 
+    @Schema(description = "结算ID")
+    private String settlementId;
+
     @Schema(description = "交易分类(income/refund/fee/adjustment/other)")
     private String transactionCategory;
 

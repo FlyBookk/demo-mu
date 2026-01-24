@@ -87,10 +87,11 @@ public class SalesDataController {
     public Result<Map<String, Object>> getSummary(
             @Parameter(description = "关键字(订单号/SKU)") @RequestParam(required = false) String keyword,
             @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
+            @Parameter(description = "结算ID") @RequestParam(required = false) String settlementId,
             @Parameter(description = "交易分类") @RequestParam(required = false) String transactionCategory,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
             @Parameter(description = "结束日期") @RequestParam(required = false) String endDate) {
-        Map<String, Object> summary = salesDataService.getSummary(keyword, siteCode, transactionCategory, startDate, endDate);
+        Map<String, Object> summary = salesDataService.getSummary(keyword, siteCode, settlementId, transactionCategory, startDate, endDate);
         return Result.success(summary);
     }
 

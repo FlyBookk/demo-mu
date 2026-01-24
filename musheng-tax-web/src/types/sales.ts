@@ -48,6 +48,7 @@ export interface SalesData {
 export interface SalesDataQuery {
   keyword?: string
   siteCode?: string
+  settlementId?: string  // 结算ID
   transactionType?: string
   transactionCategory?: string
   startDate?: string

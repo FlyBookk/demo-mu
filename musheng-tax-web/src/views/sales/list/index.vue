@@ -8,10 +8,11 @@
 
     <!-- 搜索栏 -->
     <a-card class="search-card">
-      <a-form layout="inline" :model="searchForm">
-        <a-row :gutter="16" style="width: 100%">
-          <a-col :span="4">
-            <a-form-item>
+      <a-form :model="searchForm">
+        <!-- 第一行：搜索条件 -->
+        <a-row :gutter="16">
+          <a-col :span="5">
+            <a-form-item label="关键字">
               <a-input
                 v-model:value="searchForm.keyword"
                 placeholder="订单号/SKU/ASIN"
@@ -22,11 +23,21 @@
               </a-input>
             </a-form-item>
           </a-col>
+          <a-col :span="4">
+            <a-form-item label="结算ID">
+              <a-input
+                v-model:value="searchForm.settlementId"
+                placeholder="请输入结算ID"
+                allow-clear
+                @pressEnter="handleSearch"
+              />
+            </a-form-item>
+          </a-col>
           <a-col :span="3">
-            <a-form-item>
+            <a-form-item label="站点">
               <a-select
                 v-model:value="searchForm.siteCode"
-                placeholder="站点"
+                placeholder="全部"
                 allow-clear
                 style="width: 100%"
                 @change="handleSearch"
@@ -42,10 +53,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="3">
-            <a-form-item>
+            <a-form-item label="分类">
               <a-select
                 v-model:value="searchForm.transactionCategory"
-                placeholder="交易分类"
+                placeholder="全部"
                 allow-clear
                 style="width: 100%"
                 @change="handleSearch"
@@ -59,7 +70,7 @@
             </a-form-item>
           </a-col>
           <a-col :span="5">
-            <a-form-item>
+            <a-form-item label="日期">
               <a-range-picker
                 v-model:value="searchDateRange"
                 style="width: 100%"
@@ -68,7 +79,7 @@
             </a-form-item>
           </a-col>
           <a-col :span="4">
-            <a-form-item>
+            <a-form-item label=" " :colon="false">
               <a-space>
                 <a-button type="primary" @click="handleSearch">
                   <SearchOutlined /> 查询
@@ -79,7 +90,10 @@
               </a-space>
             </a-form-item>
           </a-col>
-          <a-col :span="5" style="text-align: right">
+        </a-row>
+        <!-- 第二行：操作按钮 -->
+        <a-row>
+          <a-col :span="24" style="text-align: right">
             <a-space>
               <a-button type="primary" @click="handleGoImport">
                 <CloudUploadOutlined /> 导入数据
@@ -348,7 +362,8 @@ function formatDate(dateStr?: string): string {
 const searchForm = reactive({
   keyword: '',
   siteCode: undefined as string | undefined,
-  transactionCategory: undefined as string | undefined
+  transactionCategory: undefined as string | undefined,
+  settlementId: ''
 })
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const marketplaceOptions = ref<Marketplace[]>([])
@@ -377,6 +392,13 @@ const columns = [
     key: 'orderId',
     width: 180,
     fixed: 'left' as const,
+    ellipsis: true
+  },
+  {
+    title: '结算ID',
+    dataIndex: 'settlementId',
+    key: 'settlementId',
+    width: 130,
     ellipsis: true
   },
   {
@@ -522,6 +544,7 @@ async function fetchData() {
     const params = {
       keyword: searchForm.keyword || undefined,
       siteCode: searchForm.siteCode,
+      settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
@@ -544,6 +567,7 @@ async function fetchSummary() {
     const params = {
       keyword: searchForm.keyword || undefined,
       siteCode: searchForm.siteCode,
+      settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
@@ -565,6 +589,7 @@ function handleReset() {
   searchForm.keyword = ''
   searchForm.siteCode = undefined
   searchForm.transactionCategory = undefined
+  searchForm.settlementId = ''
   searchDateRange.value = null
   pagination.current = 1
   fetchData()
@@ -670,6 +695,14 @@ onMounted(() => {
 
   .search-card {
     margin-bottom: $spacing-md;
+    
+    :deep(.ant-form-item) {
+      margin-bottom: 12px;
+    }
+    
+    :deep(.ant-form-item-label) {
+      padding-bottom: 4px;
+    }
   }
 
   .stat-row {
