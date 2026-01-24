@@ -177,6 +177,11 @@
             {{ getCategoryDesc(record.transactionType) }}
           </template>
 
+          <!-- 交易日期 -->
+          <template v-else-if="column.key === 'transactionDate'">
+            {{ formatDate(record.transactionDate) }}
+          </template>
+
           <!-- 合计金额 -->
           <template v-else-if="column.key === 'total'">
             <span :class="record.total >= 0 ? 'amount-positive' : 'amount-negative'">
@@ -217,7 +222,7 @@
         </a-descriptions-item>
         <a-descriptions-item label="站点">{{ detailData.siteCode }}</a-descriptions-item>
         <a-descriptions-item label="Marketplace">{{ detailData.marketplace }}</a-descriptions-item>
-        <a-descriptions-item label="交易日期">{{ detailData.transactionDate }}</a-descriptions-item>
+        <a-descriptions-item label="交易日期">{{ formatDate(detailData.transactionDate) }}</a-descriptions-item>
         <a-descriptions-item label="结算编号">{{ detailData.settlementId || '-' }}</a-descriptions-item>
         <a-descriptions-item label="原始交易类型">{{ detailData.transactionType }}</a-descriptions-item>
         <a-descriptions-item label="交易分类">
@@ -324,6 +329,19 @@ function getCategoryDesc(transactionType?: string): string {
 function formatAmount(amount: number | null | undefined): string {
   const value = amount ?? 0
   return value.toFixed(2)
+}
+
+// 格式化日期（yyyy-MM-dd HH:mm:ss -> yyyy-MM-dd HH:mm）
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return '-'
+  // 处理 ISO 格式或带T的格式
+  const normalized = dateStr.replace('T', ' ')
+  // 只取到分钟，去掉秒
+  const match = normalized.match(/^(\d{4}-\d{2}-\d{2})\s*(\d{2}:\d{2})/)
+  if (match) {
+    return `${match[1]} ${match[2]}`
+  }
+  return dateStr
 }
 
 // ============= 搜索相关 =============

@@ -151,7 +151,7 @@ INSERT INTO t_field_mapping_template (template_name, site_code, data_type, sourc
   {"source": "结算时间", "target": "transactionDate"},
   {"source": "币种", "target": "currencyCode"},
   {"source": "数量", "target": "quantity"},
-  {"source": "SKU", "target": "sku"},
+  {"source": "MSKU", "target": "sku"},
   {"source": "品名", "target": "description"}
 ]');
 
@@ -164,7 +164,7 @@ INSERT INTO t_field_mapping_template (template_name, site_code, data_type, sourc
 -- - taxCollectionModel（非财务核心）
 -- - settlementStatus（ERP状态，非核心）
 -- - transferStatus（ERP状态，非核心）
--- - msku（ERP字段，不存储）
+-- - SKU（ERP字段，使用MSKU代替）
 -- - amount（ERP字段，按交易类型分配到具体金额字段）
 -- ============================================================
 

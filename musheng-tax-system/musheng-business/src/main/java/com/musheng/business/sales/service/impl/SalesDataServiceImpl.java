@@ -1362,16 +1362,35 @@ public class SalesDataServiceImpl implements SalesDataService {
     private void deleteExistingData(SalesData data, boolean isErpData) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
         
-        if (isErpData) {
-            // ERP 数据使用 结算编号+订单号+来源(transactionType) 作为唯一键
-            wrapper.eq(SalesData::getSettlementId, data.getSettlementId())
-                    .eq(SalesData::getOrderId, data.getOrderId())
-                    .eq(SalesData::getTransactionType, data.getTransactionType());
+        // 统一使用 settlementId + orderId + transactionType + sku 作为唯一键
+        // 注：不包含 transactionDate，因为原始数据和ERP数据的时间不一致
+        
+        // settlementId
+        if (data.getSettlementId() != null && !data.getSettlementId().isEmpty()) {
+            wrapper.eq(SalesData::getSettlementId, data.getSettlementId());
         } else {
-            // 原始数据使用 订单号+站点+交易分类 作为唯一键
-            wrapper.eq(SalesData::getOrderId, data.getOrderId())
-                    .eq(SalesData::getSiteCode, data.getSiteCode())
-                    .eq(SalesData::getTransactionCategory, data.getTransactionCategory());
+            wrapper.and(w -> w.isNull(SalesData::getSettlementId).or().eq(SalesData::getSettlementId, ""));
+        }
+        
+        // orderId
+        if (data.getOrderId() != null && !data.getOrderId().isEmpty()) {
+            wrapper.eq(SalesData::getOrderId, data.getOrderId());
+        } else {
+            wrapper.and(w -> w.isNull(SalesData::getOrderId).or().eq(SalesData::getOrderId, ""));
+        }
+        
+        // transactionType
+        if (data.getTransactionType() != null && !data.getTransactionType().isEmpty()) {
+            wrapper.eq(SalesData::getTransactionType, data.getTransactionType());
+        } else {
+            wrapper.and(w -> w.isNull(SalesData::getTransactionType).or().eq(SalesData::getTransactionType, ""));
+        }
+        
+        // sku
+        if (data.getSku() != null && !data.getSku().isEmpty()) {
+            wrapper.eq(SalesData::getSku, data.getSku());
+        } else {
+            wrapper.and(w -> w.isNull(SalesData::getSku).or().eq(SalesData::getSku, ""));
         }
         
         salesDataMapper.delete(wrapper);
@@ -1379,13 +1398,12 @@ public class SalesDataServiceImpl implements SalesDataService {
     
     /**
      * 批量检查重复数据
-     * 一次性查询所有可能存在的订单，避免 N+1 查询
+     * 统一使用 settlementId 作为查询入口，构建完整的唯一键
+     * 唯一键：settlementId|orderId|transactionType|sku|transactionDate
      * 
      * @param dataList 待导入数据列表
-     * @param isErpData 是否为 ERP 数据（决定使用哪种唯一键）
+     * @param isErpData 是否为 ERP 数据（保留参数以兼容调用）
      * @return 已存在的订单 key 集合
-     *         - ERP 数据：settlementId + orderId + transactionType(来源)
-     *         - 原始数据：orderId + siteCode + transactionCategory
      */
     private Set<String> batchCheckDuplicates(List<SalesData> dataList, boolean isErpData) {
         Set<String> existingKeys = new HashSet<>();
@@ -1394,64 +1412,33 @@ public class SalesDataServiceImpl implements SalesDataService {
             return existingKeys;
         }
         
-        if (isErpData) {
-            // ERP 数据：按结算编号查询
-            Set<String> settlementIds = dataList.stream()
-                    .map(SalesData::getSettlementId)
-                    .filter(id -> id != null && !id.isEmpty())
-                    .collect(java.util.stream.Collectors.toSet());
+        // 统一使用 settlementId 作为查询入口
+        Set<String> settlementIds = dataList.stream()
+                .map(SalesData::getSettlementId)
+                .filter(id -> id != null && !id.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+        
+        if (settlementIds.isEmpty()) {
+            return existingKeys;
+        }
+        
+        // 分批查询
+        List<String> settlementIdList = new ArrayList<>(settlementIds);
+        int batchSize = 500;
+        
+        for (int i = 0; i < settlementIdList.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, settlementIdList.size());
+            List<String> batch = settlementIdList.subList(i, end);
             
-            if (settlementIds.isEmpty()) {
-                return existingKeys;
-            }
+            LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SalesData::getSettlementId, batch)
+                    .select(SalesData::getSettlementId, SalesData::getOrderId, 
+                            SalesData::getTransactionType, SalesData::getSku);
             
-            // 分批查询
-            List<String> settlementIdList = new ArrayList<>(settlementIds);
-            int batchSize = 500;
+            List<SalesData> existingData = salesDataMapper.selectList(wrapper);
             
-            for (int i = 0; i < settlementIdList.size(); i += batchSize) {
-                int end = Math.min(i + batchSize, settlementIdList.size());
-                List<String> batch = settlementIdList.subList(i, end);
-                
-                LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-                wrapper.in(SalesData::getSettlementId, batch)
-                        .eq(SalesData::getSourceType, SalesSourceType.ERP.getCode())
-                        .select(SalesData::getSettlementId, SalesData::getOrderId, SalesData::getTransactionType);
-                
-                List<SalesData> existingData = salesDataMapper.selectList(wrapper);
-                
-                for (SalesData data : existingData) {
-                    existingKeys.add(buildOrderKey(data, true));
-                }
-            }
-        } else {
-            // 原始数据：按订单号查询
-            Set<String> orderIds = dataList.stream()
-                    .map(SalesData::getOrderId)
-                    .filter(id -> id != null && !id.isEmpty())
-                    .collect(java.util.stream.Collectors.toSet());
-            
-            if (orderIds.isEmpty()) {
-                return existingKeys;
-            }
-            
-            // 分批查询
-            List<String> orderIdList = new ArrayList<>(orderIds);
-            int batchSize = 500;
-            
-            for (int i = 0; i < orderIdList.size(); i += batchSize) {
-                int end = Math.min(i + batchSize, orderIdList.size());
-                List<String> batch = orderIdList.subList(i, end);
-                
-                LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-                wrapper.in(SalesData::getOrderId, batch)
-                        .select(SalesData::getOrderId, SalesData::getSiteCode, SalesData::getTransactionCategory);
-                
-                List<SalesData> existingData = salesDataMapper.selectList(wrapper);
-                
-                for (SalesData data : existingData) {
-                    existingKeys.add(buildOrderKey(data, false));
-                }
+            for (SalesData data : existingData) {
+                existingKeys.add(buildOrderKey(data, isErpData));
             }
         }
         
@@ -1460,27 +1447,20 @@ public class SalesDataServiceImpl implements SalesDataService {
     
     /**
      * 构建订单唯一 key
+     * 统一使用 settlementId|orderId|transactionType|sku 作为全局唯一键
+     * 注：不包含 transactionDate，因为原始数据和ERP数据的时间不一致
      * 
      * @param data 销售数据
-     * @param isErpData 是否为 ERP 数据
-     * @return 唯一键字符串
-     *         - ERP 数据：settlementId|orderId|transactionType(来源)
-     *         - 原始数据：orderId|siteCode|transactionCategory
+     * @param isErpData 是否为 ERP 数据（保留参数以兼容调用）
+     * @return 唯一键字符串：settlementId|orderId|transactionType|sku
      */
     private String buildOrderKey(SalesData data, boolean isErpData) {
-        if (isErpData) {
-            // ERP 数据使用 结算编号+订单号+来源(存储在transactionType)
-            return String.format("%s|%s|%s", 
-                    data.getSettlementId() != null ? data.getSettlementId() : "",
-                    data.getOrderId() != null ? data.getOrderId() : "",
-                    data.getTransactionType() != null ? data.getTransactionType() : "");
-        } else {
-            // 原始数据使用 订单号+站点+交易分类
-            return String.format("%s|%s|%s", 
-                    data.getOrderId() != null ? data.getOrderId() : "",
-                    data.getSiteCode() != null ? data.getSiteCode() : "",
-                    data.getTransactionCategory() != null ? data.getTransactionCategory() : "");
-        }
+        // 统一去重逻辑：settlementId + orderId + transactionType + sku
+        return String.format("%s|%s|%s|%s", 
+                data.getSettlementId() != null ? data.getSettlementId() : "",
+                data.getOrderId() != null ? data.getOrderId() : "",
+                data.getTransactionType() != null ? data.getTransactionType() : "",
+                data.getSku() != null ? data.getSku() : "");
     }
     
     /**

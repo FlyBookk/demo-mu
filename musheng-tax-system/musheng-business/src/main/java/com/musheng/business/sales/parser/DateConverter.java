@@ -87,6 +87,12 @@ public class DateConverter {
         String trimmed = dateStr.trim();
         
         try {
+            // 优先尝试特定格式（避免 Hutool 智能解析的误判）
+            LocalDateTime result = parseSpecificFormats(trimmed, siteCode);
+            if (result != null) {
+                return result;
+            }
+            
             // 预处理：移除时区缩写（Hutool 不直接支持 PDT/PST 等缩写）
             String processed = removeTimezoneAbbr(trimmed);
             
@@ -97,12 +103,6 @@ public class DateConverter {
             DateTime dateTime = DateUtil.parse(processed);
             if (dateTime != null) {
                 return toLocalDateTime(dateTime);
-            }
-            
-            // 如果智能解析失败，尝试特定格式
-            LocalDateTime result = parseSpecificFormats(trimmed, siteCode);
-            if (result != null) {
-                return result;
             }
             
             log.warn("日期解析失败: {} (站点: {})", dateStr, siteCode);
@@ -175,53 +175,128 @@ public class DateConverter {
     private static LocalDateTime parseSpecificFormats(String dateStr, String siteCode) {
         String processed = removeTimezoneAbbr(dateStr);
         
-        // 德国格式: 30.09.2025 22:04:35
-        if (dateStr.matches("^\\d{2}\\.\\d{2}\\.\\d{4}.*")) {
+        // 德国格式: 30.06.2025 22:04:35 UTC 或 30.06.2025 22:04:35
+        // 匹配 dd.MM.yyyy 开头的格式
+        if (processed.matches("^\\d{1,2}\\.\\d{1,2}\\.\\d{4}.*")) {
             try {
                 // 手动解析德语日期格式
                 // 格式: dd.MM.yyyy HH:mm:ss
                 String[] parts = processed.split("\\s+");
-                if (parts.length >= 2) {
-                    String datePart = parts[0]; // 30.09.2025
-                    String timePart = parts[1]; // 22:04:35
+                String datePart = parts[0]; // 30.06.2025
+                
+                String[] dateParts = datePart.split("\\.");
+                if (dateParts.length == 3) {
+                    int day = Integer.parseInt(dateParts[0]);
+                    int month = Integer.parseInt(dateParts[1]);
+                    int year = Integer.parseInt(dateParts[2]);
                     
-                    String[] dateParts = datePart.split("\\.");
-                    String[] timeParts = timePart.split(":");
+                    int hour = 0, minute = 0, second = 0;
                     
-                    if (dateParts.length == 3 && timeParts.length >= 2) {
-                        int day = Integer.parseInt(dateParts[0]);
-                        int month = Integer.parseInt(dateParts[1]);
-                        int year = Integer.parseInt(dateParts[2]);
-                        int hour = Integer.parseInt(timeParts[0]);
-                        int minute = Integer.parseInt(timeParts[1]);
-                        int second = timeParts.length > 2 ? Integer.parseInt(timeParts[2]) : 0;
-                        
-                        return LocalDateTime.of(year, month, day, hour, minute, second);
+                    // 解析时间部分（如果存在）
+                    if (parts.length >= 2 && parts[1].contains(":")) {
+                        String timePart = parts[1]; // 22:04:35
+                        String[] timeParts = timePart.split(":");
+                        if (timeParts.length >= 2) {
+                            hour = Integer.parseInt(timeParts[0]);
+                            minute = Integer.parseInt(timeParts[1]);
+                            second = timeParts.length > 2 ? Integer.parseInt(timeParts[2]) : 0;
+                        }
                     }
+                    
+                    return LocalDateTime.of(year, month, day, hour, minute, second);
                 }
             } catch (Exception e) {
                 log.debug("德国格式解析失败: {}, 错误: {}", dateStr, e.getMessage());
             }
         }
         
-        // 英国格式: 1 Jul 2025 00:01:49
-        if (dateStr.matches("^\\d{1,2}\\s+[A-Za-z]{3}\\s+\\d{4}.*")) {
+        // 英国格式: 1 Jul 2025 00:01:49 BST
+        if (processed.matches("^\\d{1,2}\\s+[A-Za-z]{3}\\s+\\d{4}.*")) {
             try {
-                DateTime dt = DateUtil.parse(processed, "d MMM yyyy HH:mm:ss");
-                if (dt != null) return toLocalDateTime(dt);
-            } catch (Exception ignored) {}
+                // 手动解析英国格式
+                String[] parts = processed.split("\\s+");
+                if (parts.length >= 4) {
+                    int day = Integer.parseInt(parts[0]);
+                    int month = parseMonth(parts[1]);
+                    int year = Integer.parseInt(parts[2]);
+                    
+                    int hour = 0, minute = 0, second = 0;
+                    if (parts[3].contains(":")) {
+                        String[] timeParts = parts[3].split(":");
+                        hour = Integer.parseInt(timeParts[0]);
+                        minute = Integer.parseInt(timeParts[1]);
+                        second = timeParts.length > 2 ? Integer.parseInt(timeParts[2]) : 0;
+                    }
+                    
+                    return LocalDateTime.of(year, month, day, hour, minute, second);
+                }
+            } catch (Exception e) {
+                log.debug("英国格式解析失败: {}, 错误: {}", dateStr, e.getMessage());
+            }
         }
         
-        // 美国格式: Jul 1, 2025 12:01:49 AM
-        if (dateStr.matches("^[A-Za-z]{3}\\s+\\d{1,2},\\s+\\d{4}.*")) {
-            String normalizedAmPm = normalizeAmPm(processed);
+        // 美国格式: Jul 1, 2025 12:01:49 AM PDT
+        if (processed.matches("^[A-Za-z]{3}\\s+\\d{1,2},?\\s+\\d{4}.*")) {
             try {
-                DateTime dt = DateUtil.parse(normalizedAmPm, "MMM d, yyyy HH:mm:ss");
-                if (dt != null) return toLocalDateTime(dt);
-            } catch (Exception ignored) {}
+                // 移除逗号并解析
+                String normalized = processed.replace(",", "");
+                String[] parts = normalized.split("\\s+");
+                if (parts.length >= 4) {
+                    int month = parseMonth(parts[0]);
+                    int day = Integer.parseInt(parts[1]);
+                    int year = Integer.parseInt(parts[2]);
+                    
+                    int hour = 0, minute = 0, second = 0;
+                    boolean isPM = false;
+                    
+                    if (parts[3].contains(":")) {
+                        String[] timeParts = parts[3].split(":");
+                        hour = Integer.parseInt(timeParts[0]);
+                        minute = Integer.parseInt(timeParts[1]);
+                        second = timeParts.length > 2 ? Integer.parseInt(timeParts[2]) : 0;
+                    }
+                    
+                    // 检查 AM/PM
+                    if (parts.length >= 5) {
+                        String ampm = parts[4].toUpperCase();
+                        if ("PM".equals(ampm) && hour != 12) {
+                            hour += 12;
+                        } else if ("AM".equals(ampm) && hour == 12) {
+                            hour = 0;
+                        }
+                    }
+                    
+                    return LocalDateTime.of(year, month, day, hour, minute, second);
+                }
+            } catch (Exception e) {
+                log.debug("美国格式解析失败: {}, 错误: {}", dateStr, e.getMessage());
+            }
         }
         
         return null;
+    }
+    
+    /**
+     * 解析月份英文缩写
+     */
+    private static int parseMonth(String monthStr) {
+        if (monthStr == null || monthStr.length() < 3) return 1;
+        String abbr = monthStr.substring(0, 3).toLowerCase();
+        switch (abbr) {
+            case "jan": return 1;
+            case "feb": return 2;
+            case "mar": return 3;
+            case "apr": return 4;
+            case "may": return 5;
+            case "jun": return 6;
+            case "jul": return 7;
+            case "aug": return 8;
+            case "sep": return 9;
+            case "oct": return 10;
+            case "nov": return 11;
+            case "dec": return 12;
+            default: return 1;
+        }
     }
     
     /**

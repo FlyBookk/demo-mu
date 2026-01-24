@@ -445,7 +445,8 @@ public class ErpSettlementParser implements SalesDataParser {
         row.setMsku(getFieldValue(record, headerMap, "MSKU"));
         row.setTransactionType(getFieldValue(record, headerMap, "交易类型"));
         row.setCurrencyCode(getFieldValue(record, headerMap, "币种"));
-        row.setSku(getFieldValue(record, headerMap, "SKU"));
+        // ERP的SKU字段不使用，改用MSKU映射到数据库的sku字段
+        // row.setSku(getFieldValue(record, headerMap, "SKU"));
         row.setProductName(getFieldValue(record, headerMap, "品名"));
         row.setSettlementStatus(getFieldValue(record, headerMap, "结算状态"));
         row.setTransferStatus(getFieldValue(record, headerMap, "转账状态"));
@@ -504,7 +505,7 @@ public class ErpSettlementParser implements SalesDataParser {
                 row.getSource() != null ? row.getSource() : "",
                 row.getOrderId() != null ? row.getOrderId() : "",
                 row.getSiteCode() != null ? row.getSiteCode() : "",
-                row.getSku() != null ? row.getSku() : "");
+                row.getMsku() != null ? row.getMsku() : "");  // 使用MSKU作为聚合键
     }
     
     /**
@@ -514,7 +515,8 @@ public class ErpSettlementParser implements SalesDataParser {
         ErpAggregateRow aggregate = new ErpAggregateRow();
         aggregate.setOrderId(firstRow.getOrderId());
         aggregate.setSiteCode(firstRow.getSiteCode());
-        aggregate.setSku(firstRow.getSku());
+        // ERP数据使用MSKU作为sku字段值
+        aggregate.setSku(firstRow.getMsku());
         aggregate.setMsku(firstRow.getMsku());
         aggregate.setSettlementId(firstRow.getSettlementId());
         aggregate.setStoreName(firstRow.getStoreName());

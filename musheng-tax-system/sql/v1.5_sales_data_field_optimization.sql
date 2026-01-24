@@ -20,7 +20,7 @@ DROP TABLE IF EXISTS t_sales_data;
 -- 如需更新映射数据，请执行 v1.6_transaction_type_mapping_update.sql
 
 -- ============================================================
--- 第二部分：创建优化后的销售数据表
+-- 第二部分：创建优化后的销售数据表 
 -- ============================================================
 
 CREATE TABLE t_sales_data (
@@ -36,7 +36,7 @@ CREATE TABLE t_sales_data (
     store_name VARCHAR(100) COMMENT '店铺名称（预留字段）',
     transaction_date DATETIME NOT NULL COMMENT '交易/结算时间',
     settlement_id VARCHAR(50) NOT NULL COMMENT '亚马逊结算批次号（去重关键字段）',
-    transaction_type VARCHAR(50) NOT NULL COMMENT '交易类型(Order/Refund/Shipment等)',
+    transaction_type VARCHAR(100) NOT NULL COMMENT '交易类型(Order/Refund/Shipment等，德语可达60字符)',
     transaction_category VARCHAR(20) COMMENT '交易分类(income/refund/fee/adjustment/other)',
     order_id VARCHAR(50) NOT NULL COMMENT '亚马逊订单编号',
     sku VARCHAR(100) COMMENT '商品SKU',
@@ -73,7 +73,8 @@ CREATE TABLE t_sales_data (
     
     -- ========== 索引 ==========
     -- 统一去重索引（原始数据和ERP数据都使用此组合）
-    INDEX idx_sales_dedup (settlement_id, order_id, transaction_type),
+    -- 注：不包含 transaction_date，因为原始数据和ERP数据的时间不一致
+    INDEX idx_sales_dedup (settlement_id, order_id, transaction_type, sku),
     -- 交易日期索引（用于日期范围查询）
     INDEX idx_sales_transaction_date (transaction_date),
     -- 站点索引（用于站点筛选）
@@ -113,7 +114,8 @@ CREATE TABLE t_sales_data (
 --   - 汇率字段：2个
 --
 -- 去重逻辑：
---   - 统一使用 settlement_id + order_id + transaction_type 作为业务唯一键
+--   - 统一使用 settlement_id + order_id + transaction_type + sku 作为业务唯一键
+--   - 不包含 transaction_date，因为原始数据和ERP数据的时间不一致，无法作为约束
 --   - 原始数据：settlement_id 来自 "settlement id" 列
 --   - ERP数据：settlement_id 来自 "Settlement ID" 列（非"结算编号"）
 --
