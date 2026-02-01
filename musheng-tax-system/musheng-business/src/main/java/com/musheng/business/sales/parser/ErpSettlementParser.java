@@ -159,15 +159,8 @@ public class ErpSettlementParser implements SalesDataParser {
     public ParseResult parse(ParseContext context) {
         log.info("开始解析ERP结算数据: {}", context.getFilePath());
         
-        // 用于聚合的Map：key = orderId + siteCode + sku
-        Map<String, ErpAggregateRow> aggregateMap = new LinkedHashMap<>();
-        List<ParseResult.ParseError> errors = new ArrayList<>();
-        Set<String> detectedSites = new HashSet<>();
-        int totalRows = 0;
-        int failRows = 0;
-        
         boolean isPreview = Boolean.TRUE.equals(context.getPreviewMode());
-        int previewLimit = context.getPreviewRows() != null ? context.getPreviewRows() : 10;
+        int maxRows = isPreview ? (context.getPreviewRows() != null ? context.getPreviewRows() : 10) : Integer.MAX_VALUE;
         
         try {
             Charset charset = context.getEncoding() != null 
@@ -175,89 +168,11 @@ public class ErpSettlementParser implements SalesDataParser {
                     : StandardCharsets.UTF_8;
             
             try (BufferedReader reader = Files.newBufferedReader(context.getFilePath(), charset)) {
-                CSVFormat format = CSVFormat.DEFAULT.builder()
-                        .setHeader()
-                        .setSkipHeaderRecord(true)
-                        .setIgnoreEmptyLines(true)
-                        .setTrim(true)
-                        .build();
-                
+                CSVFormat format = buildCsvFormat();
                 try (CSVParser parser = new CSVParser(reader, format)) {
-                    Map<String, Integer> headerMap = parser.getHeaderMap();
-                    log.info("解析到ERP表头字段: {}", headerMap.keySet());
-                    
-                    for (CSVRecord record : parser) {
-                        totalRows++;
-                        
-                        try {
-                            // 解析ERP行数据
-                            ErpRow erpRow = parseErpRow(record, headerMap, context);
-                            
-                            // 收集站点信息
-                            if (erpRow.getSiteCode() != null) {
-                                detectedSites.add(erpRow.getSiteCode());
-                            }
-                            
-                            // 聚合key
-                            String aggregateKey = buildAggregateKey(erpRow);
-                            
-                            // 聚合处理
-                            ErpAggregateRow aggregateRow = aggregateMap.computeIfAbsent(
-                                    aggregateKey, 
-                                    k -> createAggregateRow(erpRow)
-                            );
-                            
-                            // 根据交易类型累加金额
-                            accumulateAmount(aggregateRow, erpRow);
-                            
-                        } catch (Exception e) {
-                            failRows++;
-                            errors.add(ParseResult.ParseError.builder()
-                                    .row((int) record.getRecordNumber())
-                                    .message(e.getMessage())
-                                    .build());
-                            log.warn("解析第{}行失败: {}", record.getRecordNumber(), e.getMessage());
-                        }
-                        
-                        // 预览模式限制行数
-                        if (isPreview && aggregateMap.size() >= previewLimit) {
-                            break;
-                        }
-                    }
+                    return doParse(parser, context, maxRows, isPreview);
                 }
             }
-            
-            // 将聚合结果转换为SalesData列表
-            List<SalesData> dataList = new ArrayList<>();
-            List<Map<String, Object>> previewData = new ArrayList<>();
-            
-            for (ErpAggregateRow aggregateRow : aggregateMap.values()) {
-                SalesData salesData = convertToSalesData(aggregateRow, context);
-                dataList.add(salesData);
-                
-                if (isPreview) {
-                    previewData.add(convertToMap(salesData));
-                }
-            }
-            
-            ParseResult result = ParseResult.builder()
-                    .success(true)
-                    .totalRows(totalRows)
-                    .successRows(dataList.size())
-                    .failRows(failRows)
-                    .skipRows(0)
-                    .dataList(dataList)
-                    .previewData(isPreview ? previewData : null)
-                    .errors(errors)
-                    .warnings(new ArrayList<>())
-                    .detectedSiteCodes(new ArrayList<>(detectedSites))
-                    .build();
-            
-            log.info("ERP结算数据解析完成: 原始行数={}, 聚合后记录数={}, 失败行数={}, 检测到站点={}", 
-                    totalRows, dataList.size(), failRows, detectedSites);
-            
-            return result;
-            
         } catch (IOException e) {
             log.error("读取ERP文件失败: {}", e.getMessage(), e);
             return ParseResult.fail("读取文件失败: " + e.getMessage());
@@ -268,94 +183,97 @@ public class ErpSettlementParser implements SalesDataParser {
     public ParseResult parse(String content, ParseContext context, int maxRows) {
         log.info("开始解析ERP结算数据（从内容）: maxRows={}", maxRows);
         
-        // 用于聚合的Map：key = orderId + siteCode + sku
+        try {
+            CSVFormat format = buildCsvFormat();
+            try (CSVParser parser = CSVParser.parse(content, format)) {
+                return doParse(parser, context, maxRows, false);
+            }
+        } catch (IOException e) {
+            log.error("解析ERP内容失败: {}", e.getMessage(), e);
+            return ParseResult.fail("解析内容失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 构建统一的CSV格式配置
+     */
+    private CSVFormat buildCsvFormat() {
+        return CSVFormat.DEFAULT.builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreEmptyLines(true)
+                .setTrim(true)
+                .build();
+    }
+    
+    /**
+     * 执行实际的解析逻辑（公共方法）
+     */
+    private ParseResult doParse(CSVParser parser, ParseContext context, int maxRows, boolean isPreview) {
         Map<String, ErpAggregateRow> aggregateMap = new LinkedHashMap<>();
         List<ParseResult.ParseError> errors = new ArrayList<>();
         Set<String> detectedSites = new HashSet<>();
         int totalRows = 0;
         int failRows = 0;
         
-        try {
-            CSVFormat format = CSVFormat.DEFAULT.builder()
-                    .setHeader()
-                    .setSkipHeaderRecord(true)
-                    .setIgnoreEmptyLines(true)
-                    .setTrim(true)
-                    .build();
+        Map<String, Integer> headerMap = parser.getHeaderMap();
+        log.info("解析到ERP表头字段: {}", headerMap.keySet());
+        
+        for (CSVRecord record : parser) {
+            totalRows++;
             
-            try (CSVParser parser = CSVParser.parse(content, format)) {
-                Map<String, Integer> headerMap = parser.getHeaderMap();
-                log.info("解析到ERP表头字段: {}", headerMap.keySet());
+            try {
+                ErpRow erpRow = parseErpRow(record, headerMap, context);
                 
-                for (CSVRecord record : parser) {
-                    totalRows++;
-                    
-                    try {
-                        // 解析ERP行数据
-                        ErpRow erpRow = parseErpRow(record, headerMap, context);
-                        
-                        // 收集站点信息
-                        if (erpRow.getSiteCode() != null) {
-                            detectedSites.add(erpRow.getSiteCode());
-                        }
-                        
-                        // 聚合key
-                        String aggregateKey = buildAggregateKey(erpRow);
-                        
-                        // 聚合处理
-                        ErpAggregateRow aggregateRow = aggregateMap.computeIfAbsent(
-                                aggregateKey, 
-                                k -> createAggregateRow(erpRow)
-                        );
-                        
-                        // 根据交易类型累加金额
-                        accumulateAmount(aggregateRow, erpRow);
-                        
-                    } catch (Exception e) {
-                        failRows++;
-                        errors.add(ParseResult.ParseError.builder()
-                                .row((int) record.getRecordNumber())
-                                .message(e.getMessage())
-                                .build());
-                        log.warn("解析第{}行失败: {}", record.getRecordNumber(), e.getMessage());
-                    }
-                    
-                    // 限制聚合后的记录数
-                    if (aggregateMap.size() >= maxRows) {
-                        break;
-                    }
+                if (erpRow.getSiteCode() != null) {
+                    detectedSites.add(erpRow.getSiteCode());
                 }
+                
+                String aggregateKey = buildAggregateKey(erpRow);
+                ErpAggregateRow aggregateRow = aggregateMap.computeIfAbsent(
+                        aggregateKey, k -> createAggregateRow(erpRow));
+                accumulateAmount(aggregateRow, erpRow);
+                
+            } catch (Exception e) {
+                failRows++;
+                errors.add(ParseResult.ParseError.builder()
+                        .row((int) record.getRecordNumber())
+                        .message(e.getMessage())
+                        .build());
+                log.warn("解析第{}行失败: {}", record.getRecordNumber(), e.getMessage());
             }
             
-            // 将聚合结果转换为SalesData列表
-            List<SalesData> dataList = new ArrayList<>();
-            
-            for (ErpAggregateRow aggregateRow : aggregateMap.values()) {
-                SalesData salesData = convertToSalesData(aggregateRow, context);
-                dataList.add(salesData);
+            if (aggregateMap.size() >= maxRows) {
+                break;
             }
-            
-            ParseResult result = ParseResult.builder()
-                    .success(true)
-                    .totalRows(totalRows)
-                    .successRows(dataList.size())
-                    .failRows(failRows)
-                    .skipRows(0)
-                    .dataList(dataList)
-                    .errors(errors)
-                    .warnings(new ArrayList<>())
-                    .detectedSiteCodes(new ArrayList<>(detectedSites))
-                    .build();
-            
-            log.info("ERP结算数据解析完成: 原始行数={}, 聚合后记录数={}, 失败行数={}", 
-                    totalRows, dataList.size(), failRows);
-            
-            return result;
-            
-        } catch (IOException e) {
-            log.error("解析ERP内容失败: {}", e.getMessage(), e);
-            return ParseResult.fail("解析内容失败: " + e.getMessage());
         }
+        
+        List<SalesData> dataList = new ArrayList<>();
+        List<Map<String, Object>> previewData = isPreview ? new ArrayList<>() : null;
+        
+        for (ErpAggregateRow aggregateRow : aggregateMap.values()) {
+            SalesData salesData = convertToSalesData(aggregateRow, context);
+            dataList.add(salesData);
+            if (isPreview && previewData != null) {
+                previewData.add(convertToMap(salesData));
+            }
+        }
+        
+        log.info("ERP结算数据解析完成: 原始行数={}, 聚合后记录数={}, 失败行数={}, 检测到站点={}", 
+                totalRows, dataList.size(), failRows, detectedSites);
+        
+        return ParseResult.builder()
+                .success(true)
+                .totalRows(totalRows)
+                .successRows(dataList.size())
+                .failRows(failRows)
+                .skipRows(0)
+                .dataList(dataList)
+                .previewData(previewData)
+                .errors(errors)
+                .warnings(new ArrayList<>())
+                .detectedSiteCodes(new ArrayList<>(detectedSites))
+                .build();
     }
     
     @Override
@@ -552,6 +470,25 @@ public class ErpSettlementParser implements SalesDataParser {
     }
     
     /**
+     * 字段名到累加器的映射（避免冗长的switch语句）
+     */
+    private static final Map<String, java.util.function.BiConsumer<ErpAggregateRow, BigDecimal>> FIELD_ACCUMULATORS = Map.ofEntries(
+            Map.entry("productSales", (agg, amt) -> agg.setProductSales(agg.getProductSales().add(amt))),
+            Map.entry("productSalesTax", (agg, amt) -> agg.setProductSalesTax(agg.getProductSalesTax().add(amt))),
+            Map.entry("shippingCredits", (agg, amt) -> agg.setShippingCredits(agg.getShippingCredits().add(amt))),
+            Map.entry("shippingCreditsTax", (agg, amt) -> agg.setShippingCreditsTax(agg.getShippingCreditsTax().add(amt))),
+            Map.entry("giftWrapCredits", (agg, amt) -> agg.setGiftWrapCredits(agg.getGiftWrapCredits().add(amt))),
+            Map.entry("giftWrapCreditsTax", (agg, amt) -> agg.setGiftWrapCreditsTax(agg.getGiftWrapCreditsTax().add(amt))),
+            Map.entry("promotionalRebates", (agg, amt) -> agg.setPromotionalRebates(agg.getPromotionalRebates().add(amt))),
+            Map.entry("promotionalRebatesTax", (agg, amt) -> agg.setPromotionalRebatesTax(agg.getPromotionalRebatesTax().add(amt))),
+            Map.entry("marketplaceWithheldTax", (agg, amt) -> agg.setMarketplaceWithheldTax(agg.getMarketplaceWithheldTax().add(amt))),
+            Map.entry("sellingFees", (agg, amt) -> agg.setSellingFees(agg.getSellingFees().add(amt))),
+            Map.entry("fbaFees", (agg, amt) -> agg.setFbaFees(agg.getFbaFees().add(amt))),
+            Map.entry("otherTransactionFees", (agg, amt) -> agg.setOtherTransactionFees(agg.getOtherTransactionFees().add(amt))),
+            Map.entry("other", (agg, amt) -> agg.setOther(agg.getOther().add(amt)))
+    );
+    
+    /**
      * 根据交易类型累加金额
      */
     private void accumulateAmount(ErpAggregateRow aggregate, ErpRow row) {
@@ -561,53 +498,12 @@ public class ErpSettlementParser implements SalesDataParser {
         
         String targetField = ERP_TYPE_TO_FIELD.get(row.getTransactionType());
         if (targetField == null) {
-            // 未映射的交易类型归入other
-            aggregate.setOther(aggregate.getOther().add(row.getAmount()));
-            return;
+            targetField = "other";  // 未映射的交易类型归入other
         }
         
-        BigDecimal amount = row.getAmount();
-        
-        switch (targetField) {
-            case "productSales":
-                aggregate.setProductSales(aggregate.getProductSales().add(amount));
-                break;
-            case "productSalesTax":
-                aggregate.setProductSalesTax(aggregate.getProductSalesTax().add(amount));
-                break;
-            case "shippingCredits":
-                aggregate.setShippingCredits(aggregate.getShippingCredits().add(amount));
-                break;
-            case "shippingCreditsTax":
-                aggregate.setShippingCreditsTax(aggregate.getShippingCreditsTax().add(amount));
-                break;
-            case "giftWrapCredits":
-                aggregate.setGiftWrapCredits(aggregate.getGiftWrapCredits().add(amount));
-                break;
-            case "giftWrapCreditsTax":
-                aggregate.setGiftWrapCreditsTax(aggregate.getGiftWrapCreditsTax().add(amount));
-                break;
-            case "promotionalRebates":
-                aggregate.setPromotionalRebates(aggregate.getPromotionalRebates().add(amount));
-                break;
-            case "promotionalRebatesTax":
-                aggregate.setPromotionalRebatesTax(aggregate.getPromotionalRebatesTax().add(amount));
-                break;
-            case "marketplaceWithheldTax":
-                aggregate.setMarketplaceWithheldTax(aggregate.getMarketplaceWithheldTax().add(amount));
-                break;
-            case "sellingFees":
-                aggregate.setSellingFees(aggregate.getSellingFees().add(amount));
-                break;
-            case "fbaFees":
-                aggregate.setFbaFees(aggregate.getFbaFees().add(amount));
-                break;
-            case "otherTransactionFees":
-                aggregate.setOtherTransactionFees(aggregate.getOtherTransactionFees().add(amount));
-                break;
-            case "other":
-                aggregate.setOther(aggregate.getOther().add(amount));
-                break;
+        var accumulator = FIELD_ACCUMULATORS.get(targetField);
+        if (accumulator != null) {
+            accumulator.accept(aggregate, row.getAmount());
         }
     }
     

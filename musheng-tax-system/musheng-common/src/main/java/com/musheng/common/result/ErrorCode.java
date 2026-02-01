@@ -39,6 +39,7 @@ public enum ErrorCode {
     IMPORT_PARSE_ERROR(30007, "文件解析错误"),
     IMPORT_DATE_FORMAT_ERROR(30008, "日期格式错误"),
     IMPORT_NUMBER_FORMAT_ERROR(30009, "数字格式错误"),
+    IMPORT_DUPLICATE(30010, "文件已导入，请勿重复导入"),
 
     // ============== 汇率相关错误 (31xxx) ==============
     RATE_NOT_FOUND(31001, "汇率数据不存在"),

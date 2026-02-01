@@ -17,33 +17,47 @@
         <a-upload-dragger
           v-model:file-list="fileList"
           name="file"
-          :multiple="false"
+          :multiple="true"
           :before-upload="beforeUpload"
-          accept=".csv,.xlsx,.xls"
+          accept=".xlsx,.xls"
         >
           <p class="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">
-            支持 CSV、Excel (.xlsx, .xls) 格式，单个文件最大 50MB<br />
-            系统将自动识别编码（UTF-8/GBK）并解析日期格式
+            支持 Excel (.xlsx, .xls) 格式，单个文件最大 50MB<br />
+            支持批量上传多个文件，系统会自动去重（已导入的文件会被跳过）<br />
+            请确保Excel文件包含"发货单详情"工作表
           </p>
         </a-upload-dragger>
 
-        <div v-if="uploadedFileInfo" class="uploaded-file-info">
+        <div v-if="uploadedFiles.length > 0" class="uploaded-file-info">
           <a-card size="small">
-            <a-descriptions :column="2">
-              <a-descriptions-item label="文件名">{{ uploadedFileInfo.fileName }}</a-descriptions-item>
-              <a-descriptions-item label="文件大小">{{ formatFileSize(uploadedFileInfo.fileSize) }}</a-descriptions-item>
-            </a-descriptions>
+            <div class="file-list-header">
+              <span>已选择 {{ uploadedFiles.length }} 个文件</span>
+              <a-button type="link" size="small" @click="clearFiles">清空</a-button>
+            </div>
+            <a-list size="small" :data-source="uploadedFiles">
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <template #title>{{ item.name }}</template>
+                    <template #description>{{ formatFileSize(item.size) }}</template>
+                  </a-list-item-meta>
+                  <template #actions>
+                    <a-button type="link" size="small" danger @click="removeFile(item)">删除</a-button>
+                  </template>
+                </a-list-item>
+              </template>
+            </a-list>
           </a-card>
         </div>
       </div>
 
       <div class="step-actions">
-        <a-button type="primary" :disabled="!uploadedFileInfo" :loading="importing" @click="handleStartImport">
-          <CloudUploadOutlined /> 开始导入
+        <a-button type="primary" :disabled="uploadedFiles.length === 0" :loading="importing" @click="handleStartImport">
+          <CloudUploadOutlined /> 开始导入 ({{ uploadedFiles.length }} 个文件)
         </a-button>
       </div>
     </a-card>
@@ -51,7 +65,7 @@
     <!-- 导入确认弹窗 -->
     <ImportConfirmModal
       ref="importConfirmRef"
-      :file-name="uploadedFileInfo?.fileName"
+      :file-name="`${uploadedFiles.length} 个文件`"
       data-type="fba-shipment"
       @confirm="doExecuteImport"
     />
@@ -76,40 +90,57 @@
       </a-result>
 
       <div v-if="importResult" class="import-progress">
-        <a-descriptions :column="3" size="small">
-          <a-descriptions-item label="批次号">
-            <a-typography-text copyable>{{ importResult.batchNo }}</a-typography-text>
+        <a-descriptions :column="3" size="small" bordered>
+          <a-descriptions-item label="总文件数">{{ importResult.totalFiles }}</a-descriptions-item>
+          <a-descriptions-item label="成功文件">
+            <span class="success-text">{{ importResult.successFiles }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="总行数">{{ importResult.totalCount }}</a-descriptions-item>
-          <a-descriptions-item label="成功">
-            <span class="success-text">{{ importResult.successCount }}</span>
+          <a-descriptions-item label="失败文件">
+            <span class="error-text">{{ importResult.failFiles }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="失败">
-            <span class="error-text">{{ importResult.failCount }}</span>
+          <a-descriptions-item label="总SKU数">{{ importResult.totalSkuCount }}</a-descriptions-item>
+          <a-descriptions-item label="成功SKU">
+            <span class="success-text">{{ importResult.successSkuCount }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="重复">
-            <span class="warning-text">{{ importResult.duplicateCount }}</span>
+          <a-descriptions-item label="失败SKU">
+            <span class="error-text">{{ importResult.failSkuCount }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="重复SKU（已跳过）">
+            <span class="warning-text">{{ importResult.duplicateSkuCount || 0 }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="成功货件">
+            <span class="success-text">{{ importResult.totalShipmentCount }}</span>
           </a-descriptions-item>
         </a-descriptions>
 
-        <!-- 错误信息展示 -->
-        <div v-if="importResult.errors && importResult.errors.length > 0" class="error-details">
-          <a-alert
-            type="warning"
-            message="部分数据导入失败或重复"
-            show-icon
+        <!-- 文件详情列表 -->
+        <div v-if="importResult.fileResults && importResult.fileResults.length > 0" class="file-results">
+          <h4 style="margin-top: 16px; margin-bottom: 12px">文件导入详情</h4>
+          <a-table
+            :columns="fileResultColumns"
+            :data-source="importResult.fileResults"
+            :pagination="false"
+            size="small"
+            row-key="fileName"
           >
-            <template #description>
-              <div class="error-list">
-                <div v-for="(error, index) in importResult.errors.slice(0, 10)" :key="index" class="error-item">
-                  {{ error }}
-                </div>
-                <div v-if="importResult.errors.length > 10" class="error-more">
-                  ... 还有 {{ importResult.errors.length - 10 }} 条错误信息
-                </div>
-              </div>
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'status'">
+                <a-tag v-if="record.status === 'success'" color="success">成功</a-tag>
+                <a-tag v-else color="error">失败</a-tag>
+              </template>
+              <template v-else-if="column.key === 'message'">
+                <template v-if="record.result">
+                  导入 {{ record.result.shipmentCount }} 个货件
+                  <span v-if="record.result.duplicateCount > 0" class="warning-text">
+                    (跳过 {{ record.result.duplicateCount }} 个重复SKU)
+                  </span>
+                </template>
+                <template v-else>
+                  {{ record.message || '-' }}
+                </template>
+              </template>
             </template>
-          </a-alert>
+          </a-table>
         </div>
       </div>
     </a-card>
@@ -127,25 +158,46 @@ import {
 } from '@ant-design/icons-vue'
 import { request } from '@/utils/request'
 import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
-import type { FbaShipmentImportResult } from '@/types/fbaShipment'
+import type { FbaShipmentImportResult, FbaShipmentBatchImportResult } from '@/types/fbaShipment'
+import { batchImportFbaShipment } from '@/api/fbaShipment'
 
 const router = useRouter()
 
 // ============= 步骤相关 =============
 const currentStep = ref(0)
 const stepItems = [
-  { title: '上传文件', description: 'CSV/Excel' },
+  { title: '上传文件', description: 'Excel文件' },
   { title: '导入结果', description: '查看状态' }
+]
+
+// 文件结果表格列定义
+const fileResultColumns = [
+  {
+    title: '文件名',
+    dataIndex: 'fileName',
+    key: 'fileName',
+    ellipsis: true
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 80,
+    align: 'center' as const
+  },
+  {
+    title: '结果说明',
+    key: 'message',
+    ellipsis: true
+  }
 ]
 
 // ============= 上传相关 =============
 const fileList = ref<UploadFile[]>([])
-const uploadedFile = ref<File | null>(null)
-const uploadedFileInfo = ref<{ fileName: string; fileSize: number } | null>(null)
+const uploadedFiles = ref<File[]>([])
 
 // ============= 导入相关 =============
 const importing = ref(false)
-const importResult = ref<FbaShipmentImportResult | null>(null)
+const importResult = ref<FbaShipmentBatchImportResult | null>(null)
 const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // ============= 方法 =============
@@ -157,13 +209,12 @@ function formatFileSize(bytes: number): string {
 
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   const isValidType = [
-    'text/csv',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ].includes(file.type) || file.name.endsWith('.csv')
+  ].includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
 
   if (!isValidType) {
-    message.error('只能上传 CSV 或 Excel 文件!')
+    message.error('只能上传 Excel 文件!')
     return false
   }
 
@@ -173,25 +224,35 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
     return false
   }
 
-  // 保存文件用于后续导入
-  uploadedFile.value = file
-  uploadedFileInfo.value = {
-    fileName: file.name,
-    fileSize: file.size
-  }
-  message.success('文件已选择')
+  // 添加到文件列表
+  uploadedFiles.value.push(file as File)
+  message.success(`已添加文件: ${file.name}`)
 
   // 返回 false 阻止自动上传
   return false
 }
 
+function removeFile(file: File) {
+  const index = uploadedFiles.value.findIndex(f => f.name === file.name)
+  if (index > -1) {
+    uploadedFiles.value.splice(index, 1)
+    // 同步更新 fileList
+    fileList.value = fileList.value.filter(f => f.name !== file.name)
+  }
+}
+
+function clearFiles() {
+  uploadedFiles.value = []
+  fileList.value = []
+}
+
 // 点击开始导入 - 弹出确认窗口
 function handleStartImport() {
-  if (!uploadedFile.value) {
+  if (uploadedFiles.value.length === 0) {
     message.warning('请先上传文件')
     return
   }
-  
+
   // 弹出确认窗口
   importConfirmRef.value?.show()
 }
@@ -200,23 +261,13 @@ function handleStartImport() {
 async function doExecuteImport() {
   importing.value = true
   importConfirmRef.value?.setLoading(true)
-  
-  try {
-    // 使用 request.upload 上传文件（自动添加token）
-    const formData = new FormData()
-    formData.append('file', uploadedFile.value!)
 
-    const result = await request.upload<any>('/api/v1/business/fba-shipment/import', formData)
+  try {
+    // 调用批量导入API
+    const result = await batchImportFbaShipment(uploadedFiles.value)
 
     // 保存导入结果
-    importResult.value = {
-      totalCount: result.data.totalCount,
-      successCount: result.data.successCount,
-      failCount: result.data.failCount,
-      duplicateCount: result.data.duplicateCount,
-      errors: result.data.errors || [],
-      batchNo: result.data.batchNo
-    }
+    importResult.value = result.data
 
     importConfirmRef.value?.hide()
     currentStep.value = 1
@@ -232,10 +283,10 @@ async function doExecuteImport() {
 
 function getResultStatus() {
   if (!importResult.value) return 'info'
-  if (importResult.value.failCount === 0 && importResult.value.duplicateCount === 0) {
+  if (importResult.value.failFiles === 0) {
     return 'success'
   }
-  if (importResult.value.successCount > 0) {
+  if (importResult.value.successFiles > 0) {
     return 'warning'
   }
   return 'error'
@@ -243,10 +294,10 @@ function getResultStatus() {
 
 function getResultTitle(): string {
   if (!importResult.value) return '等待处理'
-  if (importResult.value.failCount === 0 && importResult.value.duplicateCount === 0) {
-    return '导入成功'
+  if (importResult.value.failFiles === 0) {
+    return '全部导入成功'
   }
-  if (importResult.value.successCount > 0) {
+  if (importResult.value.successFiles > 0) {
     return '部分导入成功'
   }
   return '导入失败'
@@ -255,14 +306,17 @@ function getResultTitle(): string {
 function getResultSubTitle(): string {
   if (!importResult.value) return ''
   const parts: string[] = []
-  if (importResult.value.successCount > 0) {
-    parts.push(`成功导入 ${importResult.value.successCount} 条`)
+  if (importResult.value.successFiles > 0) {
+    parts.push(`成功 ${importResult.value.successFiles} 个文件`)
   }
-  if (importResult.value.failCount > 0) {
-    parts.push(`失败 ${importResult.value.failCount} 条`)
+  if (importResult.value.failFiles > 0) {
+    parts.push(`失败 ${importResult.value.failFiles} 个文件`)
   }
-  if (importResult.value.duplicateCount > 0) {
-    parts.push(`重复 ${importResult.value.duplicateCount} 条`)
+  if (importResult.value.totalShipmentCount > 0) {
+    parts.push(`共导入 ${importResult.value.totalShipmentCount} 个货件`)
+  }
+  if (importResult.value.duplicateSkuCount && importResult.value.duplicateSkuCount > 0) {
+    parts.push(`跳过 ${importResult.value.duplicateSkuCount} 个重复SKU`)
   }
   return parts.join('，')
 }
@@ -274,8 +328,7 @@ function handleViewList() {
 function handleImportAgain() {
   currentStep.value = 0
   fileList.value = []
-  uploadedFile.value = null
-  uploadedFileInfo.value = null
+  uploadedFiles.value = []
   importResult.value = null
 }
 </script>
@@ -313,6 +366,14 @@ function handleImportAgain() {
 
     .uploaded-file-info {
       margin-top: $spacing-md;
+
+      .file-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: $spacing-sm;
+        font-weight: 600;
+      }
     }
 
     .step-actions {
@@ -327,26 +388,8 @@ function handleImportAgain() {
     background: $background-color-light;
     border-radius: $border-radius-md;
 
-    .error-details {
+    .file-results {
       margin-top: $spacing-md;
-
-      .error-list {
-        max-height: 200px;
-        overflow-y: auto;
-
-        .error-item {
-          padding: 4px 0;
-          font-size: $font-size-sm;
-          color: $text-color-secondary;
-        }
-
-        .error-more {
-          padding: 4px 0;
-          font-size: $font-size-sm;
-          color: $warning-color;
-          font-weight: 600;
-        }
-      }
     }
   }
 

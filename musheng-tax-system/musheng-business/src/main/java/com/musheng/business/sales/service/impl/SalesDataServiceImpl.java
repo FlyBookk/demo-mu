@@ -398,7 +398,6 @@ public class SalesDataServiceImpl implements SalesDataService {
     /**
      * Get field mapping configuration for site and data type
      */
-    @SuppressWarnings("unchecked")
     private Map<String, String> getFieldMapping(String siteCode, String dataType) {
         LambdaQueryWrapper<FieldMappingTemplate> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FieldMappingTemplate::getSiteCode, siteCode)
@@ -514,22 +513,7 @@ public class SalesDataServiceImpl implements SalesDataService {
         if (StringUtils.hasText(transactionCategory)) {
             wrapper.eq(SalesData::getTransactionCategory, transactionCategory);
         }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDateTime start = java.time.LocalDate.parse(startDate).atStartOfDay();
-                wrapper.ge(SalesData::getTransactionDate, start);
-            } catch (Exception e) {
-                log.warn("Invalid start date format: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDateTime end = java.time.LocalDate.parse(endDate).atTime(23, 59, 59);
-                wrapper.le(SalesData::getTransactionDate, end);
-            } catch (Exception e) {
-                log.warn("Invalid end date format: {}", endDate);
-            }
-        }
+        applyDateRangeFilter(wrapper, startDate, endDate);
 
         List<SalesData> dataList = salesDataMapper.selectList(wrapper);
 
@@ -577,6 +561,50 @@ public class SalesDataServiceImpl implements SalesDataService {
             return BigDecimal.ZERO;
         }
         return amount.multiply(exchangeRate);
+    }
+    
+    /**
+     * 安全解析开始日期（解析失败返回null）
+     */
+    private LocalDateTime parseStartDate(String dateStr) {
+        if (!StringUtils.hasText(dateStr)) {
+            return null;
+        }
+        try {
+            return java.time.LocalDate.parse(dateStr).atStartOfDay();
+        } catch (Exception e) {
+            log.warn("Invalid start date format: {}", dateStr);
+            return null;
+        }
+    }
+    
+    /**
+     * 安全解析结束日期（解析失败返回null）
+     */
+    private LocalDateTime parseEndDate(String dateStr) {
+        if (!StringUtils.hasText(dateStr)) {
+            return null;
+        }
+        try {
+            return java.time.LocalDate.parse(dateStr).atTime(23, 59, 59);
+        } catch (Exception e) {
+            log.warn("Invalid end date format: {}", dateStr);
+            return null;
+        }
+    }
+    
+    /**
+     * 添加日期范围过滤条件到查询包装器
+     */
+    private void applyDateRangeFilter(LambdaQueryWrapper<SalesData> wrapper, String startDate, String endDate) {
+        LocalDateTime start = parseStartDate(startDate);
+        if (start != null) {
+            wrapper.ge(SalesData::getTransactionDate, start);
+        }
+        LocalDateTime end = parseEndDate(endDate);
+        if (end != null) {
+            wrapper.le(SalesData::getTransactionDate, end);
+        }
     }
 
     /**
@@ -627,22 +655,7 @@ public class SalesDataServiceImpl implements SalesDataService {
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
         }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDateTime start = java.time.LocalDate.parse(startDate).atStartOfDay();
-                wrapper.ge(SalesData::getTransactionDate, start);
-            } catch (Exception e) {
-                log.warn("Invalid start date format: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDateTime end = java.time.LocalDate.parse(endDate).atTime(23, 59, 59);
-                wrapper.le(SalesData::getTransactionDate, end);
-            } catch (Exception e) {
-                log.warn("Invalid end date format: {}", endDate);
-            }
-        }
+        applyDateRangeFilter(wrapper, startDate, endDate);
 
         List<SalesData> dataList = salesDataMapper.selectList(wrapper);
 
@@ -684,22 +697,7 @@ public class SalesDataServiceImpl implements SalesDataService {
         if (StringUtils.hasText(transactionCategory)) {
             wrapper.eq(SalesData::getTransactionCategory, transactionCategory);
         }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDateTime start = java.time.LocalDate.parse(startDate).atStartOfDay();
-                wrapper.ge(SalesData::getTransactionDate, start);
-            } catch (Exception e) {
-                log.warn("Invalid start date format: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDateTime end = java.time.LocalDate.parse(endDate).atTime(23, 59, 59);
-                wrapper.le(SalesData::getTransactionDate, end);
-            } catch (Exception e) {
-                log.warn("Invalid end date format: {}", endDate);
-            }
-        }
+        applyDateRangeFilter(wrapper, startDate, endDate);
 
         wrapper.orderByDesc(SalesData::getTransactionDate);
         List<SalesData> dataList = salesDataMapper.selectList(wrapper);
@@ -1360,13 +1358,6 @@ public class SalesDataServiceImpl implements SalesDataService {
     }
     
     /**
-     * 获取必填字段列表（默认为原始数据）
-     */
-    private List<String> getRequiredFields() {
-        return getRequiredFields(null);
-    }
-    
-    /**
      * 获取可选字段列表（根据数据源类型区分）
      */
     private List<String> getOptionalFields(SalesSourceType sourceType) {
@@ -1377,13 +1368,6 @@ public class SalesDataServiceImpl implements SalesDataService {
         // 亚马逊原始数据的可选字段
         return Arrays.asList("sku", "quantity", "transactionType", "productSales", "sellingFees", 
                 "fbaFees", "shippingCredits", "promotionalRebates", "other", "total");
-    }
-    
-    /**
-     * 获取可选字段列表（默认为原始数据）
-     */
-    private List<String> getOptionalFields() {
-        return getOptionalFields(null);
     }
     
     /**

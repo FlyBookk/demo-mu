@@ -214,6 +214,16 @@ export const routes: RouteRecordRaw[] = [
               title: '数据列表',
               permission: 'fba-shipment:list'
             }
+          },
+          {
+            path: 'detail',
+            name: 'FbaShipmentDetail',
+            component: () => import('@/views/fba-shipment/detail/index.vue'),
+            meta: {
+              title: 'SKU明细',
+              permission: 'fba-shipment:list',
+              hideInMenu: true
+            }
           }
         ]
       },

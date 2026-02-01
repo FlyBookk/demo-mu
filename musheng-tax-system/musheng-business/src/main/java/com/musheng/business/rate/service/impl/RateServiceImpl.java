@@ -351,7 +351,7 @@ public class RateServiceImpl implements RateService {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
 
-            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            CSVParser parser = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build().parse(reader);
             List<String> headers = parser.getHeaderNames();
 
             // Detect column indices
@@ -420,54 +420,9 @@ public class RateServiceImpl implements RateService {
             throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Failed to parse file: " + e.getMessage());
         }
 
-        // 批量检查已存在的数据（避免N+1查询）
-        if (!ratesToImport.isEmpty()) {
-            // 提取所有日期和货币
-            Set<LocalDate> dates = ratesToImport.stream()
-                    .map(ExchangeRate::getRateDate)
-                    .collect(Collectors.toSet());
-            Set<String> currencies = ratesToImport.stream()
-                    .map(ExchangeRate::getCurrencyCode)
-                    .collect(Collectors.toSet());
-
-            // 一次性查询所有可能存在的记录
-            LambdaQueryWrapper<ExchangeRate> wrapper = new LambdaQueryWrapper<>();
-            wrapper.in(ExchangeRate::getRateDate, dates)
-                    .in(ExchangeRate::getCurrencyCode, currencies);
-            List<ExchangeRate> existingRates = exchangeRateMapper.selectList(wrapper);
-
-            // 构建已存在的key集合
-            Set<String> existingKeys = existingRates.stream()
-                    .map(r -> r.getRateDate() + "_" + r.getCurrencyCode())
-                    .collect(Collectors.toSet());
-
-            // 过滤出不存在的数据
-            List<ExchangeRate> newRates = ratesToImport.stream()
-                    .filter(r -> {
-                        String key = r.getRateDate() + "_" + r.getCurrencyCode();
-                        if (existingKeys.contains(key)) {
-                            existsCount.getAndIncrement();
-                            return false;
-                        }
-                        return true;
-                    })
-                    .collect(Collectors.toList());
-
-            // 批量插入新数据
-            if (!newRates.isEmpty()) {
-                // MyBatis-Plus批量插入，每批1000条
-                int batchSize = 1000;
-                for (int i = 0; i < newRates.size(); i += batchSize) {
-                    int end = Math.min(i + batchSize, newRates.size());
-                    List<ExchangeRate> batch = newRates.subList(i, end);
-                    for (ExchangeRate rate : batch) {
-                        exchangeRateMapper.insert(rate);
-                    }
-                }
-                successCount = newRates.size();
-                log.info("Batch inserted {} exchange rates", successCount);
-            }
-        }
+        // 执行批量去重和插入
+        int[] insertResult = batchCheckAndInsert(ratesToImport, existsCount);
+        successCount = insertResult[0];
 
         result.put("totalCount", totalCount);
         result.put("successCount", successCount);
@@ -481,6 +436,66 @@ public class RateServiceImpl implements RateService {
                 totalCount, successCount, existsCount, failCount, skipCount, skippedCurrencies);
 
         return result;
+    }
+    
+    /**
+     * 批量检查重复并插入新数据（公共方法）
+     * @param ratesToImport 待导入的汇率列表
+     * @param existsCount 已存在计数器
+     * @return [成功插入数量]
+     */
+    private int[] batchCheckAndInsert(List<ExchangeRate> ratesToImport, AtomicInteger existsCount) {
+        if (ratesToImport.isEmpty()) {
+            return new int[]{0};
+        }
+        
+        // 提取所有日期和货币
+        Set<LocalDate> dates = ratesToImport.stream()
+                .map(ExchangeRate::getRateDate)
+                .collect(Collectors.toSet());
+        Set<String> currencies = ratesToImport.stream()
+                .map(ExchangeRate::getCurrencyCode)
+                .collect(Collectors.toSet());
+
+        // 一次性查询所有可能存在的记录
+        LambdaQueryWrapper<ExchangeRate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(ExchangeRate::getRateDate, dates)
+                .in(ExchangeRate::getCurrencyCode, currencies);
+        List<ExchangeRate> existingRates = exchangeRateMapper.selectList(wrapper);
+
+        // 构建已存在的key集合
+        Set<String> existingKeys = existingRates.stream()
+                .map(r -> r.getRateDate() + "_" + r.getCurrencyCode())
+                .collect(Collectors.toSet());
+
+        // 过滤出不存在的数据
+        List<ExchangeRate> newRates = ratesToImport.stream()
+                .filter(r -> {
+                    String key = r.getRateDate() + "_" + r.getCurrencyCode();
+                    if (existingKeys.contains(key)) {
+                        existsCount.getAndIncrement();
+                        return false;
+                    }
+                    return true;
+                })
+                .collect(Collectors.toList());
+
+        // 批量插入新数据
+        int successCount = 0;
+        if (!newRates.isEmpty()) {
+            int batchSize = 1000;
+            for (int i = 0; i < newRates.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, newRates.size());
+                List<ExchangeRate> batch = newRates.subList(i, end);
+                for (ExchangeRate rate : batch) {
+                    exchangeRateMapper.insert(rate);
+                }
+            }
+            successCount = newRates.size();
+            log.info("Batch inserted {} exchange rates", successCount);
+        }
+        
+        return new int[]{successCount};
     }
 
     /**
@@ -635,54 +650,9 @@ public class RateServiceImpl implements RateService {
                     "Failed to parse Excel file: " + e.getMessage());
         }
 
-        // 批量检查已存在的数据（避免N+1查询）
-        if (!ratesToImport.isEmpty()) {
-            // 提取所有日期和货币
-            Set<LocalDate> dates = ratesToImport.stream()
-                    .map(ExchangeRate::getRateDate)
-                    .collect(Collectors.toSet());
-            Set<String> currencies = ratesToImport.stream()
-                    .map(ExchangeRate::getCurrencyCode)
-                    .collect(Collectors.toSet());
-
-            // 一次性查询所有可能存在的记录
-            LambdaQueryWrapper<ExchangeRate> wrapper = new LambdaQueryWrapper<>();
-            wrapper.in(ExchangeRate::getRateDate, dates)
-                    .in(ExchangeRate::getCurrencyCode, currencies);
-            List<ExchangeRate> existingRates = exchangeRateMapper.selectList(wrapper);
-
-            // 构建已存在的key集合
-            Set<String> existingKeys = existingRates.stream()
-                    .map(r -> r.getRateDate() + "_" + r.getCurrencyCode())
-                    .collect(Collectors.toSet());
-
-            // 过滤出不存在的数据
-            List<ExchangeRate> newRates = ratesToImport.stream()
-                    .filter(r -> {
-                        String key = r.getRateDate() + "_" + r.getCurrencyCode();
-                        if (existingKeys.contains(key)) {
-                            existsCount.getAndIncrement();
-                            return false;
-                        }
-                        return true;
-                    })
-                    .collect(Collectors.toList());
-
-            // 批量插入新数据
-            if (!newRates.isEmpty()) {
-                // MyBatis-Plus批量插入，每批1000条
-                int batchSize = 1000;
-                for (int i = 0; i < newRates.size(); i += batchSize) {
-                    int end = Math.min(i + batchSize, newRates.size());
-                    List<ExchangeRate> batch = newRates.subList(i, end);
-                    for (ExchangeRate rate : batch) {
-                        exchangeRateMapper.insert(rate);
-                    }
-                }
-                successCount = newRates.size();
-                log.info("Batch inserted {} exchange rates", successCount);
-            }
-        }
+        // 执行批量去重和插入
+        int[] insertResult = batchCheckAndInsert(ratesToImport, existsCount);
+        successCount = insertResult[0];
 
         result.put("totalCount", totalCount);
         result.put("successCount", successCount);
@@ -814,7 +784,7 @@ public class RateServiceImpl implements RateService {
 
         // Calculate converted amount (to CNY)
         BigDecimal convertedAmount = amount.multiply(rate)
-                .setScale(2, BigDecimal.ROUND_HALF_UP);
+                .setScale(2, java.math.RoundingMode.HALF_UP);
 
         log.info("Currency conversion: {} {} -> {} CNY (rate: {}, date: {})",
                 amount, currencyCode, convertedAmount, rate, actualRateDate);

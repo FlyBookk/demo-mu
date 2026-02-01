@@ -46,6 +46,11 @@ public class ImportRecord extends BaseEntityMinimal {
     private String filePath;
 
     /**
+     * 文件哈希值（用于幂等性检查，防止重复导入）
+     */
+    private String fileHash;
+
+    /**
      * 总记录数
      */
     private Integer totalCount;

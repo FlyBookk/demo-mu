@@ -14,7 +14,7 @@
             <a-form-item>
               <a-input
                 v-model:value="searchForm.shipmentId"
-                placeholder="货件编号"
+                placeholder="货件单号"
                 allow-clear
                 @pressEnter="handleSearch"
               >
@@ -22,17 +22,19 @@
               </a-input>
             </a-form-item>
           </a-col>
-          <a-col :span="3">
+          <a-col :span="4">
             <a-form-item>
               <a-select
-                v-model:value="searchForm.status"
-                placeholder="状态"
+                v-model:value="searchForm.shopName"
+                placeholder="店铺名称"
                 allow-clear
+                show-search
+                :filter-option="filterOption"
                 style="width: 100%"
                 @change="handleSearch"
               >
                 <a-select-option
-                  v-for="option in statusOptions"
+                  v-for="option in shopNameOptions"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -43,12 +45,23 @@
           </a-col>
           <a-col :span="3">
             <a-form-item>
-              <a-input
-                v-model:value="searchForm.receivingAddress"
-                placeholder="收货地址"
+              <a-select
+                v-model:value="searchForm.country"
+                placeholder="国家"
                 allow-clear
-                @pressEnter="handleSearch"
-              />
+                show-search
+                :filter-option="filterOption"
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option
+                  v-for="option in countryOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </a-select-option>
+              </a-select>
             </a-form-item>
           </a-col>
           <a-col :span="5">
@@ -74,6 +87,9 @@
           </a-col>
           <a-col :span="5" style="text-align: right">
             <a-space>
+              <a-button @click="handleGoToDetailView">
+                <UnorderedListOutlined /> SKU明细视图
+              </a-button>
               <a-button type="primary" @click="handleGoImport">
                 <CloudUploadOutlined /> 导入数据
               </a-button>
@@ -95,31 +111,24 @@
 
     <!-- 统计卡片 -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
           <a-statistic title="总货件数" :value="summary.totalShipments" :value-style="{ color: '#1890ff' }">
             <template #prefix><InboxOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
-          <a-statistic title="总SKU数" :value="summary.totalSkuCount" :value-style="{ color: '#52c41a' }">
+          <a-statistic title="总SKU种类数" :value="summary.totalSkuCount" :value-style="{ color: '#52c41a' }">
             <template #prefix><TagsOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :span="8">
         <a-card class="stat-card">
-          <a-statistic title="预计总数量" :value="summary.totalExpectedQuantity" :value-style="{ color: '#faad14' }">
+          <a-statistic title="总发货量" :value="summary.totalQuantity" :value-style="{ color: '#faad14' }">
             <template #prefix><ShoppingOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic title="实际总数量" :value="summary.totalFoundQuantity" :value-style="{ color: '#ff4d4f' }">
-            <template #prefix><CheckCircleOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
@@ -146,22 +155,14 @@
             </a-typography-text>
           </template>
 
-          <!-- 状态 -->
-          <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">{{ record.status }}</a-tag>
-          </template>
-
           <!-- 操作 -->
           <template v-else-if="column.key === 'action'">
             <a-space>
               <a-button type="link" size="small" @click="handleViewDetail(record)">
                 详情
               </a-button>
-              <a-button type="link" size="small" @click="handleEdit(record)">
-                编辑
-              </a-button>
               <a-popconfirm
-                title="确定要删除该记录吗？"
+                title="确定要删除该货件吗？将同时删除所有SKU明细。"
                 ok-text="确定"
                 cancel-text="取消"
                 @confirm="handleDelete(record)"
@@ -177,76 +178,46 @@
     <!-- 详情弹窗 -->
     <a-modal
       v-model:open="detailModalVisible"
-      title="FBA货件明细详情"
-      width="750px"
+      title="FBA货件详情"
+      width="900px"
       :footer="null"
     >
-      <a-descriptions v-if="detailData" :column="2" bordered size="small">
-        <a-descriptions-item label="货件名称" :span="2">{{ detailData.shipmentName }}</a-descriptions-item>
-        <a-descriptions-item label="货件编号" :span="2">
-          <a-typography-text copyable>{{ detailData.shipmentId }}</a-typography-text>
-        </a-descriptions-item>
-        <a-descriptions-item label="创建时间">{{ detailData.createdDate }}</a-descriptions-item>
-        <a-descriptions-item label="最后更新">{{ detailData.lastUpdated }}</a-descriptions-item>
-        <a-descriptions-item label="收货地址">{{ detailData.receivingAddress || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="状态">
-          <a-tag :color="getStatusColor(detailData.status)">{{ detailData.status }}</a-tag>
-        </a-descriptions-item>
-        <a-descriptions-item label="SKU种类数">{{ detailData.skuCount || 0 }}</a-descriptions-item>
-        <a-descriptions-item label="预计商品数量">{{ detailData.expectedQuantity || 0 }}</a-descriptions-item>
-        <a-descriptions-item label="找到的商品数量" :span="2">
-          <span :class="{ 'warning-text': detailData.foundQuantity !== detailData.expectedQuantity }">
-            {{ detailData.foundQuantity || 0 }}
-            <span v-if="detailData.foundQuantity !== detailData.expectedQuantity" class="diff-text">
-              (差异: {{ (detailData.foundQuantity || 0) - (detailData.expectedQuantity || 0) }})
-            </span>
-          </span>
-        </a-descriptions-item>
-        <a-descriptions-item label="导入批次ID">{{ detailData.importBatchId || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="导入时间">{{ detailData.createTime }}</a-descriptions-item>
-      </a-descriptions>
-    </a-modal>
+      <div v-if="detailData">
+        <!-- 货件信息 -->
+        <a-descriptions :column="2" bordered size="small" style="margin-bottom: 16px">
+          <a-descriptions-item label="货件单号" :span="2">
+            <a-typography-text copyable>{{ detailData.shipmentId }}</a-typography-text>
+          </a-descriptions-item>
+          <a-descriptions-item label="物流中心编码" :span="2">
+            {{ detailData.warehouseCode || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="店铺名称">{{ detailData.shopName || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="国家">{{ detailData.country || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="货件创建时间">{{ detailData.createdDate || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="导入时间">{{ detailData.createTime }}</a-descriptions-item>
+          <a-descriptions-item label="SKU种类数">{{ detailData.skuCount || 0 }}</a-descriptions-item>
+          <a-descriptions-item label="总发货量">{{ detailData.totalQuantity || 0 }}</a-descriptions-item>
+        </a-descriptions>
 
-    <!-- 编辑弹窗 -->
-    <a-modal
-      v-model:open="editModalVisible"
-      title="编辑FBA货件明细"
-      width="750px"
-      @ok="handleSaveEdit"
-    >
-      <a-form
-        v-if="editData"
-        ref="editFormRef"
-        :model="editData"
-        :label-col="{ span: 6 }"
-        :wrapper-col="{ span: 16 }"
-      >
-        <a-form-item label="货件名称" name="shipmentName" :rules="[{ required: true, message: '请输入货件名称' }]">
-          <a-input v-model:value="editData.shipmentName" />
-        </a-form-item>
-        <a-form-item label="货件编号" name="shipmentId" :rules="[{ required: true, message: '请输入货件编号' }]">
-          <a-input v-model:value="editData.shipmentId" disabled />
-        </a-form-item>
-        <a-form-item label="收货地址" name="receivingAddress">
-          <a-input v-model:value="editData.receivingAddress" />
-        </a-form-item>
-        <a-form-item label="SKU种类数" name="skuCount">
-          <a-input-number v-model:value="editData.skuCount" :min="0" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="预计商品数量" name="expectedQuantity">
-          <a-input-number v-model:value="editData.expectedQuantity" :min="0" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="找到的商品数量" name="foundQuantity">
-          <a-input-number v-model:value="editData.foundQuantity" :min="0" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="状态" name="status">
-          <a-select v-model:value="editData.status">
-            <a-select-option v-for="option in statusOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
+        <!-- SKU明细表格 -->
+        <div style="margin-top: 16px">
+          <h4 style="margin-bottom: 12px">SKU明细列表</h4>
+          <a-table
+            :columns="itemColumns"
+            :data-source="detailData.items || []"
+            :pagination="false"
+            :scroll="{ y: 300 }"
+            size="small"
+            row-key="id"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'index'">
+                {{ record.index }}
+              </template>
+            </template>
+          </a-table>
+        </div>
+      </div>
     </a-modal>
   </div>
 </template>
@@ -267,59 +238,71 @@ import {
   InboxOutlined,
   TagsOutlined,
   ShoppingOutlined,
-  CheckCircleOutlined
+  UnorderedListOutlined
 } from '@ant-design/icons-vue'
 import {
   getFbaShipmentList,
   getFbaShipmentById,
   getFbaShipmentSummary,
-  updateFbaShipment,
   deleteFbaShipment,
   batchDeleteFbaShipment,
-  exportFbaShipmentData
+  exportFbaShipmentData,
+  getFbaShipmentCountries,
+  getFbaShipmentShopNames
 } from '@/api/fbaShipment'
-import type { FbaShipmentDetail, FbaShipmentSummary } from '@/types/fbaShipment'
-import { FbaShipmentStatusOptions } from '@/types/fbaShipment'
+import type { FbaShipment, FbaShipmentSummary } from '@/types/fbaShipment'
 
 const router = useRouter()
 
 // ============= 搜索相关 =============
 const searchForm = reactive({
   shipmentId: '',
-  status: undefined as string | undefined,
-  receivingAddress: ''
+  shopName: '',
+  country: undefined as string | undefined
 })
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
-const statusOptions = FbaShipmentStatusOptions
+const countryOptions = ref<Array<{ label: string; value: string }>>([])
+const shopNameOptions = ref<Array<{ label: string; value: string }>>([])
 
 // ============= 表格相关 =============
 const loading = ref(false)
-const tableData = ref<FbaShipmentDetail[]>([])
+const tableData = ref<FbaShipment[]>([])
 const selectedRowKeys = ref<number[]>([])
 
 // ============= 统计数据 =============
 const summary = reactive<FbaShipmentSummary>({
   totalShipments: 0,
   totalSkuCount: 0,
-  totalExpectedQuantity: 0,
-  totalFoundQuantity: 0
+  totalQuantity: 0
 })
 
 const columns = [
   {
-    title: '货件名称',
-    dataIndex: 'shipmentName',
-    key: 'shipmentName',
+    title: '货件单号',
+    dataIndex: 'shipmentId',
+    key: 'shipmentId',
     width: 150,
     fixed: 'left' as const,
     ellipsis: true
   },
   {
-    title: '货件编号',
-    dataIndex: 'shipmentId',
-    key: 'shipmentId',
-    width: 180,
+    title: '物流中心编码',
+    dataIndex: 'warehouseCode',
+    key: 'warehouseCode',
+    width: 200,
     ellipsis: true
+  },
+  {
+    title: '店铺名称',
+    dataIndex: 'shopName',
+    key: 'shopName',
+    width: 120
+  },
+  {
+    title: '国家',
+    dataIndex: 'country',
+    key: 'country',
+    width: 80
   },
   {
     title: '创建时间',
@@ -328,49 +311,53 @@ const columns = [
     width: 160
   },
   {
-    title: '最后更新',
-    dataIndex: 'lastUpdated',
-    key: 'lastUpdated',
-    width: 160
-  },
-  {
-    title: '收货地址',
-    dataIndex: 'receivingAddress',
-    key: 'receivingAddress',
-    width: 100
-  },
-  {
-    title: 'SKU数',
+    title: 'SKU种类数',
     dataIndex: 'skuCount',
     key: 'skuCount',
-    width: 80,
-    align: 'right' as const
-  },
-  {
-    title: '预计数量',
-    dataIndex: 'expectedQuantity',
-    key: 'expectedQuantity',
     width: 100,
     align: 'right' as const
   },
   {
-    title: '实际数量',
-    dataIndex: 'foundQuantity',
-    key: 'foundQuantity',
+    title: '总发货量',
+    dataIndex: 'totalQuantity',
+    key: 'totalQuantity',
     width: 100,
     align: 'right' as const
-  },
-  {
-    title: '状态',
-    dataIndex: 'status',
-    key: 'status',
-    width: 100
   },
   {
     title: '操作',
     key: 'action',
-    width: 180,
+    width: 120,
     fixed: 'right' as const
+  }
+]
+
+// SKU明细表格列定义
+const itemColumns = [
+  {
+    title: '序号',
+    key: 'index',
+    width: 60,
+    customRender: ({ index }: { index: number }) => index + 1
+  },
+  {
+    title: 'SKU',
+    dataIndex: 'sku',
+    key: 'sku',
+    width: 150
+  },
+  {
+    title: 'MSKU',
+    dataIndex: 'msku',
+    key: 'msku',
+    width: 150
+  },
+  {
+    title: '发货量',
+    dataIndex: 'quantity',
+    key: 'quantity',
+    width: 100,
+    align: 'right' as const
   }
 ]
 
@@ -394,32 +381,16 @@ const rowSelection = computed<TableRowSelection>(() => ({
 
 // ============= 详情弹窗 =============
 const detailModalVisible = ref(false)
-const detailData = ref<FbaShipmentDetail | null>(null)
-
-// ============= 编辑弹窗 =============
-const editModalVisible = ref(false)
-const editData = ref<Partial<FbaShipmentDetail> | null>(null)
-const editFormRef = ref<FormInstance>()
+const detailData = ref<FbaShipment | null>(null)
 
 // ============= 方法 =============
-function getStatusColor(status: string | undefined): string {
-  if (!status) return 'default'
-  switch (status) {
-    case '已完成': return 'success'
-    case '接受中': return 'processing'
-    case '已结账': return 'default'
-    case '配送中': return 'warning'
-    default: return 'default'
-  }
-}
-
 async function fetchData() {
   loading.value = true
   try {
     const params = {
       shipmentId: searchForm.shipmentId || undefined,
-      status: searchForm.status,
-      receivingAddress: searchForm.receivingAddress || undefined,
+      shopName: searchForm.shopName || undefined,
+      country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
@@ -439,8 +410,8 @@ async function fetchData() {
 async function fetchSummary() {
   try {
     const params = {
-      status: searchForm.status,
-      receivingAddress: searchForm.receivingAddress || undefined,
+      shopName: searchForm.shopName || undefined,
+      country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
@@ -459,8 +430,8 @@ function handleSearch() {
 
 function handleReset() {
   searchForm.shipmentId = ''
-  searchForm.status = undefined
-  searchForm.receivingAddress = ''
+  searchForm.shopName = ''
+  searchForm.country = undefined
   searchDateRange.value = null
   pagination.current = 1
   fetchData()
@@ -477,11 +448,20 @@ function handleGoImport() {
   router.push('/fba-shipment/import')
 }
 
+function handleGoToDetailView() {
+  router.push('/fba-shipment/detail')
+}
+
+// 下拉框搜索过滤
+function filterOption(input: string, option: any) {
+  return option.value.toLowerCase().includes(input.toLowerCase())
+}
+
 async function handleExport() {
   try {
     const params = {
-      status: searchForm.status,
-      receivingAddress: searchForm.receivingAddress || undefined,
+      shopName: searchForm.shopName || undefined,
+      country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
@@ -492,7 +472,7 @@ async function handleExport() {
   }
 }
 
-async function handleViewDetail(record: FbaShipmentDetail) {
+async function handleViewDetail(record: FbaShipment) {
   try {
     const res = await getFbaShipmentById(record.id)
     detailData.value = res.data
@@ -502,29 +482,7 @@ async function handleViewDetail(record: FbaShipmentDetail) {
   }
 }
 
-function handleEdit(record: FbaShipmentDetail) {
-  editData.value = { ...record }
-  editModalVisible.value = true
-}
-
-async function handleSaveEdit() {
-  try {
-    await editFormRef.value?.validate()
-    if (!editData.value || !editData.value.id) {
-      message.error('数据异常')
-      return
-    }
-    await updateFbaShipment(editData.value.id, editData.value)
-    message.success('更新成功')
-    editModalVisible.value = false
-    fetchData()
-    fetchSummary()
-  } catch (error) {
-    console.error('更新失败:', error)
-  }
-}
-
-async function handleDelete(record: FbaShipmentDetail) {
+async function handleDelete(record: FbaShipment) {
   try {
     await deleteFbaShipment(record.id)
     message.success('删除成功')
@@ -560,7 +518,35 @@ function handleBatchDelete() {
 onMounted(() => {
   fetchData()
   fetchSummary()
+  fetchCountries()
+  fetchShopNames()
 })
+
+// 获取国家列表
+async function fetchCountries() {
+  try {
+    const res = await getFbaShipmentCountries()
+    countryOptions.value = (res.data || []).map(country => ({
+      label: country,
+      value: country
+    }))
+  } catch (error) {
+    console.error('获取国家列表失败:', error)
+  }
+}
+
+// 获取店铺名称列表
+async function fetchShopNames() {
+  try {
+    const res = await getFbaShipmentShopNames()
+    shopNameOptions.value = (res.data || []).map(shopName => ({
+      label: shopName,
+      value: shopName
+    }))
+  } catch (error) {
+    console.error('获取店铺列表失败:', error)
+  }
+}
 </script>
 
 <style lang="scss" scoped>

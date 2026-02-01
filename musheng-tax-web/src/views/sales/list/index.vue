@@ -161,7 +161,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 2000 }"
+        :scroll="{ x: TABLE_SCROLL_WIDTH }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -199,7 +199,7 @@
           <!-- 合计金额 -->
           <template v-else-if="column.key === 'total'">
             <span :class="record.total >= 0 ? 'amount-positive' : 'amount-negative'">
-              {{ formatAmount(record.total, record.currencyCode) }}
+              {{ formatAmount(record.total) }}
             </span>
           </template>
 
@@ -293,11 +293,12 @@ import {
   CloudUploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  ShoppingOutlined,
-  DollarOutlined,
-  PercentageOutlined,
-  ContainerOutlined
+  ShoppingOutlined
 } from '@ant-design/icons-vue'
+
+// ============= 常量配置 =============
+const DEFAULT_PAGE_SIZE = 20
+const TABLE_SCROLL_WIDTH = 2000
 import {
   getSalesList,
   getSalesById,
@@ -492,7 +493,7 @@ const columns = [
 // 分页配置
 const pagination = reactive({
   current: 1,
-  pageSize: 20,
+  pageSize: DEFAULT_PAGE_SIZE,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
@@ -598,7 +599,7 @@ function handleReset() {
 
 function handleTableChange(pag: TablePaginationConfig) {
   pagination.current = pag.current || 1
-  pagination.pageSize = pag.pageSize || 20
+  pagination.pageSize = pag.pageSize || DEFAULT_PAGE_SIZE
   fetchData()
 }
 
