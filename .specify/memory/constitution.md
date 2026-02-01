@@ -1,50 +1,149 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# 慕声报税管理系统 Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. 数据准确性优先 (Data Accuracy First)
+**税务数据的准确性是系统的生命线。**
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+- 所有涉及金额、税率、数量的计算必须有单元测试覆盖
+- 财务相关功能必须有集成测试验证端到端流程
+- 数据导入/导出必须有数据一致性校验
+- 所有计算逻辑必须有明确的业务规则文档
+- 边界条件（零值、负值、极大值）必须有测试用例
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. 测试驱动开发 (Test-First - NON-NEGOTIABLE)
+**没有失败的测试，就不能写生产代码。**
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+- 遵循 RED-GREEN-REFACTOR 循环
+- 测试必须在实现前编写并确认失败
+- 每个新功能、Bug 修复都必须有对应测试
+- 测试失败原因必须是功能缺失，而非代码错误
+- 禁止先写代码再补测试
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. 前后端分离与契约 (Frontend-Backend Contracts)
+**前后端通过明确的 API 契约协作。**
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+- 所有 API 必须有 Knife4j/Swagger 文档
+- API 变更必须先更新契约文档，经审查后实施
+- 前端不得直接访问数据库
+- 后端 API 必须返回统一的响应格式（成功/失败/错误码）
+- 契约变更必须向后兼容，或提供迁移方案
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. 审计与可追溯性 (Auditability)
+**税务系统必须能够追溯每一笔数据的来源和变更历史。**
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+- 关键业务操作必须记录操作日志（谁、何时、做了什么）
+- 数据修改必须保留变更历史或使用软删除
+- 导入的原始文件必须保留备份
+- 系统错误必须有详细的错误日志和堆栈信息
+- 日志必须包含请求 ID 以便追踪完整调用链
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. 简洁性与 YAGNI (Simplicity)
+**只构建当前需要的功能，避免过度设计。**
+
+- 不添加"可能将来需要"的功能
+- 优先使用框架提供的功能，而非自己实现
+- 三次重复才考虑抽象，避免过早优化
+- 代码应该自解释，复杂逻辑才需要注释
+- 拒绝不必要的设计模式和抽象层
+
+## 技术约束
+
+### 技术栈标准
+- **前端**: Vue 3 + TypeScript + Ant Design Vue + Vite
+- **后端**: Spring Boot 3 + Java 17 + MyBatis-Plus
+- **数据库**: MySQL 8.0
+- **认证**: Sa-Token
+- **文档**: Knife4j (Swagger)
+- **Excel**: EasyExcel
+
+### 代码规范
+- 前端遵循 Vue 3 Composition API 风格
+- 后端遵循 RESTful API 设计原则
+- 使用 Conventional Commits 提交规范
+- 变量命名：前端 camelCase，后端 camelCase（Java）
+- 数据库字段：snake_case
+
+### 性能要求
+- 列表查询响应时间 < 2 秒
+- Excel 导出 1000 条数据 < 5 秒
+- 单次导入支持 10000 条数据
+- 前端首屏加载时间 < 3 秒
+
+### 安全要求
+- 所有 API 必须经过 Sa-Token 认证
+- 敏感操作（删除、导出）需要二次确认
+- SQL 查询必须使用参数化，禁止字符串拼接
+- 文件上传必须校验文件类型和大小
+- 密码等敏感信息必须加密存储
+
+## 开发工作流程
+
+### 规格驱动开发流程
+1. **Specify** - 在 `.specify/specs/` 创建功能规格文档
+2. **Plan** - 编写技术实施计划，定义 API 契约
+3. **Tasks** - 拆解为可并行的任务清单
+4. **Implement** - 遵循 TDD 执行实施
+
+### 代码审查要求
+- 所有代码必须经过 Pull Request 审查
+- 审查清单：
+  - [ ] 测试覆盖（单元测试 + 集成测试）
+  - [ ] API 文档更新
+  - [ ] 数据库迁移脚本（如有）
+  - [ ] 错误处理和日志记录
+  - [ ] 性能影响评估
+  - [ ] 安全风险检查
+
+### 质量门禁
+- 单元测试必须通过
+- 代码覆盖率 ≥ 70%（核心业务逻辑 ≥ 90%）
+- 无 SonarQube 阻断性问题
+- API 文档与代码一致
+- 前端 ESLint 无错误
+
+## 特殊场景处理
+
+### 税务计算变更
+税率、计算公式等变更属于高风险操作：
+1. 必须创建独立的规格文档
+2. 必须有完整的测试用例（包括历史数据回归测试）
+3. 必须经过业务人员审查确认
+4. 必须提供新旧算法对比报告
+5. 上线后必须进行数据校验
+
+### 数据迁移
+涉及数据库结构变更或数据迁移：
+1. 必须编写可回滚的迁移脚本
+2. 必须在测试环境验证
+3. 必须备份生产数据
+4. 必须有迁移验证 SQL
+5. 必须记录迁移日志
+
+### 紧急 Bug 修复
+生产环境紧急 Bug：
+1. 仍需遵循 TDD（先写失败测试）
+2. 可以跳过完整规格文档，但需事后补充
+3. 必须记录根本原因分析
+4. 修复后必须添加回归测试
+5. 必须评估是否需要数据修复
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+### 宪章权威性
+- 本宪章优先级高于所有其他开发规范
+- 违反宪章的代码不得合并
+- 宪章修订需要团队讨论并记录原因
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+### 复杂性审批
+如果需要违反简洁性原则（如引入新的抽象层、设计模式），必须：
+1. 在规格文档中说明原因
+2. 提供更简单方案被拒绝的理由
+3. 经过技术负责人审批
+
+### 运行时指导
+- 开发过程中参考 `.cursorrules`（Superpowers 工作流程）
+- AI 助手参考 `AGENTS.md`（如存在）
+- 规格模板参考 `.specify/templates/`
+
+**Version**: 1.0.0 | **Ratified**: 2026-02-01 | **Last Amended**: 2026-02-01

@@ -1,0 +1,13 @@
+{
+  "name": "Lint on Save",
+  "version": "1.0.0",
+  "description": "当 Java 文件保存时，检查代码诊断问题",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*.java"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "请使用 getDiagnostics 工具检查刚才编辑的文件是否有编译错误或警告，如果有问题请帮助修复。"
+  }
+}

@@ -1,0 +1,11 @@
+# 导入测试文件目录
+# 请将测试用的 CSV 文件放在此目录下
+# 
+# 建议的测试文件：
+# - sales_us_test.csv    US站点销售数据测试文件
+# - sales_uk_test.csv    UK站点销售数据测试文件
+# - sales_de_test.csv    DE站点销售数据测试文件
+# - sales_ca_test.csv    CA站点销售数据测试文件
+# - sales_duplicate_test.csv  重复数据测试文件
+# - sales_empty_test.csv      空文件测试
+# - sales_invalid_test.csv    格式错误测试文件

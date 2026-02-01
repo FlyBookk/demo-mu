@@ -1,0 +1,12 @@
+{
+  "name": "提交前运行测试",
+  "version": "1.0.0",
+  "description": "在 Agent 停止时提醒运行测试并提交代码",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Agent 任务完成，请执行以下步骤：\n\n1. 运行测试：mvn test\n2. 检查测试结果\n3. 如果测试通过，提交代码：git add . && git commit -m \"feat: [任务描述]\"\n4. 如果测试失败，修复问题后重新测试\n\n是否需要我帮你执行这些步骤？"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Java Code Review",
+  "version": "1.0.0",
+  "description": "当 Java 文件被编辑时，自动检查代码是否符合 QuickCEP 研发规范",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*.java"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "请检查刚才编辑的 Java 文件是否符合 QuickCEP 研发规范，重点检查：\n1. 类注解是否完整（@Slf4j, @Service/@RestController 等）\n2. 依赖注入是否使用 @Resource\n3. 字符串/集合判断是否使用 StringUtils/CollectionUtils\n4. 响应是否使用 ResponseResult 封装\n如有不符合规范的地方，请指出并给出修改建议。"
+  }
+}

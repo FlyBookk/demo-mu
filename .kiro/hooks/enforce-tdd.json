@@ -1,0 +1,13 @@
+{
+  "name": "强制 TDD 工作流",
+  "version": "1.0.0",
+  "description": "在保存 Java 文件时提醒遵循 TDD 流程（先写测试）",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/src/main/**/*.java"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚才修改的代码是否遵循 TDD 流程：\n1. 是否先写了测试？\n2. 测试是否失败（RED）？\n3. 实现是否让测试通过（GREEN）？\n4. 是否进行了重构（REFACTOR）？\n\n如果发现违反 TDD 流程，提醒用户并建议正确的做法。"
+  }
+}

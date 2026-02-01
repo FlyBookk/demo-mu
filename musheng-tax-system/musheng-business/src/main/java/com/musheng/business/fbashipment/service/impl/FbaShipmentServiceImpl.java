@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.fbashipment.entity.FbaShipment;
 import com.musheng.business.fbashipment.entity.FbaShipmentItem;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
-import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
+import com.musheng.business.fbashipment.repository.FbaShipmentRepository;
 import com.musheng.business.fbashipment.service.FbaShipmentExcelParser;
 import com.musheng.business.fbashipment.service.FbaShipmentService;
 import com.musheng.common.context.ShopContext;
@@ -22,21 +22,28 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * FBA货件服务实现
- * 实现货件的导入、查询、删除等业务功能
+ * 
+ * 实现货件的导入、查询、删除等业务功能。
+ * 
+ * ⚠️ 核心原则：
+ * 1. 禁止修改业务流程
+ * 2. 禁止改变输出结果
+ * 3. 只是将 Mapper 调用替换为 Repository 调用
+ *
+ * @author wanhua
+ * 10:30 2026年02月02日
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FbaShipmentServiceImpl implements FbaShipmentService {
 
-    private final FbaShipmentMapper fbaShipmentMapper;
+    private final FbaShipmentRepository fbaShipmentRepository;
     private final FbaShipmentItemMapper fbaShipmentItemMapper;
     private final ImportRecordMapper importRecordMapper;
     private final FbaShipmentExcelParser excelParser;
@@ -79,8 +86,14 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
             List<FbaShipment> shipments = excelParser.parseExcel(file, shopId, importRecord.getId());
             log.info("Excel解析完成: 共{}个货件", shipments.size());
 
-            // Step 2: 批量检测重复货件
-            Set<String> existingShipmentIds = batchCheckDuplicates(shipments, shopId);
+            // Step 2: 批量检测重复货件 - 使用 Repository
+            Set<String> shipmentIds = new HashSet<>();
+            for (FbaShipment shipment : shipments) {
+                if (StringUtils.hasText(shipment.getShipmentId())) {
+                    shipmentIds.add(shipment.getShipmentId());
+                }
+            }
+            Set<String> existingShipmentIds = fbaShipmentRepository.findExistingShipmentIds(shipmentIds);
             log.info("重复检测完成: 找到{}个已存在的货件", existingShipmentIds.size());
 
             // Step 3: 保存数据
@@ -97,8 +110,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
                 }
 
                 try {
-                    // 保存货件主表
-                    fbaShipmentMapper.insert(shipment);
+                    // 保存货件主表 - 使用 Repository
+                    fbaShipmentRepository.save(shipment);
 
                     // 批量保存明细
                     for (FbaShipmentItem item : shipment.getItems()) {
@@ -168,50 +181,15 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Override
     public Page<FbaShipment> list(String shipmentId, String shopName, String country,
                                   String startDate, String endDate, int page, int size) {
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-
-        // 店铺数据隔离
-        Long shopId = ShopContext.requireShopId();
-        wrapper.eq(FbaShipment::getShopId, shopId);
-
-        // 条件筛选
-        if (StringUtils.hasText(shipmentId)) {
-            wrapper.like(FbaShipment::getShipmentId, shipmentId);
-        }
-        if (StringUtils.hasText(shopName)) {
-            wrapper.like(FbaShipment::getShopName, shopName);
-        }
-        if (StringUtils.hasText(country)) {
-            wrapper.eq(FbaShipment::getCountry, country);
-        }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDate start = LocalDate.parse(startDate);
-                wrapper.ge(FbaShipment::getCreatedDate, start.atStartOfDay());
-            } catch (Exception e) {
-                log.warn("开始日期格式错误: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDate end = LocalDate.parse(endDate);
-                wrapper.le(FbaShipment::getCreatedDate, end.atTime(23, 59, 59));
-            } catch (Exception e) {
-                log.warn("结束日期格式错误: {}", endDate);
-            }
-        }
-
-        wrapper.orderByDesc(FbaShipment::getCreatedDate);
-
-        return fbaShipmentMapper.selectPage(new Page<>(page, size), wrapper);
+        // 使用 Repository 进行查询
+        return fbaShipmentRepository.findByQuery(shipmentId, shopName, country, startDate, endDate, page, size);
     }
 
     @Override
     public FbaShipment getById(Long id) {
-        FbaShipment shipment = fbaShipmentMapper.selectById(id);
-        if (shipment == null) {
-            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在");
-        }
+        // 使用 Repository 查询
+        FbaShipment shipment = fbaShipmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
 
         // 查询关联的SKU明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
@@ -226,18 +204,17 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        FbaShipment shipment = fbaShipmentMapper.selectById(id);
-        if (shipment == null) {
-            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在");
-        }
+        // 使用 Repository 查询
+        FbaShipment shipment = fbaShipmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
 
         // 删除明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
         itemWrapper.eq(FbaShipmentItem::getShipmentId, id);
         fbaShipmentItemMapper.delete(itemWrapper);
 
-        // 删除主表
-        fbaShipmentMapper.deleteById(id);
+        // 删除主表 - 使用 Repository
+        fbaShipmentRepository.deleteById(id);
 
         log.info("删除FBA货件: id={}, shipmentId={}", id, shipment.getShipmentId());
     }
@@ -259,37 +236,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Override
     public Map<String, Object> getSummary(String shopName, String country,
                                          String startDate, String endDate) {
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-
-        // 店铺数据隔离
-        Long shopId = ShopContext.requireShopId();
-        wrapper.eq(FbaShipment::getShopId, shopId);
-
-        // 条件筛选
-        if (StringUtils.hasText(shopName)) {
-            wrapper.like(FbaShipment::getShopName, shopName);
-        }
-        if (StringUtils.hasText(country)) {
-            wrapper.eq(FbaShipment::getCountry, country);
-        }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDate start = LocalDate.parse(startDate);
-                wrapper.ge(FbaShipment::getCreatedDate, start.atStartOfDay());
-            } catch (Exception e) {
-                log.warn("开始日期格式错误: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDate end = LocalDate.parse(endDate);
-                wrapper.le(FbaShipment::getCreatedDate, end.atTime(23, 59, 59));
-            } catch (Exception e) {
-                log.warn("结束日期格式错误: {}", endDate);
-            }
-        }
-
-        List<FbaShipment> shipments = fbaShipmentMapper.selectList(wrapper);
+        // 使用 Repository 查询列表
+        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(shopName, country, startDate, endDate);
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalShipments", shipments.size());
@@ -304,38 +252,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Override
     public void exportData(String shopName, String country, String startDate, String endDate,
                           jakarta.servlet.http.HttpServletResponse response) {
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-
-        // 店铺数据隔离
-        Long shopId = ShopContext.requireShopId();
-        wrapper.eq(FbaShipment::getShopId, shopId);
-
-        // 条件筛选
-        if (StringUtils.hasText(shopName)) {
-            wrapper.like(FbaShipment::getShopName, shopName);
-        }
-        if (StringUtils.hasText(country)) {
-            wrapper.eq(FbaShipment::getCountry, country);
-        }
-        if (StringUtils.hasText(startDate)) {
-            try {
-                LocalDate start = LocalDate.parse(startDate);
-                wrapper.ge(FbaShipment::getCreatedDate, start.atStartOfDay());
-            } catch (Exception e) {
-                log.warn("开始日期格式错误: {}", startDate);
-            }
-        }
-        if (StringUtils.hasText(endDate)) {
-            try {
-                LocalDate end = LocalDate.parse(endDate);
-                wrapper.le(FbaShipment::getCreatedDate, end.atTime(23, 59, 59));
-            } catch (Exception e) {
-                log.warn("结束日期格式错误: {}", endDate);
-            }
-        }
-
-        wrapper.orderByDesc(FbaShipment::getCreatedDate);
-        List<FbaShipment> shipments = fbaShipmentMapper.selectList(wrapper);
+        // 使用 Repository 查询列表
+        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(shopName, country, startDate, endDate);
 
         try {
             String fileName = "fba_shipment_" + System.currentTimeMillis() + ".xlsx";
@@ -381,44 +299,11 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     }
 
     /**
-     * 批量检测重复货件
-     */
-    private Set<String> batchCheckDuplicates(List<FbaShipment> shipments, Long shopId) {
-        if (shipments.isEmpty()) {
-            return Collections.emptySet();
-        }
-
-        Set<String> existingIds = new HashSet<>();
-
-        // 收集所有货件单号
-        Set<String> shipmentIds = new HashSet<>();
-        for (FbaShipment shipment : shipments) {
-            if (StringUtils.hasText(shipment.getShipmentId())) {
-                shipmentIds.add(shipment.getShipmentId());
-            }
-        }
-
-        if (shipmentIds.isEmpty()) {
-            return existingIds;
-        }
-
-        // 批量查询已存在的货件
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FbaShipment::getShopId, shopId)
-                .in(FbaShipment::getShipmentId, shipmentIds)
-                .select(FbaShipment::getShipmentId);
-
-        List<FbaShipment> existing = fbaShipmentMapper.selectList(wrapper);
-
-        for (FbaShipment shipment : existing) {
-            existingIds.add(shipment.getShipmentId());
-        }
-
-        return existingIds;
-    }
-
-    /**
      * 生成唯一批次号
+     *
+     * @return 批次号
+     * @author wanhua
+     * 10:30 2026年02月02日
      */
     private String generateBatchNo() {
         return "FBA-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8);
@@ -426,43 +311,24 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
 
     @Override
     public List<String> getCountryList() {
-        Long shopId = ShopContext.requireShopId();
-
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FbaShipment::getShopId, shopId)
-                .select(FbaShipment::getCountry)
-                .groupBy(FbaShipment::getCountry)
-                .orderByAsc(FbaShipment::getCountry);
-
-        List<FbaShipment> list = fbaShipmentMapper.selectList(wrapper);
-        return list.stream()
-                .map(FbaShipment::getCountry)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
+        // 使用 Repository 查询
+        return fbaShipmentRepository.findDistinctCountries();
     }
 
     @Override
     public List<String> getShopNameList() {
-        Long shopId = ShopContext.requireShopId();
-
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FbaShipment::getShopId, shopId)
-                .select(FbaShipment::getShopName)
-                .groupBy(FbaShipment::getShopName)
-                .orderByAsc(FbaShipment::getShopName);
-
-        List<FbaShipment> list = fbaShipmentMapper.selectList(wrapper);
-        return list.stream()
-                .map(FbaShipment::getShopName)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
+        // 使用 Repository 查询
+        return fbaShipmentRepository.findDistinctShopNames();
     }
 
     /**
      * 计算文件哈希值（MD5）
      * 用于记录文件标识，不用于阻止导入
+     *
+     * @param file 上传的文件
+     * @return MD5哈希值
+     * @author wanhua
+     * 10:30 2026年02月02日
      */
     private String calculateFileHash(MultipartFile file) {
         try {
@@ -478,8 +344,6 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> batchImportData(List<MultipartFile> files) {
         log.info("批量导入FBA货件明细: 文件数={}", files.size());
-
-        Long shopId = ShopContext.requireShopId();
 
         Map<String, Object> batchResult = new HashMap<>();
         List<Map<String, Object>> fileResults = new ArrayList<>();

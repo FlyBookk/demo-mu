@@ -1,0 +1,12 @@
+{
+  "name": "New Service Scaffold",
+  "version": "1.0.0",
+  "description": "手动触发：根据 QuickCEP 规范创建新的 Service 类脚手架",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "请根据 QuickCEP 研发规范创建一个新的 Service 类。需要包含：\n1. @Service 和 @Slf4j 注解\n2. 使用 @Resource 注入依赖\n3. 实现对应的接口\n4. 添加标准的方法注释\n请询问用户需要创建的 Service 名称和所在模块。"
+  }
+}
