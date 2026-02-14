@@ -355,4 +355,15 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
 
         return entity;
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchDelete(java.util.List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "ID列表不能为空");
+        }
+
+        log.info("批量删除广告数据: count={}", ids.size());
+        advertisingDataMapper.deleteBatchIds(ids);
+    }
 }

@@ -113,4 +113,12 @@ public class AdvertisingDataController {
         );
         return Result.success(result);
     }
+
+    @OperationLog(module = "广告数据", operation = "批量删除广告数据")
+    @Operation(summary = "批量删除广告数据", description = "根据ID列表批量删除广告数据（逻辑删除）")
+    @PostMapping("/batch-delete")
+    public Result<Void> batchDelete(@RequestBody java.util.List<Long> ids) {
+        advertisingDataService.batchDelete(ids);
+        return Result.success();
+    }
 }

@@ -45,6 +45,10 @@ public class SaTokenConfig {
                     // 管理员路由权限校验
                     SaRouter.match("/v1/system/**")
                             .check(r -> StpUtil.checkRole("admin"));
+
+                    // admin 数据删除功能权限校验
+                    SaRouter.match("/v1/admin/data-deletion/**")
+                            .check(r -> StpUtil.checkRole("admin"));
                 })
                 // 异常处理函数
                 .setError(e -> {

@@ -80,4 +80,11 @@ public interface AdvertisingDataService {
     Page<AdvertisingData> listByConditions(String siteCode, LocalDate billingStartDate,
                                             LocalDate billingEndDate, String invoiceNumber,
                                             int page, int size);
+
+    /**
+     * 批量删除广告数据（逻辑删除）
+     *
+     * @param ids 实体ID列表
+     */
+    void batchDelete(java.util.List<Long> ids);
 }

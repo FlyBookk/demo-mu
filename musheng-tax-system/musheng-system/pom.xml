@@ -23,6 +23,12 @@
             <artifactId>musheng-common</artifactId>
         </dependency>
 
+        <!-- Business Module (for Admin Data Deletion) -->
+        <dependency>
+            <groupId>com.musheng</groupId>
+            <artifactId>musheng-business</artifactId>
+        </dependency>
+
         <!-- Sa-Token -->
         <dependency>
             <groupId>cn.dev33</groupId>
