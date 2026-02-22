@@ -13,26 +13,28 @@ fileMatchPattern: "**/pom.xml"
 
 ```xml
 <properties>
-    <maven.compiler.source>8</maven.compiler.source>
-    <maven.compiler.target>8</maven.compiler.target>
-    <java.version>1.8</java.version>
-    <project.encoding>UTF-8</project.encoding>
+    <java.version>17</java.version>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     
-    <!-- Spring 版本 -->
-    <spring-boot.version>2.3.2.RELEASE</spring-boot.version>
-    <spring-cloud.version>Hoxton.SR9</spring-cloud.version>
-    <spring-cloud-alibaba.version>2.2.6.RELEASE</spring-cloud-alibaba.version>
+    <!-- Spring Boot -->
+    <spring-boot.version>3.2.2</spring-boot.version>
     
-    <!-- 框架版本 -->
-    <quickshop-framework.version>1.0.0</quickshop-framework.version>
-    <quickcem-feign.version>1.2.146.3</quickcem-feign.version>
+    <!-- MyBatis-Plus -->
+    <mybatis-plus.version>3.5.5</mybatis-plus.version>
     
-    <!-- 常用依赖版本 -->
-    <lombok.version>1.18.24</lombok.version>
-    <fastjson.version>1.2.75</fastjson.version>
-    <hutool.version>5.7.15</hutool.version>
-    <mybatis-plus.version>3.5.2</mybatis-plus.version>
-    <redisson.version>3.17.6</redisson.version>
+    <!-- Sa-Token -->
+    <sa-token.version>1.37.0</sa-token.version>
+    
+    <!-- Database -->
+    <mysql.version>8.0.33</mysql.version>
+    
+    <!-- Tools -->
+    <hutool.version>5.8.25</hutool.version>
+    <easyexcel.version>3.3.3</easyexcel.version>
+    <knife4j.version>4.3.0</knife4j.version>
+    <lombok.version>1.18.30</lombok.version>
 </properties>
 ```
 
@@ -40,35 +42,17 @@ fileMatchPattern: "**/pom.xml"
 
 | 项目类型 | GroupId |
 |---------|---------|
-| 框架组件 | `com.quickshop.framework` |
-| QuickCEM 业务 | `com.quickcem` |
-| 消息平台 | `com.quickcep.message` |
-| 工单系统 | `com.7moor.apass` / `com.m7` |
+| 慕声税务系统 | `com.musheng` |
 
-## 仓库配置
+## 常用依赖
 
-```xml
-<distributionManagement>
-    <repository>
-        <id>maven-releases</id>
-        <name>maven-releases</name>
-        <url>http://nexus.quickcep.com/repository/maven-releases/</url>
-    </repository>
-    <snapshotRepository>
-        <id>maven-snapshots</id>
-        <name>maven-snapshots</name>
-        <url>http://nexus.quickcep.com/repository/maven-snapshots/</url>
-    </snapshotRepository>
-</distributionManagement>
-```
-
-## 常用 Starter
-
-| Starter | GroupId | 功能 |
-|---------|---------|------|
-| `swagger-spring-boot-starter` | `com.quickshop.framework` | API 文档 |
-| `jwt-spring-boot-starter` | `com.quickshop.framework` | JWT 认证 |
-| `response-spring-boot-starter` | `com.quickshop.framework` | 统一响应 |
-| `trace-spring-boot-starter` | `com.quickshop.framework` | 链路追踪 |
-| `oss-spring-boot-starter` | `com.quickshop.framework` | 对象存储 |
-| `quick-message-spring-boot-starter` | `com.quickcep.message` | 消息推送 |
+| 依赖 | GroupId | ArtifactId | 功能 |
+|-----|---------|-----------|------|
+| Spring Boot | `org.springframework.boot` | `spring-boot-starter-web` | Web 框架 |
+| MyBatis-Plus | `com.baomidou` | `mybatis-plus-spring-boot3-starter` | ORM 框架 |
+| Sa-Token | `cn.dev33` | `sa-token-spring-boot3-starter` | 认证授权 |
+| MySQL | `com.mysql` | `mysql-connector-j` | 数据库驱动 |
+| Hutool | `cn.hutool` | `hutool-all` | 工具集 |
+| EasyExcel | `com.alibaba` | `easyexcel` | Excel 处理 |
+| Knife4j | `com.github.xiaoymin` | `knife4j-openapi3-jakarta-spring-boot-starter` | API 文档 |
+| Lombok | `org.projectlombok` | `lombok` | 代码简化 |

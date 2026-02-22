@@ -16,9 +16,10 @@ public interface RateSyncService {
      *
      * @param startDate 开始日期
      * @param endDate   结束日期
+     * @param cookie    可选，从浏览器复制的 Cookie（curl -b 后的内容），不传则用配置文件
      * @return 同步结果
      */
-    RateSyncResultDTO syncFromChinaMoney(LocalDate startDate, LocalDate endDate);
+    RateSyncResultDTO syncFromChinaMoney(LocalDate startDate, LocalDate endDate, String cookie);
 
     /**
      * 同步指定货币的汇率
@@ -26,16 +27,27 @@ public interface RateSyncService {
      * @param startDate      开始日期
      * @param endDate        结束日期
      * @param currencyCodes  指定货币编码列表
+     * @param cookie         可选，从浏览器复制的 Cookie
      * @return 同步结果
      */
-    RateSyncResultDTO syncSpecificCurrencies(LocalDate startDate, LocalDate endDate, List<String> currencyCodes);
+    RateSyncResultDTO syncSpecificCurrencies(LocalDate startDate, LocalDate endDate, List<String> currencyCodes, String cookie);
 
     /**
      * 同步最近N天的汇率
      * 自动同步所有启用货币
      *
-     * @param days 天数
+     * @param days   天数
+     * @param cookie 可选，从浏览器复制的 Cookie
      * @return 同步结果
      */
-    RateSyncResultDTO syncRecentDays(int days);
+    RateSyncResultDTO syncRecentDays(int days, String cookie);
+
+    /**
+     * 通过粘贴的 curl 命令同步汇率
+     * 用户从中国货币网页面 F12 → Network → CcprHisNew → 右键 Copy as cURL
+     *
+     * @param curlCommand 完整的 curl 命令
+     * @return 同步结果
+     */
+    RateSyncResultDTO syncFromCurl(String curlCommand);
 }

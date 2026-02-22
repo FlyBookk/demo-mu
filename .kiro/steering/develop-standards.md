@@ -2,64 +2,55 @@
 inclusion: always
 ---
 
-# QuickCEP 研发规范 (Develop Standards)
+# 慕声税务系统研发规范 (Musheng Tax System Development Standards)
 
-本规范用于指导 Kiro 在 QuickCEP 项目群中进行代码生成、修改和审查时保持风格一致性。
+本规范用于指导 Kiro 在慕声亚马逊转口贸易报税系统中进行代码生成、修改和审查时保持风格一致性。
 
 ## 核心原则
 
-1. **遵循 DDD 分层架构** - 复杂服务使用标准 DDD 分层，轻量服务使用简化分层
+1. **模块化架构** - 使用 Maven 多模块管理，清晰的职责划分
 2. **统一代码风格** - 使用项目约定的注解、命名和注释规范
-3. **中间件标准化** - 按规范使用 Redis、Kafka、QMQ、Caffeine 等中间件
+3. **中文注释** - 所有代码注释、文档、日志消息使用中文
+4. **现代化技术栈** - 使用 Spring Boot 3.x、Java 17、Sa-Token 等现代框架
 
 ## 项目架构
 
-### 标准 DDD 分层（复杂业务）
+### Maven 模块结构
 ```
-{project}-client/           # Feign Client 定义
-{project}-interfaces/       # Controller 层
-{project}-application/      # Service 编排层
-{project}-domain/           # 领域层
-{project}-infrastructure/   # 基础设施层
-{project}-start/            # 启动模块
-```
-
-### 简化分层（轻量服务）
-```
-{project}-core/             # 核心业务
-{project}-domain/           # 领域模型
-{project}-starter/          # 启动模块
+musheng-tax-system/         # 后端项目根目录
+├── musheng-common/         # 公共模块（工具类、异常、结果封装）
+├── musheng-system/         # 系统模块（用户、角色、权限、日志）
+├── musheng-config/         # 配置模块（Swagger、CORS、Sa-Token）
+├── musheng-business/       # 业务模块（销售、配送、FBA、广告数据）
+└── musheng-web/            # Web 模块（启动类、Controller）
 ```
 
 ## 包命名规范
 
 | 层级 | 包名 |
 |-----|------|
-| 控制器 | `controller` / `facade` |
+| 控制器 | `controller` |
 | 服务层 | `service` / `service.impl` |
-| 实体 | `entity` / `domain.entity` |
-| DTO/VO | `dto` / `vo` / `bo` |
-| 数据访问 | `repository.mapper` |
-| 枚举 | `enums` / `enumertion` |
+| 实体 | `entity` |
+| DTO/VO | `dto` / `vo` |
+| 数据访问 | `mapper` |
+| 枚举 | `enums` |
 | 配置 | `config` |
-| 工具 | `utils` / `util` |
+| 工具 | `utils` |
 
 ## GroupId 规范
 
-- 框架组件: `com.quickshop.framework`
-- QuickCEM 业务: `com.quickcem`
-- 消息平台: `com.quickcep.message`
-- 工单系统: `com.7moor.apass` / `com.m7`
+- 项目 GroupId: `com.musheng`
 
 ## 技术栈版本
 
-- JDK: 1.8
-- Spring Boot: 2.3.2.RELEASE
-- Spring Cloud: Hoxton.SR9
-- Spring Cloud Alibaba: 2.2.6.RELEASE
-- MyBatis-Plus: 3.5.2
-- Redisson: 3.17.6
-- Hutool: 5.7.15
-- FastJSON: 1.2.75
+- JDK: 17
+- Spring Boot: 3.2.2
+- MyBatis-Plus: 3.5.5
+- Sa-Token: 1.37.0
+- MySQL: 8.0.33
+- Hutool: 5.8.25
+- EasyExcel: 3.3.3
+- Knife4j: 4.3.0
 
 详细规范请参考: #[[file:develop-agent.md]]

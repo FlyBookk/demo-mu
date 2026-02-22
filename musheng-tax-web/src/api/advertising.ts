@@ -54,10 +54,17 @@ export function deleteAdvertising(id: number) {
 }
 
 /**
- * 批量删除广告数据
+ * 批量删除广告数据（逻辑删除）
  */
 export function batchDeleteAdvertising(ids: number[]) {
-  return request.delete<void>(BASE_URL, { data: { ids } })
+  return request.post<void>(`${BASE_URL}/batch-delete`, ids)
+}
+
+/**
+ * 批量物理删除广告数据（仅 admin）
+ */
+export function batchPhysicalDeleteAdvertising(ids: number[]) {
+  return request.delete<void>('/api/v1/admin/data-deletion/advertising/batch', { data: ids })
 }
 
 /**

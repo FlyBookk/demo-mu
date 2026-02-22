@@ -165,6 +165,15 @@ const menuItems = computed<ItemType[]>(() => {
       ]
     },
     {
+      key: 'Rate',
+      icon: () => h(DollarOutlined),
+      label: '汇率管理',
+      children: [
+        { key: 'RateImport', label: '汇率导入' },
+        { key: 'RateList', label: '汇率查询' }
+      ]
+    },
+    {
       key: 'Sales',
       icon: () => h(ShoppingCartOutlined),
       label: '销售数据',
@@ -198,15 +207,6 @@ const menuItems = computed<ItemType[]>(() => {
       children: [
         { key: 'AdvertisingAdd', label: '广告费录入' },
         { key: 'AdvertisingList', label: '数据列表' }
-      ]
-    },
-    {
-      key: 'Rate',
-      icon: () => h(DollarOutlined),
-      label: '汇率管理',
-      children: [
-        { key: 'RateImport', label: '汇率导入' },
-        { key: 'RateList', label: '汇率查询' }
       ]
     },
     {

@@ -56,28 +56,36 @@ public class TaxReportServiceImpl implements TaxReportService {
     );
 
     @Override
-    public DashboardData getDashboardData() {
+    public DashboardData getDashboardData(String quarterParam) {
         long startTime = System.currentTimeMillis();
-        log.info("Getting dashboard data (lightweight)");
+        log.info("Getting dashboard data (lightweight), quarter={}", quarterParam);
 
         Long shopId = ShopContext.requireShopId();
         List<String> sites = List.of("US", "CA", "UK", "DE");
 
-        // 计算最近4个季度范围
+        // 确定当前季度：传入参数优先，否则取系统当前季度
         LocalDate now = LocalDate.now();
         int currentQ = (now.getMonthValue() - 1) / 3 + 1;
-        String currentQuarter = now.getYear() + "-Q" + currentQ;
+        String currentQuarter;
+        if (quarterParam != null && !quarterParam.isBlank() && quarterParam.matches("\\d{4}-Q[1-4]")) {
+            currentQuarter = quarterParam.trim();
+        } else {
+            currentQuarter = now.getYear() + "-Q" + currentQ;
+        }
+
         String oldestQuarter = currentQuarter;
         for (int i = 0; i < 3; i++) {
             oldestQuarter = getPreviousQuarter(oldestQuarter);
         }
         String previousQuarter = getPreviousQuarter(currentQuarter);
 
-        // 计算日期范围
+        // 计算日期范围（基于选中的季度）
+        int currentYear = Integer.parseInt(currentQuarter.substring(0, 4));
+        int currentQNum = Integer.parseInt(currentQuarter.substring(6, 7));
         int oldYear = Integer.parseInt(oldestQuarter.substring(0, 4));
         int oldQ = Integer.parseInt(oldestQuarter.substring(6, 7));
         LocalDate minStartDate = getQuarterStartDate(oldYear, oldQ);
-        LocalDate maxEndDate = getQuarterEndDate(now.getYear(), currentQ);
+        LocalDate maxEndDate = getQuarterEndDate(currentYear, currentQNum);
 
         // ========== 轻量级查询：只查发货数据和退款数据 ==========
         

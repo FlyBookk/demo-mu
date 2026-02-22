@@ -145,9 +145,11 @@ import {
   PlusOutlined,
   DeleteOutlined
 } from '@ant-design/icons-vue'
+import { useAuthStore } from '@/stores/modules/auth'
 import {
   deleteAdvertising,
   batchDeleteAdvertising,
+  batchPhysicalDeleteAdvertising,
   searchAdvertisingData
 } from '@/api/advertising'
 import { getEnabledMarketplaces } from '@/api/marketplace'
@@ -155,6 +157,7 @@ import type { AdvertisingData } from '@/types/advertising'
 import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 function formatAmount(amount: number | null | undefined, currency: string): string {
   const value = amount ?? 0
@@ -340,7 +343,12 @@ function handleTableChange(pag: TablePaginationConfig) {
 
 async function handleDelete(record: AdvertisingData) {
   try {
-    await deleteAdvertising(record.id)
+    // Admin 用户使用物理删除，普通用户使用逻辑删除
+    if (authStore.isAdmin) {
+      await batchPhysicalDeleteAdvertising([record.id])
+    } else {
+      await deleteAdvertising(record.id)
+    }
     message.success('删除成功')
     fetchData()
   } catch (error) {
@@ -357,8 +365,14 @@ function handleBatchDelete() {
     cancelText: '取消',
     async onOk() {
       try {
-        await batchDeleteAdvertising(selectedRowKeys.value)
-        message.success('批量删除成功')
+        // Admin 用户使用物理删除，普通用户使用逻辑删除
+        if (authStore.isAdmin) {
+          await batchPhysicalDeleteAdvertising(selectedRowKeys.value)
+          message.success('批量删除成功')
+        } else {
+          await batchDeleteAdvertising(selectedRowKeys.value)
+          message.success('批量删除成功')
+        }
         selectedRowKeys.value = []
         fetchData()
       } catch (error) {

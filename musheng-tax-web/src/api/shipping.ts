@@ -5,8 +5,7 @@
 
 import { request } from '@/utils/request'
 import type { PageResult } from '@/types/api'
-import type { ShippingData, ShippingDataQuery, ShippingImportParams, ShippingSummary } from '@/types/shipping'
-import type { ImportRecord } from '@/types/importRecord'
+import type { ShippingData, ShippingDataQuery, ShippingBatchImportResult, ShippingSummary } from '@/types/shipping'
 
 const BASE_URL = '/api/v1/business/shipping'
 
@@ -25,10 +24,23 @@ export function getShippingById(id: number) {
 }
 
 /**
- * 导入配送数据
+ * 导入配送数据（单个文件）
  */
-export function importShippingData(data: ShippingImportParams) {
-  return request.post<ImportRecord>(`${BASE_URL}/import`, data)
+export function importShippingData(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.upload<Record<string, unknown>>(`${BASE_URL}/import`, formData)
+}
+
+/**
+ * 批量导入配送数据（多个文件）
+ */
+export function batchImportShippingData(files: File[]) {
+  const formData = new FormData()
+  files.forEach(file => {
+    formData.append('files', file)
+  })
+  return request.upload<ShippingBatchImportResult>(`${BASE_URL}/batch-import`, formData)
 }
 
 /**
@@ -39,10 +51,17 @@ export function deleteShippingData(id: number) {
 }
 
 /**
- * 批量删除配送数据
+ * 批量删除配送数据（逻辑删除）
  */
 export function batchDeleteShippingData(ids: number[]) {
   return request.post<void>(`${BASE_URL}/batch-delete`, ids)
+}
+
+/**
+ * 批量物理删除配送数据（仅 admin）
+ */
+export function batchPhysicalDeleteShippingData(ids: number[]) {
+  return request.delete<void>('/api/v1/admin/data-deletion/shipping/batch', { data: ids })
 }
 
 /**

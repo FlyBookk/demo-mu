@@ -102,6 +102,13 @@ public class FieldMappingTemplateServiceImpl implements FieldMappingTemplateServ
         if (queryRequest.getIsDefault() != null) {
             wrapper.eq(FieldMappingTemplate::getIsDefault, queryRequest.getIsDefault());
         }
+        
+        // 可见性过滤：默认只查询可见的模板
+        if (queryRequest.getIsVisible() == null) {
+            wrapper.eq(FieldMappingTemplate::getIsVisible, true);
+        } else {
+            wrapper.eq(FieldMappingTemplate::getIsVisible, queryRequest.getIsVisible());
+        }
 
         wrapper.orderByDesc(FieldMappingTemplate::getCreateTime);
 
@@ -129,6 +136,7 @@ public class FieldMappingTemplateServiceImpl implements FieldMappingTemplateServ
         copy.setHeaderRow(source.getHeaderRow());
         copy.setDefaultValues(source.getDefaultValues());
         copy.setIsDefault(false); // Copied template is not default
+        copy.setIsVisible(true); // 复制的模板默认可见
 
         if (StpUtil.isLogin()) {
             copy.setCreateBy(StpUtil.getLoginIdAsLong());
@@ -230,5 +238,6 @@ public class FieldMappingTemplateServiceImpl implements FieldMappingTemplateServ
         entity.setHeaderRow(request.getHeaderRow());
         entity.setDefaultValues(request.getDefaultValues());
         entity.setIsDefault(request.getIsDefault());
+        entity.setIsVisible(request.getIsVisible());
     }
 }

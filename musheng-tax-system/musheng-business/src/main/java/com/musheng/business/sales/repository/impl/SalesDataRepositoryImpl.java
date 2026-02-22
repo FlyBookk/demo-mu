@@ -109,6 +109,9 @@ public class SalesDataRepositoryImpl implements SalesDataRepository {
         Long shopId = ShopContext.requireShopId();
         QueryWrapperUtils.applyShopIdFilter(wrapper, SalesData::getShopId, shopId);
 
+        // 数据来源过滤
+        QueryWrapperUtils.applyEqFilter(wrapper, SalesData::getSourceType, query.getSourceType());
+
         // 站点过滤
         QueryWrapperUtils.applyEqFilter(wrapper, SalesData::getSiteCode, query.getSiteCode());
 

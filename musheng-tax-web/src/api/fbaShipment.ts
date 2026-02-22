@@ -62,10 +62,17 @@ export function deleteFbaShipment(id: number) {
 }
 
 /**
- * 批量删除FBA货件
+ * 批量删除FBA货件（逻辑删除）
  */
 export function batchDeleteFbaShipment(ids: number[]) {
   return request.post<void>(`${BASE_URL}/batch-delete`, ids)
+}
+
+/**
+ * 批量物理删除FBA货件（仅 admin）
+ */
+export function batchPhysicalDeleteFbaShipment(ids: number[]) {
+  return request.delete<void>('/api/v1/admin/data-deletion/fba-shipment/batch', { data: ids })
 }
 
 /**

@@ -66,4 +66,10 @@ public class FieldMappingTemplate extends BaseEntity {
      * 是否默认模板(1是/0否)
      */
     private Boolean isDefault;
+
+    /**
+     * 是否在列表中显示(1-是/0-否)
+     * 用于控制模板在管理列表中的可见性，不影响导入时的选择
+     */
+    private Boolean isVisible;
 }

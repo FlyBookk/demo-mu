@@ -10,6 +10,9 @@ import lombok.Data;
 @Schema(description = "销售数据查询请求")
 public class SalesQueryRequest {
 
+    @Schema(description = "数据来源(ORIGINAL-原始数据, ERP-ERP结算)")
+    private String sourceType;
+
     @Schema(description = "站点编码")
     private String siteCode;
 

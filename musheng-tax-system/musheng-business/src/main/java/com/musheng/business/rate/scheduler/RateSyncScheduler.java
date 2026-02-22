@@ -40,7 +40,7 @@ public class RateSyncScheduler {
         try {
             // 同步最近 3 天的汇率（覆盖周末和节假日）
             int days = 3;
-            RateSyncResultDTO result = rateSyncService.syncRecentDays(days);
+            RateSyncResultDTO result = rateSyncService.syncRecentDays(days, null);
 
             if (result.getSuccess()) {
                 log.info("Scheduled rate sync completed successfully: {}",  result.getMessage());
@@ -70,7 +70,7 @@ public class RateSyncScheduler {
 
         try {
             // 同步今天的汇率（如果缺失）
-            RateSyncResultDTO result = rateSyncService.syncRecentDays(1);
+            RateSyncResultDTO result = rateSyncService.syncRecentDays(1, null);
 
             if (result.getInsertCount() > 0) {
                 log.info("Found missing rates for today, synced {} new records", result.getInsertCount());

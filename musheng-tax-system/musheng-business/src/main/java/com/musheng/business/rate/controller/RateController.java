@@ -1,6 +1,7 @@
 package com.musheng.business.rate.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.musheng.business.rate.dto.CurlSyncRequest;
 import com.musheng.business.rate.dto.RateConvertRequest;
 import com.musheng.business.rate.dto.RateConvertResultDTO;
 import com.musheng.business.rate.dto.RateRequest;
@@ -124,14 +125,16 @@ public class RateController {
     }
 
     @OperationLog(module = "汇率管理", operation = "同步汇率")
-    @Operation(summary = "同步汇率", description = "从中国外汇交易中心同步汇率数据（仅同步已启用的货币）")
+    @Operation(summary = "同步汇率", description = "从中国外汇交易中心同步汇率数据。Cookie 可从浏览器开发者工具复制（curl -b 后的内容）")
     @PostMapping("/sync")
     public Result<RateSyncResultDTO> syncRates(
             @Parameter(description = "开始日期(YYYY-MM-DD)", required = true)
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @Parameter(description = "结束日期(YYYY-MM-DD)", required = true)
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        RateSyncResultDTO result = rateSyncService.syncFromChinaMoney(startDate, endDate);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "可选，从浏览器复制的 Cookie（curl -b 后的内容）")
+            @RequestParam(required = false) String cookie) {
+        RateSyncResultDTO result = rateSyncService.syncFromChinaMoney(startDate, endDate, cookie);
         return Result.success(result);
     }
 
@@ -143,17 +146,29 @@ public class RateController {
             @Parameter(description = "结束日期(YYYY-MM-DD)", required = true)
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @Parameter(description = "货币编码列表", required = true)
-            @RequestParam List<String> currencyCodes) {
-        RateSyncResultDTO result = rateSyncService.syncSpecificCurrencies(startDate, endDate, currencyCodes);
+            @RequestParam List<String> currencyCodes,
+            @Parameter(description = "可选，从浏览器复制的 Cookie")
+            @RequestParam(required = false) String cookie) {
+        RateSyncResultDTO result = rateSyncService.syncSpecificCurrencies(startDate, endDate, currencyCodes, cookie);
         return Result.success(result);
     }
 
-    @Operation(summary = "同步最近N天汇率", description = "同步最近N天的汇率数据（自动同步所有已启用货币）")
+    @Operation(summary = "同步最近N天汇率", description = "同步最近N天的汇率数据。Cookie 可从浏览器复制，用于绕过反爬虫")
     @PostMapping("/sync/recent")
     public Result<RateSyncResultDTO> syncRecentDays(
             @Parameter(description = "天数(1-365)", required = true)
-            @RequestParam(defaultValue = "7") int days) {
-        RateSyncResultDTO result = rateSyncService.syncRecentDays(days);
+            @RequestParam(defaultValue = "7") int days,
+            @Parameter(description = "可选，从浏览器复制的 Cookie（curl -b 后的内容）")
+            @RequestParam(required = false) String cookie) {
+        RateSyncResultDTO result = rateSyncService.syncRecentDays(days, cookie);
+        return Result.success(result);
+    }
+
+    @OperationLog(module = "汇率管理", operation = "curl同步汇率")
+    @Operation(summary = "通过 curl 同步汇率", description = "粘贴从中国货币网复制的完整 curl 命令，后端执行请求并解析数据")
+    @PostMapping("/sync/curl")
+    public Result<RateSyncResultDTO> syncFromCurl(@Valid @RequestBody CurlSyncRequest request) {
+        RateSyncResultDTO result = rateSyncService.syncFromCurl(request.getCurl());
         return Result.success(result);
     }
 }

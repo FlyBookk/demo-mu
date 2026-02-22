@@ -11,31 +11,31 @@ fileMatchPattern: "**/*.java"
 
 ### 启动类
 ```java
-@Slf4j
-@EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
+@SpringBootApplication
+@EnableAsync
 @EnableScheduling
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
-@EnableDiscoveryClient
-@EnableFeignClients(basePackages = "com.quickcem")
-@ComponentScan({"com.quickcem", "com.quickshop", "com.quickcep"})
-@MapperScan("com.quickcem.{module}.domain.repository.mapper")
-@EnableTracing
-public class {Module}Application {
+@EnableTransactionManagement
+@MapperScan("com.musheng.**.mapper")
+public class MushengApplication {
     public static void main(String[] args) {
-        SpringApplication.run({Module}Application.class, args);
-        log.info(" ========= QuickCEM {Module} Service Start =========");
+        SpringApplication.run(MushengApplication.class, args);
+        System.out.println("============================================");
+        System.out.println("  慕声税务系统启动成功!                      ");
+        System.out.println("============================================");
     }
 }
 ```
 
 ### Controller 类
 ```java
+@RestController
+@RequestMapping("/v1/{resource}")
+@Tag(name = "{资源}管理")
 @Slf4j
 @CrossOrigin
-@RestController
-@RequestMapping("/{resource}")
-@Api(tags = "{资源}API")
-public class {Resource}Api {
+public class {Resource}Controller {
+    @Resource
+    private {Service} service;
     // ...
 }
 ```
@@ -44,27 +44,24 @@ public class {Resource}Api {
 ```java
 @Service
 @Slf4j
-public class {Service}Impl implements I{Service} {
-    @Resource
-    private {Repository} repository;
+public class {Service}Impl implements {Service} {
+    @Autowired  // 或 @Resource
+    private {Mapper} mapper;
     // ...
 }
 ```
 
 ### 配置类
 ```java
-@Data
-@Component
-@RefreshScope
-@ConfigurationProperties(prefix = "{config-prefix}")
-public class {Config}Properties {
-    // ...
+@Configuration
+public class {Config}Configuration {
+    // 配置 Bean
 }
 ```
 
 ## 实体类注解
 
-### DTO/VO/BO
+### DTO/VO 类
 ```java
 @Data
 @Builder
@@ -79,19 +76,15 @@ public class {Entity}DTO {
 ```java
 @Data
 @TableName("{table_name}")
-@Accessors(chain = true)
-public class {Entity}PO {
+public class {Entity} {
     @TableId(type = IdType.AUTO)
     private Long id;
     
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    
-    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
     
     @TableLogic
-    private Integer isDeleted;
+    private Boolean deleted;
 }
 ```
 
@@ -100,61 +93,65 @@ public class {Entity}PO {
 @Getter
 @AllArgsConstructor
 public enum {Name}Enum {
-    TYPE_A("a", "描述A"),
-    TYPE_B("b", "描述B");
+    TYPE_A("A", "类型A"),
+    TYPE_B("B", "类型B");
     
-    private final String type;
+    private final String code;
     private final String desc;
 }
 ```
 
 ## 依赖注入
 
-- **优先使用** `@Resource` 进行依赖注入
-- 构造器注入用于必需依赖
-- `@Autowired` 作为备选方案
+- 优先使用 `@Autowired` 或 `@Resource`
+- 构造器注入用于必需依赖（推荐）
+- 字段注入用于可选依赖
 
 ## 方法注释规范
 
 ```java
 /**
  * 方法功能描述
- *
- * @author {author}
- * {HH:mm yyyy年MM月dd日}
+ * 
  * @param paramName 参数说明
- * @return {@link ReturnType} 返回值说明
+ * @return 返回值说明
+ * @author wanhua
+ * 10:30 2026年01月29日
  */
+public ReturnType methodName(ParamType paramName) {
+    // ...
+}
 ```
 
 ## API 响应规范
 
-使用 `ResponseResult` 封装响应：
+使用 `Result` 封装响应：
 ```java
-return ResponseResult.success(data);
-return ResponseResult.querySuccess(data);
-return ResponseResult.failed("error.message.key");
+return Result.success(data);
+return Result.success();
+return Result.error(ErrorCode.PARAM_ERROR);
 ```
 
 ## 工具类使用
 
 ### 字符串判断
 ```java
-import org.apache.commons.lang3.StringUtils;
-if (StringUtils.isBlank(str)) { }
-if (StringUtils.isNotBlank(str)) { }
+import org.springframework.util.StringUtils;
+if (StringUtils.hasText(str)) { }
+if (!StringUtils.hasText(str)) { }
 ```
 
 ### 集合判断
 ```java
-import org.apache.commons.collections4.CollectionUtils;
+import org.springframework.util.CollectionUtils;
 if (CollectionUtils.isEmpty(list)) { }
-if (CollectionUtils.isNotEmpty(list)) { }
+if (!CollectionUtils.isEmpty(list)) { }
 ```
 
-### JSON 处理
+### Hutool 工具
 ```java
-import com.alibaba.fastjson.JSON;
-String jsonStr = JSON.toJSONString(object);
-UserDTO user = JSON.parseObject(jsonStr, UserDTO.class);
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.bean.BeanUtil;
+String msg = StrUtil.format("用户{}登录成功", username);
+UserVO vo = BeanUtil.toBean(entity, UserVO.class);
 ```

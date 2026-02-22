@@ -56,6 +56,24 @@ export interface ShippingImportParams {
   fileId: string
 }
 
+// 配送数据批量导入结果
+export interface ShippingBatchImportResult {
+  totalFiles: number
+  successFiles: number
+  failFiles: number
+  totalCount: number
+  successCount: number
+  failCount: number
+  duplicateCount: number
+  batchNo?: string
+  fileResults?: Array<{
+    fileName: string
+    status: string
+    result?: Record<string, unknown>
+    message?: string
+  }>
+}
+
 // 配送数据汇总（人民币）
 export interface ShippingSummary {
   totalOrders: number

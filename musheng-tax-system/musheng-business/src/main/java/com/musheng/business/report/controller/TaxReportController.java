@@ -25,10 +25,11 @@ public class TaxReportController {
 
     private final TaxReportService taxReportService;
 
-    @Operation(summary = "首页仪表盘数据", description = "获取首页核心指标和图表数据")
+    @Operation(summary = "首页仪表盘数据", description = "获取首页核心指标和图表数据，支持按季度筛选")
     @GetMapping("/dashboard")
-    public Result<DashboardData> getDashboardData() {
-        DashboardData data = taxReportService.getDashboardData();
+    public Result<DashboardData> getDashboardData(
+            @Parameter(description = "季度(格式:2024-Q1，不传则默认当前季度)") @RequestParam(required = false) String quarter) {
+        DashboardData data = taxReportService.getDashboardData(quarter);
         return Result.success(data);
     }
 

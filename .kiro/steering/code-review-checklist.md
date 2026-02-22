@@ -19,31 +19,32 @@ inclusion: always
 
 ### 阶段 2：代码质量检查
 
-#### 2.1 QuickCEP 规范合规
+#### 2.1 慕声税务系统规范合规
 
 **注解规范**：
 - [ ] Service 类使用 `@Service` + `@Slf4j`
-- [ ] Controller 类使用 `@RestController` + `@Slf4j` + `@CrossOrigin` + `@Api`
-- [ ] 配置类使用 `@Configuration` + `@RefreshScope`
+- [ ] Controller 类使用 `@RestController` + `@Slf4j` + `@CrossOrigin` + `@Tag`
+- [ ] 配置类使用 `@Configuration`
 - [ ] DTO/VO 使用 `@Data` + `@Builder` + `@NoArgsConstructor` + `@AllArgsConstructor`
 
 **依赖注入**：
-- [ ] 优先使用 `@Resource` 而非 `@Autowired`
-- [ ] 避免字段注入，考虑构造器注入（必需依赖）
+- [ ] 使用 `@Autowired` 或 `@Resource` 进行依赖注入
+- [ ] 构造器注入用于必需依赖（推荐）
 
 **工具类使用**：
-- [ ] 字符串判断使用 `StringUtils.isBlank()` / `isNotBlank()`
-- [ ] 集合判断使用 `CollectionUtils.isEmpty()` / `isNotEmpty()`
-- [ ] JSON 处理使用 `JSON.toJSONString()` / `parseObject()`
+- [ ] 字符串判断使用 `StringUtils.hasText()` / `!StringUtils.hasText()`
+- [ ] 集合判断使用 `CollectionUtils.isEmpty()` / `!CollectionUtils.isEmpty()`
+- [ ] Hutool 工具使用 `StrUtil` / `BeanUtil` / `CollUtil`
 
 **响应封装**：
-- [ ] API 返回使用 `ResponseResult.success()` / `failed()`
+- [ ] API 返回使用 `Result.success()` / `Result.error()`
 - [ ] 不直接返回裸对象
 
 **方法注释**：
 - [ ] 包含 `@author` 和时间
 - [ ] 包含 `@param` 说明
 - [ ] 包含 `@return` 说明
+- [ ] 使用中文注释
 
 #### 2.2 代码质量
 
@@ -69,26 +70,22 @@ inclusion: always
 - [ ] 使用合适的日志级别（debug/info/warn/error）
 - [ ] 敏感信息脱敏
 
-#### 2.3 中间件使用
-
-**Redis/Redisson**：
-- [ ] Key 命名符合规范：`{module}:{type}:{id}`
-- [ ] 分布式锁正确释放（try-finally）
-- [ ] 缓存设置过期时间
-
-**Kafka/QMQ**：
-- [ ] 消息有异常处理和重试机制
-- [ ] Topic 命名符合规范
-- [ ] 消费者有日志记录
-
-**Caffeine**：
-- [ ] 设置最大缓存数量
-- [ ] 设置过期策略
+#### 2.3 数据库与缓存
 
 **MyBatis-Plus**：
 - [ ] 使用 Lambda 查询而非 XML
-- [ ] PO 类使用 `@TableName` 和 `@TableId`
+- [ ] 实体类使用 `@TableName` 和 `@TableId`
 - [ ] 逻辑删除使用 `@TableLogic`
+- [ ] 店铺数据隔离（使用 `ShopContext.requireShopId()`）
+
+**Caffeine 本地缓存**：
+- [ ] 设置最大缓存数量
+- [ ] 设置过期策略
+
+**Sa-Token 权限**：
+- [ ] 使用 `@SaCheckRole` 进行角色校验
+- [ ] 使用 `@SaCheckPermission` 进行权限校验
+- [ ] 使用 `StpUtil` 获取用户信息
 
 #### 2.4 测试质量
 
@@ -104,9 +101,10 @@ inclusion: always
 
 - 未通过编译
 - 测试失败
-- 违反核心规范（如未使用 @Resource）
+- 违反核心规范（如响应未使用 Result 封装）
 - 安全漏洞
 - 数据丢失风险
+- 缺少店铺数据隔离
 
 ### 🟡 Major（重要）- 强烈建议修复
 
@@ -129,9 +127,10 @@ inclusion: always
 ## 代码审查报告 - 任务 X.X
 
 ### ✅ 通过项
-- 使用了 @Resource 注入
+- 使用了 @Autowired 注入
 - 添加了单元测试
-- 响应使用 ResponseResult 封装
+- 响应使用 Result 封装
+- 使用中文注释
 
 ### 🔴 Critical 问题
 无

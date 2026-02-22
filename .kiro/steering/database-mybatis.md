@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: "**/*Mapper.java,**/*Mapper.xml,**/repository/**/*.java,**/po/**/*.java"
+fileMatchPattern: "**/*Mapper.java,**/*Mapper.xml,**/mapper/**/*.java,**/entity/**/*.java"
 ---
 
 # 数据库与 MyBatis-Plus 规范
@@ -10,8 +10,8 @@ fileMatchPattern: "**/*Mapper.java,**/*Mapper.xml,**/repository/**/*.java,**/po/
 ## 表命名规范
 
 - 使用小写字母和下划线
-- 前缀表示业务模块: `im_`, `cdp_`, `ticket_`, `store_`
-- 示例: `im_chat_session`, `cdp_user_data`, `store_staff`
+- 业务模块前缀: `sales_`, `shipping_`, `fba_`, `advertising_`
+- 示例: `sales_data`, `shipping_data`, `fba_shipment`
 
 ## 字段命名规范
 
@@ -19,33 +19,28 @@ fileMatchPattern: "**/*Mapper.java,**/*Mapper.xml,**/repository/**/*.java,**/po/
 - 主键: `id`
 - 外键: `{table}_id`
 - 时间字段: `create_time`, `update_time`
-- 状态字段: `status`, `is_deleted`
+- 状态字段: `status`, `deleted`
+- 店铺ID: `shop_id`（用于数据隔离）
 
 ## PO 实体类
 
 ```java
 @Data
-@TableName("{table_name}")
-@Accessors(chain = true)
-public class {Entity}PO {
+@TableName("sales_data")
+public class SalesData {
     
     @TableId(type = IdType.AUTO)
     private Long id;
     
-    @TableField("store_id")
-    private Integer storeId;
+    private Long shopId;  // 店铺ID（数据隔离）
     
-    @TableField("name")
     private String name;
     
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
-    
-    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
     
     @TableLogic
-    private Integer isDeleted;
+    private Boolean deleted;
 }
 ```
 
@@ -53,13 +48,14 @@ public class {Entity}PO {
 
 ```java
 @Mapper
-public interface {Entity}Mapper extends BaseMapper<{Entity}PO> {
+public interface {Entity}Mapper extends BaseMapper<{Entity}> {
     
     // 自定义查询方法
-    List<{Entity}PO> selectByCondition(@Param("param") QueryParam param);
+    List<{Entity}> selectByCondition(@Param("param") QueryParam param);
     
-    // 分页查询
-    Page<{Entity}PO> selectPage(Page<{Entity}PO> page, @Param("param") QueryParam param);
+    // 物理删除方法
+    @Delete("DELETE FROM table_name WHERE id = #{id}")
+    int physicalDeleteById(@Param("id") Long id);
 }
 ```
 
@@ -67,46 +63,46 @@ public interface {Entity}Mapper extends BaseMapper<{Entity}PO> {
 
 ```java
 // 条件查询
-List<EntityPO> list = mapper.selectList(
-    Wrappers.<EntityPO>lambdaQuery()
-        .eq(EntityPO::getStoreId, storeId)
-        .eq(EntityPO::getStatus, status)
-        .orderByDesc(EntityPO::getCreateTime)
+List<Entity> list = mapper.selectList(
+    new LambdaQueryWrapper<Entity>()
+        .eq(Entity::getShopId, shopId)
+        .eq(Entity::getStatus, status)
+        .orderByDesc(Entity::getCreateTime)
 );
 
 // 更新
 mapper.update(null, 
-    Wrappers.<EntityPO>lambdaUpdate()
-        .set(EntityPO::getStatus, newStatus)
-        .eq(EntityPO::getId, id)
+    new LambdaQueryWrapper<Entity>()
+        .set(Entity::getStatus, newStatus)
+        .eq(Entity::getId, id)
 );
 
-// 删除
-mapper.delete(
-    Wrappers.<EntityPO>lambdaQuery()
-        .eq(EntityPO::getStoreId, storeId)
-        .in(EntityPO::getId, idList)
-);
+// 删除（逻辑删除）
+mapper.deleteById(id);
 ```
 
 ## Service 层使用
 
 ```java
 @Service
-public class EntityServiceImpl extends ServiceImpl<EntityMapper, EntityPO> 
-        implements IEntityService {
+public class EntityServiceImpl implements EntityService {
     
-    public List<EntityPO> listByStoreId(Integer storeId) {
-        return lambdaQuery()
-            .eq(EntityPO::getStoreId, storeId)
-            .list();
+    @Autowired
+    private EntityMapper mapper;
+    
+    public List<Entity> listByShopId(Long shopId) {
+        return mapper.selectList(
+            new LambdaQueryWrapper<Entity>()
+                .eq(Entity::getShopId, shopId)
+        );
     }
     
+    @Transactional(rollbackFor = Exception.class)
     public boolean updateStatus(Long id, Integer status) {
-        return lambdaUpdate()
-            .set(EntityPO::getStatus, status)
-            .eq(EntityPO::getId, id)
-            .update();
+        Entity entity = new Entity();
+        entity.setId(id);
+        entity.setStatus(status);
+        return mapper.updateById(entity) > 0;
     }
 }
 ```
@@ -116,10 +112,11 @@ public class EntityServiceImpl extends ServiceImpl<EntityMapper, EntityPO>
 ```java
 // Controller
 @GetMapping
-public ResponseResult<PageResult<EntityVO>> list(
-        @RequestParam(defaultValue = "1") Integer pageNum,
-        @RequestParam(defaultValue = "10") Integer pageSize) {
-    Page<EntityPO> page = service.page(new Page<>(pageNum, pageSize));
-    return ResponseResult.pageSuccess(convert(page));
+public Result<PageResult<EntityVO>> list(
+        @RequestParam(defaultValue = "1") Integer current,
+        @RequestParam(defaultValue = "10") Integer size) {
+    Page<Entity> page = new Page<>(current, size);
+    mapper.selectPage(page, new LambdaQueryWrapper<Entity>());
+    return Result.success(convert(page));
 }
 ```

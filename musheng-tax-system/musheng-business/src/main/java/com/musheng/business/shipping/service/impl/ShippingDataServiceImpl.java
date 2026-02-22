@@ -13,6 +13,9 @@ import com.musheng.config.importrecord.entity.ImportRecord;
 import com.musheng.config.importrecord.mapper.ImportRecordMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
+import com.musheng.config.marketplace.dto.MarketplaceRequest;
+import com.musheng.config.marketplace.service.MarketplaceService;
+import com.musheng.business.common.config.ImportConfig;
 import com.musheng.business.rate.service.RateService;
 import com.musheng.common.context.ShopContext;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +32,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -47,6 +51,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     private final CsvParseServiceImpl csvParseService;
     private final RateService rateService;
     private final org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
+    private final ImportConfig importConfig;
+    private final MarketplaceService marketplaceService;
 
     @Override
     public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId,
@@ -203,7 +209,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
 
             log.info("Duplicate check completed: {} to insert, {} duplicates", toInsert.size(), duplicates.size());
 
-            // Step 3: Fill exchange rates for each record
+            // Step 3: 预热汇率缓存 + 填充汇率
+            preloadExchangeRateCache(toInsert);
             for (ShippingData data : toInsert) {
                 fillExchangeRate(data);
             }
@@ -285,6 +292,70 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         return result;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> batchImportData(List<MultipartFile> files) {
+        log.info("Batch importing shipping data: fileCount={}", files.size());
+
+        Map<String, Object> batchResult = new HashMap<>();
+        List<Map<String, Object>> fileResults = new ArrayList<>();
+
+        int totalFiles = files.size();
+        int successFiles = 0;
+        int failFiles = 0;
+        int totalCount = 0;
+        int successCount = 0;
+        int failCount = 0;
+        int duplicateCount = 0;
+
+        for (MultipartFile file : files) {
+            Map<String, Object> fileResult = new HashMap<>();
+            fileResult.put("fileName", file.getOriginalFilename());
+
+            try {
+                Map<String, Object> importResult = importData(file);
+                fileResult.put("status", "success");
+                fileResult.put("result", importResult);
+
+                totalCount += (Integer) importResult.getOrDefault("totalCount", 0);
+                successCount += (Integer) importResult.getOrDefault("successCount", 0);
+                failCount += (Integer) importResult.getOrDefault("failCount", 0);
+                duplicateCount += (Integer) importResult.getOrDefault("duplicateCount", 0);
+                successFiles++;
+            } catch (Exception e) {
+                log.error("Import file failed: {}", file.getOriginalFilename(), e);
+                fileResult.put("status", "fail");
+                fileResult.put("message", e.getMessage());
+                failFiles++;
+            }
+
+            fileResults.add(fileResult);
+        }
+
+        batchResult.put("totalFiles", totalFiles);
+        batchResult.put("successFiles", successFiles);
+        batchResult.put("failFiles", failFiles);
+        batchResult.put("totalCount", totalCount);
+        batchResult.put("successCount", successCount);
+        batchResult.put("failCount", failCount);
+        batchResult.put("duplicateCount", duplicateCount);
+        batchResult.put("fileResults", fileResults);
+        String batchNo = null;
+        for (Map<String, Object> fr : fileResults) {
+            Object res = fr.get("result");
+            if (res instanceof Map<?, ?> m && m.get("batchNo") != null) {
+                batchNo = m.get("batchNo").toString();
+                break;
+            }
+        }
+        batchResult.put("batchNo", batchNo);
+
+        log.info("Batch import completed: files={}/{}, total={}, success={}, fail={}, duplicate={}",
+                successFiles, totalFiles, totalCount, successCount, failCount, duplicateCount);
+
+        return batchResult;
+    }
+
     /**
      * Parse a single CSV record into ShippingData entity (自动识别销售渠道)
      * @param marketplaceMap Pre-loaded marketplace configurations to avoid N+1 queries
@@ -313,7 +384,13 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         Marketplace marketplace = marketplaceMap.get(siteCode);
 
         if (marketplace == null) {
-            throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found for site: " + siteCode);
+            if (importConfig.isAutoCreateMarketplace()) {
+                marketplace = autoCreateMarketplace(siteCode);
+                marketplaceMap.put(siteCode, marketplace);
+                log.info("Auto-created marketplace for siteCode: {}", siteCode);
+            } else {
+                throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found for site: " + siteCode);
+            }
         }
 
         ShippingData shippingData = new ShippingData();
@@ -536,6 +613,88 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
+     * 自动创建站点（当 import.auto-create-marketplace=true 时）
+     */
+    private Marketplace autoCreateMarketplace(String siteCode) {
+        String currencyCode = mapSiteCodeToCurrency(siteCode);
+
+        MarketplaceRequest request = new MarketplaceRequest();
+        request.setSiteCode(siteCode);
+        request.setSiteName(siteCode);
+        request.setMarketplaceId("AUTO_" + siteCode);
+        request.setCurrencyCode(currencyCode);
+        request.setStatus(1);
+
+        return marketplaceService.create(request);
+    }
+
+    /**
+     * 根据站点编码推断默认货币
+     */
+    private String mapSiteCodeToCurrency(String siteCode) {
+        if (siteCode == null) {
+            return "USD";
+        }
+        return switch (siteCode.toUpperCase()) {
+            case "US" -> "USD";
+            case "CA" -> "CAD";
+            case "MX" -> "MXN";
+            case "UK", "GB" -> "GBP";
+            case "DE", "FR", "IT", "ES", "NL", "BE", "AT", "PL" -> "EUR";
+            case "JP" -> "JPY";
+            case "AU" -> "AUD";
+            case "SG" -> "SGD";
+            case "AE", "SA" -> "AED";
+            case "IN" -> "INR";
+            case "BR" -> "BRL";
+            case "SE" -> "SEK";
+            default -> "USD";
+        };
+    }
+
+    /**
+     * 预热汇率缓存（批量查询去重的 currencyCode+date 组合）
+     * 避免在 fillExchangeRate 循环中产生 N 次 DB 查询
+     */
+    private void preloadExchangeRateCache(List<ShippingData> dataList) {
+        if (dataList == null || dataList.isEmpty()) {
+            return;
+        }
+
+        // 收集唯一的 (currencyCode, date) 组合
+        Set<String> uniquePairs = new HashSet<>();
+        for (ShippingData data : dataList) {
+            if (data.getShipDate() != null && StringUtils.hasText(data.getCurrencyCode())) {
+                String currencyCode = data.getCurrencyCode();
+                if (!"CNY".equalsIgnoreCase(currencyCode)) {
+                    uniquePairs.add(currencyCode + "|" + data.getShipDate());
+                }
+            }
+        }
+
+        if (uniquePairs.isEmpty()) {
+            return;
+        }
+
+        log.info("Preloading exchange rate cache for {} unique (currency, date) pairs", uniquePairs.size());
+
+        int loadedCount = 0;
+        for (String pair : uniquePairs) {
+            String[] parts = pair.split("\\|");
+            String currencyCode = parts[0];
+            LocalDate date = LocalDate.parse(parts[1]);
+            try {
+                rateService.getRateWithDate(currencyCode, date);
+                loadedCount++;
+            } catch (Exception e) {
+                log.warn("Failed to preload rate for {}/{}: {}", currencyCode, date, e.getMessage());
+            }
+        }
+
+        log.info("Exchange rate cache preloaded: {}/{} pairs", loadedCount, uniquePairs.size());
+    }
+
+    /**
      * Fill exchange rate for shipping data based on ship date
      * If the ship date is a holiday/weekend, the rate service will automatically
      * use the next workday's rate
@@ -554,25 +713,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             return;
         }
 
-        try {
-            // Get rate - the rate service handles holiday deferral automatically
-            BigDecimal rate = rateService.getRate(data.getCurrencyCode(), data.getShipDate().toString());
-            data.setExchangeRate(rate);
+        var rateWithDate = rateService.getRateWithDate(data.getCurrencyCode(), data.getShipDate());
+        data.setExchangeRate(rateWithDate.getRate());
+        data.setExchangeRateDate(rateWithDate.getActualDate());
 
-            // Get actual rate date (after holiday deferral)
-            // For simplicity, we store the ship date here. If you need the actual rate date,
-            // you can call rateService.getRateWithDate() method
-            data.setExchangeRateDate(data.getShipDate());
-
-            log.debug("Exchange rate filled: currency={}, date={}, rate={}",
-                    data.getCurrencyCode(), data.getShipDate(), rate);
-        } catch (Exception e) {
-            log.warn("Failed to get exchange rate for currency={}, date={}: {}",
-                    data.getCurrencyCode(), data.getShipDate(), e.getMessage());
-            // Don't fail the import, just leave the rate as null
-            data.setExchangeRate(null);
-            data.setExchangeRateDate(null);
-        }
+        log.debug("Exchange rate filled: currency={}, shipDate={}, rate={}, actualRateDate={}",
+                data.getCurrencyCode(), data.getShipDate(), rateWithDate.getRate(), rateWithDate.getActualDate());
     }
 
     @Override

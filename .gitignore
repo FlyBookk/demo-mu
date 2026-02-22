@@ -6,3 +6,8 @@
 /musheng-tax-system/musheng-business/target/*
 /musheng-tax-system/musheng-config/target/*
 /musheng-tax-web/node_modules/*
+
+.claude/
+.kiro/
+.serena/
+.cursor/

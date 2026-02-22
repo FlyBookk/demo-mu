@@ -246,13 +246,16 @@ import {
   getFbaShipmentSummary,
   deleteFbaShipment,
   batchDeleteFbaShipment,
+  batchPhysicalDeleteFbaShipment,
   exportFbaShipmentData,
   getFbaShipmentCountries,
   getFbaShipmentShopNames
 } from '@/api/fbaShipment'
 import type { FbaShipment, FbaShipmentSummary } from '@/types/fbaShipment'
+import { useAuthStore } from '@/stores/modules/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 // ============= 搜索相关 =============
 const searchForm = reactive({
@@ -484,7 +487,12 @@ async function handleViewDetail(record: FbaShipment) {
 
 async function handleDelete(record: FbaShipment) {
   try {
-    await deleteFbaShipment(record.id)
+    // Admin 用户使用物理删除，普通用户使用逻辑删除
+    if (authStore.isAdmin) {
+      await batchPhysicalDeleteFbaShipment([record.id])
+    } else {
+      await deleteFbaShipment(record.id)
+    }
     message.success('删除成功')
     fetchData()
     fetchSummary()
@@ -502,8 +510,14 @@ function handleBatchDelete() {
     cancelText: '取消',
     async onOk() {
       try {
-        await batchDeleteFbaShipment(selectedRowKeys.value)
-        message.success('批量删除成功')
+        // Admin 用户使用物理删除，普通用户使用逻辑删除
+        if (authStore.isAdmin) {
+          await batchPhysicalDeleteFbaShipment(selectedRowKeys.value)
+          message.success('批量删除成功')
+        } else {
+          await batchDeleteFbaShipment(selectedRowKeys.value)
+          message.success('批量删除成功')
+        }
         selectedRowKeys.value = []
         fetchData()
         fetchSummary()

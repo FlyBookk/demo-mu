@@ -116,7 +116,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 1600 }"
+        :scroll="{ x: 1720 }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -176,22 +176,22 @@
         <a-descriptions-item label="货币">{{ detailData.currencyCode }}</a-descriptions-item>
         <a-descriptions-item label="SKU">{{ detailData.sku || '-' }}</a-descriptions-item>
         <a-descriptions-item label="数量">{{ detailData.quantity || 0 }}</a-descriptions-item>
-        <a-descriptions-item label="商品价格">{{ formatAmount(detailData.productPrice, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="商品税">{{ formatAmount(detailData.productTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="运费">{{ formatAmount(detailData.shippingPrice, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="运费税">{{ formatAmount(detailData.shippingTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="礼品包装价格">{{ formatAmount(detailData.giftWrapPrice, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="礼品包装税">{{ formatAmount(detailData.giftWrapTax, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="商品促销折扣">{{ formatAmount(detailData.productPromotionDiscount, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="货件促销折扣">{{ formatAmount(detailData.shipmentPromotionDiscount, detailData.currencyCode) }}</a-descriptions-item>
-        <a-descriptions-item label="物流费用">{{ formatAmount(detailData.shippingCost, detailData.currencyCode) }}</a-descriptions-item>
+        <a-descriptions-item label="商品价格">{{ formatAmountValue(detailData.productPrice) }}</a-descriptions-item>
+        <a-descriptions-item label="商品税">{{ formatAmountValue(detailData.productTax) }}</a-descriptions-item>
+        <a-descriptions-item label="运费">{{ formatAmountValue(detailData.shippingPrice) }}</a-descriptions-item>
+        <a-descriptions-item label="运费税">{{ formatAmountValue(detailData.shippingTax) }}</a-descriptions-item>
+        <a-descriptions-item label="礼品包装价格">{{ formatAmountValue(detailData.giftWrapPrice) }}</a-descriptions-item>
+        <a-descriptions-item label="礼品包装税">{{ formatAmountValue(detailData.giftWrapTax) }}</a-descriptions-item>
+        <a-descriptions-item label="商品促销折扣">{{ formatAmountValue(detailData.productPromotionDiscount) }}</a-descriptions-item>
+        <a-descriptions-item label="货件促销折扣">{{ formatAmountValue(detailData.shipmentPromotionDiscount) }}</a-descriptions-item>
+        <a-descriptions-item label="物流费用">{{ formatAmountValue(detailData.shippingCost) }}</a-descriptions-item>
         <a-descriptions-item label="收入总额">
-          <span class="highlight-amount">{{ formatAmount(detailData.revenueTotal, detailData.currencyCode) }}</span>
+          <span class="highlight-amount">{{ formatAmountValue(detailData.revenueTotal) }}</span>
         </a-descriptions-item>
         <a-descriptions-item label="承运商">{{ detailData.carrier || '-' }}</a-descriptions-item>
         <a-descriptions-item label="物流单号">{{ detailData.trackingNumber || '-' }}</a-descriptions-item>
         <a-descriptions-item label="汇率">{{ detailData.exchangeRate || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="汇率日期">{{ detailData.exchangeRateDate || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="汇率取值日期">{{ detailData.exchangeRateDate || '-' }}</a-descriptions-item>
         <a-descriptions-item label="导入时间" :span="2">{{ detailData.createTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
@@ -213,12 +213,14 @@ import {
   DeleteOutlined,
   SendOutlined
 } from '@ant-design/icons-vue'
+import { useAuthStore } from '@/stores/modules/auth'
 import {
   getShippingList,
   getShippingById,
   getShippingSummary,
   deleteShippingData,
   batchDeleteShippingData,
+  batchPhysicalDeleteShippingData,
   exportShippingData
 } from '@/api/shipping'
 import { getEnabledMarketplaces } from '@/api/marketplace'
@@ -226,10 +228,16 @@ import type { ShippingData, ShippingSummary } from '@/types/shipping'
 import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 function formatAmount(amount: number | null | undefined, currency: string): string {
   const value = amount ?? 0
   return `${currency || ''} ${value.toFixed(2)}`
+}
+
+/** 仅格式化金额数值（详情页已有货币字段，无需重复展示） */
+function formatAmountValue(amount: number | null | undefined): string {
+  return (amount ?? 0).toFixed(2)
 }
 
 // ============= 搜索相关 =============
@@ -338,6 +346,12 @@ const columns = [
     key: 'exchangeRate',
     width: 90,
     align: 'right' as const
+  },
+  {
+    title: '汇率取值日期',
+    dataIndex: 'exchangeRateDate',
+    key: 'exchangeRateDate',
+    width: 120
   },
   {
     title: '承运商',
@@ -486,7 +500,12 @@ async function handleViewDetail(record: ShippingData) {
 
 async function handleDelete(record: ShippingData) {
   try {
-    await deleteShippingData(record.id)
+    // Admin 用户使用物理删除，普通用户使用逻辑删除
+    if (authStore.isAdmin) {
+      await batchPhysicalDeleteShippingData([record.id])
+    } else {
+      await deleteShippingData(record.id)
+    }
     message.success('删除成功')
     fetchData()
     fetchSummary()
@@ -504,8 +523,14 @@ function handleBatchDelete() {
     cancelText: '取消',
     async onOk() {
       try {
-        await batchDeleteShippingData(selectedRowKeys.value)
-        message.success('批量删除成功')
+        // Admin 用户使用物理删除，普通用户使用逻辑删除
+        if (authStore.isAdmin) {
+          await batchPhysicalDeleteShippingData(selectedRowKeys.value)
+          message.success('批量删除成功')
+        } else {
+          await batchDeleteShippingData(selectedRowKeys.value)
+          message.success('批量删除成功')
+        }
         selectedRowKeys.value = []
         fetchData()
         fetchSummary()

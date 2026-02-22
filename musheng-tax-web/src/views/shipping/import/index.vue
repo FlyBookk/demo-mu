@@ -17,7 +17,7 @@
         <a-upload-dragger
           v-model:file-list="fileList"
           name="file"
-          :multiple="false"
+          :multiple="true"
           :before-upload="beforeUpload"
           accept=".csv,.xlsx,.xls"
         >
@@ -27,23 +27,36 @@
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">
             支持 CSV、Excel (.xlsx, .xls) 格式，单个文件最大 50MB<br />
-            系统将自动识别销售渠道并分配站点，根据配送日期计算数据季度
+            支持批量上传多个文件，系统将自动识别销售渠道并分配站点，根据配送日期计算数据季度
           </p>
         </a-upload-dragger>
 
-        <div v-if="uploadedFileInfo" class="uploaded-file-info">
+        <div v-if="uploadedFiles.length > 0" class="uploaded-file-info">
           <a-card size="small">
-            <a-descriptions :column="2">
-              <a-descriptions-item label="文件名">{{ uploadedFileInfo.fileName }}</a-descriptions-item>
-              <a-descriptions-item label="文件大小">{{ formatFileSize(uploadedFileInfo.fileSize) }}</a-descriptions-item>
-            </a-descriptions>
+            <div class="file-list-header">
+              <span>已选择 {{ uploadedFiles.length }} 个文件</span>
+              <a-button type="link" size="small" @click="clearFiles">清空</a-button>
+            </div>
+            <a-list size="small" :data-source="uploadedFiles">
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <template #title>{{ item.name }}</template>
+                    <template #description>{{ formatFileSize(item.size) }}</template>
+                  </a-list-item-meta>
+                  <template #actions>
+                    <a-button type="link" size="small" danger @click="removeFile(item)">删除</a-button>
+                  </template>
+                </a-list-item>
+              </template>
+            </a-list>
           </a-card>
         </div>
       </div>
 
       <div class="step-actions">
-        <a-button type="primary" :disabled="!uploadedFileInfo" :loading="importing" @click="handleStartImport">
-          <CloudUploadOutlined /> 开始导入
+        <a-button type="primary" :disabled="uploadedFiles.length === 0" :loading="importing" @click="handleStartImport">
+          <CloudUploadOutlined /> 开始导入 ({{ uploadedFiles.length }} 个文件)
         </a-button>
       </div>
     </a-card>
@@ -51,7 +64,7 @@
     <!-- 导入确认弹窗 -->
     <ImportConfirmModal
       ref="importConfirmRef"
-      :file-name="uploadedFileInfo?.fileName"
+      :file-name="uploadedFiles.length > 0 ? `${uploadedFiles.length} 个文件` : ''"
       data-type="shipping"
       @confirm="doExecuteImport"
     />
@@ -80,9 +93,16 @@
       </a-result>
 
       <div v-if="importResult" class="import-progress">
-        <a-descriptions :column="3" size="small">
+        <a-descriptions :column="3" size="small" bordered>
+          <a-descriptions-item v-if="importResult.totalFiles > 1" label="总文件数">{{ importResult.totalFiles }}</a-descriptions-item>
+          <a-descriptions-item v-if="importResult.totalFiles > 1" label="成功文件">
+            <span class="success-text">{{ importResult.successFiles }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item v-if="importResult.totalFiles > 1" label="失败文件">
+            <span class="error-text">{{ importResult.failFiles }}</span>
+          </a-descriptions-item>
           <a-descriptions-item label="批次号">
-            <a-typography-text copyable>{{ importResult.batchNo }}</a-typography-text>
+            <a-typography-text copyable>{{ importResult.batchNo || '-' }}</a-typography-text>
           </a-descriptions-item>
           <a-descriptions-item label="总行数">{{ importResult.totalRows }}</a-descriptions-item>
           <a-descriptions-item label="成功">
@@ -101,19 +121,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import type { FormInstance, UploadProps, UploadFile } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
+import type { UploadProps, UploadFile } from 'ant-design-vue'
 import {
-  RightOutlined,
-  LeftOutlined,
   InboxOutlined,
   CloudUploadOutlined,
   LoadingOutlined
 } from '@ant-design/icons-vue'
-import { request } from '@/utils/request'
+import { importShippingData, batchImportShippingData } from '@/api/shipping'
 import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import type { ImportRecord } from '@/types/importRecord'
 
@@ -128,12 +145,11 @@ const stepItems = [
 
 // ============= 上传相关 =============
 const fileList = ref<UploadFile[]>([])
-const uploadedFile = ref<File | null>(null)
-const uploadedFileInfo = ref<{ fileName: string; fileSize: number } | null>(null)
+const uploadedFiles = ref<File[]>([])
 
 // ============= 导入相关 =============
 const importing = ref(false)
-const importResult = ref<ImportRecord | null>(null)
+const importResult = ref<(ImportRecord & { totalFiles?: number; successFiles?: number; failFiles?: number }) | null>(null)
 const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // ============= 方法 =============
@@ -161,26 +177,37 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
     return false
   }
 
-  // 保存文件用于后续导入
-  uploadedFile.value = file
-  uploadedFileInfo.value = {
-    fileName: file.name,
-    fileSize: file.size
+  if (uploadedFiles.value.some(f => f.name === file.name && f.size === file.size)) {
+    message.info('文件已存在，无需重复添加')
+    return false
   }
-  message.success('文件已选择')
 
-  // 返回 false 阻止自动上传
+  uploadedFiles.value.push(file as File)
+  message.success(`已添加文件: ${file.name}`)
+
   return false
+}
+
+function removeFile(file: File) {
+  const index = uploadedFiles.value.findIndex(f => f.name === file.name && f.size === file.size)
+  if (index > -1) {
+    uploadedFiles.value.splice(index, 1)
+    fileList.value = fileList.value.filter(f => f.name !== file.name || f.size !== file.size)
+  }
+}
+
+function clearFiles() {
+  uploadedFiles.value = []
+  fileList.value = []
 }
 
 // 点击开始导入 - 弹出确认窗口
 function handleStartImport() {
-  if (!uploadedFile.value) {
-    message.warning('请先上传文件')
+  if (uploadedFiles.value.length === 0) {
+    message.warning('请先选择文件')
     return
   }
-  
-  // 弹出确认窗口
+
   importConfirmRef.value?.show()
 }
 
@@ -188,23 +215,39 @@ function handleStartImport() {
 async function doExecuteImport() {
   importing.value = true
   importConfirmRef.value?.setLoading(true)
-  
+
   try {
-    // 使用 request.upload 上传文件（自动添加token）
-    const formData = new FormData()
-    formData.append('file', uploadedFile.value!)
+    let result: { data: Record<string, unknown> }
 
-    const result = await request.upload<any>('/api/v1/business/shipping/import', formData)
-
-    // 构造导入结果对象
-    importResult.value = {
-      batchNo: result.data.batchNo,
-      totalRows: result.data.totalCount,
-      successRows: result.data.successCount,
-      failedRows: result.data.failCount,
-      duplicateRows: result.data.duplicateCount || 0,
-      status: result.data.failCount === 0 && result.data.duplicateCount === 0 ? 2 : 3 // 2=成功, 3=部分成功
-    } as ImportRecord
+    if (uploadedFiles.value.length === 1) {
+      result = await importShippingData(uploadedFiles.value[0])
+      const d = result.data
+      importResult.value = {
+        batchNo: d.batchNo as string,
+        totalRows: d.totalCount as number,
+        successRows: d.successCount as number,
+        failedRows: d.failCount as number,
+        duplicateRows: (d.duplicateCount as number) || 0,
+        totalFiles: 1,
+        successFiles: 1,
+        failFiles: 0,
+        status: (d.failCount as number) === 0 && ((d.duplicateCount as number) || 0) === 0 ? 2 : 3
+      }
+    } else {
+      result = await batchImportShippingData(uploadedFiles.value)
+      const d = result.data
+      importResult.value = {
+        batchNo: d.batchNo as string,
+        totalRows: d.totalCount as number,
+        successRows: d.successCount as number,
+        failedRows: d.failCount as number,
+        duplicateRows: (d.duplicateCount as number) || 0,
+        totalFiles: d.totalFiles as number,
+        successFiles: d.successFiles as number,
+        failFiles: d.failFiles as number,
+        status: (d.failFiles as number) === 0 ? 2 : 3
+      }
+    }
 
     importConfirmRef.value?.hide()
     currentStep.value = 1
@@ -222,7 +265,7 @@ function getResultTitle(): string {
   if (!importResult.value) return ''
   switch (importResult.value.status) {
     case 1: return '正在处理中...'
-    case 2: return '导入成功'
+    case 2: return importResult.value.totalFiles && importResult.value.totalFiles > 1 ? '全部导入成功' : '导入成功'
     case 3: return '部分导入成功'
     case 4: return '导入失败'
     default: return '等待处理'
@@ -235,6 +278,12 @@ function getResultSubTitle(): string {
     return '系统正在后台处理数据,请稍候查看导入记录'
   }
   const parts: string[] = []
+  if (importResult.value.totalFiles && importResult.value.totalFiles > 1) {
+    parts.push(`成功 ${importResult.value.successFiles} 个文件`)
+    if (importResult.value.failFiles && importResult.value.failFiles > 0) {
+      parts.push(`失败 ${importResult.value.failFiles} 个文件`)
+    }
+  }
   if (importResult.value.successRows > 0) {
     parts.push(`成功导入 ${importResult.value.successRows} 条`)
   }
@@ -254,8 +303,7 @@ function handleViewRecords() {
 function handleImportAgain() {
   currentStep.value = 0
   fileList.value = []
-  uploadedFile.value = null
-  uploadedFileInfo.value = null
+  uploadedFiles.value = []
   importResult.value = null
 }
 
@@ -296,9 +344,16 @@ onMounted(() => {
       margin: 0 auto;
     }
 
-    .uploaded-file-info {
-      margin-top: $spacing-md;
+  .uploaded-file-info {
+    margin-top: $spacing-md;
+
+    .file-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: $spacing-sm;
     }
+  }
 
     .step-actions {
       margin-top: $spacing-lg;

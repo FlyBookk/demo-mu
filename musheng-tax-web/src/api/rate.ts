@@ -81,9 +81,16 @@ export function convertCurrency(data: RateConvertRequest) {
 
 /**
  * 同步汇率 - 指定日期范围
+ * @param cookie 可选，从浏览器复制的 Cookie（curl -b 后的内容）
  */
-export function syncRates(params: RateSyncRequest) {
-  return request.post<RateSyncResult>(`${BASE_URL}/sync`, params)
+export function syncRates(params: RateSyncRequest & { cookie?: string }) {
+  const searchParams = new URLSearchParams()
+  searchParams.append('startDate', params.startDate)
+  searchParams.append('endDate', params.endDate)
+  if (params.cookie?.trim()) searchParams.append('cookie', params.cookie.trim())
+  return request.post<RateSyncResult>(`${BASE_URL}/sync`, searchParams, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  })
 }
 
 /**
@@ -93,15 +100,37 @@ export function syncSpecificCurrencies(params: {
   startDate: string
   endDate: string
   currencyCodes: string[]
+  cookie?: string
 }) {
-  return request.post<RateSyncResult>(`${BASE_URL}/sync/currencies`, params)
+  const searchParams = new URLSearchParams()
+  searchParams.append('startDate', params.startDate)
+  searchParams.append('endDate', params.endDate)
+  params.currencyCodes.forEach(c => searchParams.append('currencyCodes', c))
+  if (params.cookie?.trim()) searchParams.append('cookie', params.cookie.trim())
+  return request.post<RateSyncResult>(`${BASE_URL}/sync/currencies`, searchParams, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  })
 }
 
 /**
  * 同步最近N天的汇率
+ * @param cookie 可选，从浏览器复制的 Cookie（curl -b 后的内容），用于绕过中国货币网反爬虫
  */
-export function syncRecentDays(days: number) {
-  return request.post<RateSyncResult>(`${BASE_URL}/sync/recent`, { days })
+export function syncRecentDays(days: number, cookie?: string) {
+  const searchParams = new URLSearchParams()
+  searchParams.append('days', String(days))
+  if (cookie?.trim()) searchParams.append('cookie', cookie.trim())
+  return request.post<RateSyncResult>(`${BASE_URL}/sync/recent`, searchParams, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  })
+}
+
+/**
+ * 通过粘贴 curl 命令同步汇率
+ * 从中国货币网 F12 → Network → CcprHisNew → 右键 Copy as cURL
+ */
+export function syncFromCurl(curl: string) {
+  return request.post<RateSyncResult>(`${BASE_URL}/sync/curl`, { curl: curl.trim() })
 }
 
 /**

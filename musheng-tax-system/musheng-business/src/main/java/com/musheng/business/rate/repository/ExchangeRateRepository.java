@@ -79,6 +79,16 @@ public interface ExchangeRateRepository {
     boolean existsByCurrencyAndDateExcludeId(String currencyCode, LocalDate date, Long excludeId);
 
     /**
+     * 查询指定日期及之后最早有汇率的记录
+     * 用于节假日顺延：遇假期/周末无汇率时，取下一个有汇率的日期
+     *
+     * @param currencyCode 货币代码
+     * @param date 起始日期（含）
+     * @return 汇率数据实体，不存在返回null
+     */
+    ExchangeRate findEarliestOnOrAfter(String currencyCode, LocalDate date);
+
+    /**
      * 查询指定日期之前最近的汇率
      *
      * @param currencyCode 货币代码

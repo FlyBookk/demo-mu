@@ -68,6 +68,9 @@
           </a-col>
           <a-col :span="6" style="text-align: right">
             <a-space>
+              <a-button type="primary" @click="showSyncModal">
+                <SyncOutlined /> 同步汇率
+              </a-button>
               <a-button type="primary" @click="handleGoImport">
                 <CloudUploadOutlined /> 导入汇率
               </a-button>
@@ -196,6 +199,50 @@
         </template>
       </a-table>
     </a-card>
+
+    <!-- 同步汇率弹窗 -->
+    <a-modal
+      v-model:open="syncModalVisible"
+      title="从中国外汇交易中心同步汇率"
+      :confirm-loading="syncing"
+      width="640px"
+      :ok-text="'开始同步'"
+      @ok="handleSync"
+    >
+      <a-form layout="vertical">
+        <a-alert
+          message="操作步骤"
+          type="info"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #description>
+            <ol style="margin: 0; padding-left: 18px; line-height: 1.8">
+              <li>打开 <a href="https://www.chinamoney.com.cn/chinese/bkccpr/" target="_blank" rel="noopener">中国货币网汇率页面</a></li>
+              <li>按 <strong>F12</strong> 打开浏览器开发者工具，切换到 <strong>Network（网络）</strong> 标签</li>
+              <li>在页面上查询汇率数据，在请求列表中找到 <strong>CcprHisNew</strong> 请求</li>
+              <li>右键该请求 → <strong>Copy</strong> → <strong>Copy as cURL</strong></li>
+              <li>将复制的完整 curl 命令粘贴到下方输入框</li>
+            </ol>
+          </template>
+        </a-alert>
+        <a-form-item label="操作示意图">
+          <img
+            src="@/assets/images/rate-sync-guide.jpg"
+            alt="复制 curl 操作示意"
+            style="max-width: 100%; border-radius: 4px; border: 1px solid #e8e8e8"
+          />
+        </a-form-item>
+        <a-form-item label="粘贴 curl 命令（必填）">
+          <a-textarea
+            v-model:value="syncForm.curl"
+            placeholder="粘贴从浏览器复制的完整 curl 命令，例如：curl 'https://www.chinamoney.com.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew?...' -X 'POST' -H '...' -b '...'"
+            :rows="6"
+            allow-clear
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -212,14 +259,16 @@ import {
   CloudUploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  SwapOutlined
+  SwapOutlined,
+  SyncOutlined
 } from '@ant-design/icons-vue'
 import {
   getRateList,
   deleteRate,
   batchDeleteRates,
   exportRateData,
-  convertCurrency
+  convertCurrency,
+  syncFromCurl
 } from '@/api/rate'
 import { getEnabledCurrencies } from '@/api/currency'
 import type { RateData, RateSource, RateConvertResult } from '@/types/rate'
@@ -231,7 +280,8 @@ const router = useRouter()
 const sourceOptions = [
   { value: 'PBOC', label: '人民银行', color: 'blue' },
   { value: 'MANUAL', label: '手动录入', color: 'default' },
-  { value: 'IMPORT', label: '文件导入', color: 'green' }
+  { value: 'IMPORT', label: '文件导入', color: 'green' },
+  { value: 'CHINA_MONEY', label: '外汇中心', color: 'cyan' }
 ]
 
 function getSourceColor(source: string): string {
@@ -263,6 +313,13 @@ const converter = reactive({
 })
 const converting = ref(false)
 const convertResult = ref<RateConvertResult | null>(null)
+
+// ============= 同步相关 =============
+const syncModalVisible = ref(false)
+const syncing = ref(false)
+const syncForm = reactive({
+  curl: ''
+})
 
 const columns = [
   {
@@ -383,6 +440,41 @@ function handleTableChange(pag: TablePaginationConfig) {
   pagination.current = pag.current || 1
   pagination.pageSize = pag.pageSize || 20
   fetchData()
+}
+
+function showSyncModal() {
+  syncForm.curl = ''
+  syncModalVisible.value = true
+}
+
+async function handleSync() {
+  const curl = syncForm.curl?.trim()
+  if (!curl) {
+    message.warning('请粘贴从浏览器复制的 curl 命令')
+    return
+  }
+  if (!curl.toLowerCase().startsWith('curl')) {
+    message.warning('请粘贴完整的 curl 命令（以 curl 开头）')
+    return
+  }
+
+  syncing.value = true
+  try {
+    const res = await syncFromCurl(curl)
+    const result = res.data
+    if (result?.success) {
+      message.success(result.message || '同步成功')
+      syncModalVisible.value = false
+      fetchData()
+    } else {
+      message.error(result?.message || '同步失败')
+    }
+  } catch (error) {
+    console.error('同步失败:', error)
+    message.error('同步失败，请确认 curl 来自 CcprHisNew 请求且格式正确')
+  } finally {
+    syncing.value = false
+  }
 }
 
 function handleGoImport() {

@@ -6,15 +6,16 @@ import com.musheng.business.common.strategy.ImportContext;
 import com.musheng.business.rate.dto.RateConvertRequest;
 import com.musheng.business.rate.dto.RateConvertResultDTO;
 import com.musheng.business.rate.dto.RateRequest;
+import com.musheng.business.rate.dto.RateWithDateDTO;
 import com.musheng.business.rate.entity.ExchangeRate;
 import com.musheng.business.rate.mapper.ExchangeRateMapper;
-import com.musheng.business.rate.mapper.HolidayMapper;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.musheng.business.rate.repository.ExchangeRateRepository;
 import com.musheng.business.rate.service.RateService;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +23,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -46,23 +46,24 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class RateServiceImpl implements RateService {
 
-    // 使用 Repository 替代直接使用 Mapper
     private final ExchangeRateRepository exchangeRateRepository;
-    
-    // 保留 Mapper 用于 update 操作（Repository 暂不支持）
     private final ExchangeRateMapper exchangeRateMapper;
-    private final HolidayMapper holidayMapper;
-    
-    // 导入策略列表（策略模式）
     private final List<FileImportStrategy<ExchangeRate>> importStrategies;
+    private final Cache<String, Object> exchangeRateCache;
 
-    /**
-     * Maximum days to defer for holiday
-     */
-    private static final int MAX_DEFER_DAYS = 10;
+    private static final String CACHE_KEY_FORMAT = "%s_%s";
+
+    public RateServiceImpl(ExchangeRateRepository exchangeRateRepository,
+                           ExchangeRateMapper exchangeRateMapper,
+                           List<FileImportStrategy<ExchangeRate>> importStrategies,
+                           @Qualifier("exchangeRateCache") Cache<String, Object> exchangeRateCache) {
+        this.exchangeRateRepository = exchangeRateRepository;
+        this.exchangeRateMapper = exchangeRateMapper;
+        this.importStrategies = importStrategies;
+        this.exchangeRateCache = exchangeRateCache;
+    }
 
     @Override
     public Page<ExchangeRate> list(String currencyCode, LocalDate startDate, LocalDate endDate, String source, int page, int size) {
@@ -93,17 +94,13 @@ public class RateServiceImpl implements RateService {
         ExchangeRate rate = new ExchangeRate();
         BeanUtils.copyProperties(request, rate);
 
-        // Set defaults
-        if (rate.getIsWorkday() == null) {
-            rate.setIsWorkday(isWeekend(request.getRateDate()) ? 0 : 1);
-        }
         if (!StringUtils.hasText(rate.getSource())) {
             rate.setSource("MANUAL");
         }
         rate.setActualRateDate(request.getRateDate());
 
-        // ⚠️ 委托给 Repository 保存
         exchangeRateRepository.save(rate);
+        exchangeRateCache.invalidateAll();
         log.info("Created new exchange rate: {} - {} = {}",
                 rate.getCurrencyCode(), rate.getRateDate(), rate.getRate());
 
@@ -128,13 +125,10 @@ public class RateServiceImpl implements RateService {
 
         BeanUtils.copyProperties(request, existing, "id", "createTime", "createUser");
 
-        if (existing.getIsWorkday() == null) {
-            existing.setIsWorkday(isWeekend(request.getRateDate()) ? 0 : 1);
-        }
         existing.setActualRateDate(request.getRateDate());
 
-        // 使用 Mapper 进行更新（Repository 暂不支持 update）
         exchangeRateMapper.updateById(existing);
+        exchangeRateCache.invalidateAll();
         log.info("Updated exchange rate: id={}, {} - {} = {}",
                 id, existing.getCurrencyCode(), existing.getRateDate(), existing.getRate());
 
@@ -145,8 +139,8 @@ public class RateServiceImpl implements RateService {
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         ExchangeRate rate = getById(id);
-        // ⚠️ 委托给 Repository 删除
         exchangeRateRepository.deleteById(id);
+        exchangeRateCache.invalidateAll();
         log.info("Deleted exchange rate: id={}, {} - {}",
                 id, rate.getCurrencyCode(), rate.getRateDate());
     }
@@ -157,36 +151,32 @@ public class RateServiceImpl implements RateService {
         if (ids == null || ids.isEmpty()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "ID列表不能为空");
         }
-        // ⚠️ 委托给 Repository 批量删除
         exchangeRateRepository.deleteByIds(ids);
+        exchangeRateCache.invalidateAll();
         log.info("Batch deleted {} exchange rates", ids.size());
     }
 
     @Override
     public BigDecimal getRate(String currencyCode, String date) {
-        // Parse the date
-        LocalDate queryDate = LocalDate.parse(date);
-
-        // Apply holiday deferral logic - find next workday if current date is holiday/weekend
-        LocalDate actualRateDate = getActualRateDate(queryDate);
-
-        log.debug("Rate query: original date={}, actual rate date={}", date, actualRateDate);
-
-        // ⚠️ 委托给 Repository 查询，逻辑不变
-        ExchangeRate rate = exchangeRateRepository.findByCurrencyAndDate(currencyCode, actualRateDate);
-
-        if (rate == null) {
-            // Try to find the closest rate before the actual date
-            // ⚠️ 委托给 Repository 查询最近的汇率
-            rate = exchangeRateRepository.findLatestBefore(currencyCode, actualRateDate);
+        String cacheKey = String.format(CACHE_KEY_FORMAT, currencyCode, date);
+        ExchangeRate cached = (ExchangeRate) exchangeRateCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            log.debug("Rate cache hit: {}", cacheKey);
+            return cached.getRate();
         }
 
+        LocalDate queryDate = LocalDate.parse(date);
+        ExchangeRate rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, queryDate);
+        if (rate == null) {
+            rate = exchangeRateRepository.findLatestBefore(currencyCode, queryDate);
+        }
         if (rate == null) {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST,
-                    String.format("Exchange rate not found for %s on %s (actual: %s)",
-                            currencyCode, date, actualRateDate));
+                    String.format("未找到汇率：货币 %s，日期 %s 及附近无汇率数据，请先在【汇率管理】中导入或同步该日期的汇率", currencyCode, date));
         }
 
+        exchangeRateCache.put(cacheKey, rate);
+        log.debug("Rate query: date={}, actual rate date={}", date, rate.getRateDate());
         return rate.getRate();
     }
 
@@ -203,81 +193,31 @@ public class RateServiceImpl implements RateService {
         return getRate(sourceCurrency, date);
     }
 
-    /**
-     * Get rate with holiday deferral - returns rate and actual date used
-     *
-     * @param sourceCurrency 源货币代码
-     * @param targetCurrency 目标货币代码
-     * @param date 日期
-     * @return 汇率和实际日期
-     */
-    public RateWithDate getRateWithDate(String sourceCurrency, String targetCurrency, LocalDate date) {
-        LocalDate actualRateDate = getActualRateDate(date);
-        BigDecimal rate = getRate(sourceCurrency, targetCurrency, actualRateDate.toString());
-        return new RateWithDate(rate, actualRateDate);
-    }
-
-    /**
-     * Get actual rate date after applying holiday deferral logic
-     * If the date is a weekend or holiday, defer to the next workday
-     *
-     * @param date 原始日期
-     * @return 实际汇率日期（工作日）
-     */
-    private LocalDate getActualRateDate(LocalDate date) {
-        LocalDate currentDate = date;
-        int deferCount = 0;
-
-        while (deferCount < MAX_DEFER_DAYS) {
-            // Check if it's a weekend
-            if (isWeekend(currentDate)) {
-                currentDate = currentDate.plusDays(1);
-                deferCount++;
-                continue;
-            }
-
-            // Check if it's a holiday in database
-            if (isHoliday(currentDate)) {
-                currentDate = currentDate.plusDays(1);
-                deferCount++;
-                continue;
-            }
-
-            // Found a workday
-            break;
+    @Override
+    public RateWithDateDTO getRateWithDate(String currencyCode, LocalDate date) {
+        String cacheKey = String.format(CACHE_KEY_FORMAT, currencyCode, date);
+        ExchangeRate cached = (ExchangeRate) exchangeRateCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            log.debug("Rate cache hit: {}", cacheKey);
+            return RateWithDateDTO.builder()
+                    .rate(cached.getRate())
+                    .actualDate(cached.getRateDate())
+                    .build();
         }
 
-        if (deferCount >= MAX_DEFER_DAYS) {
-            log.warn("Reached max defer days for rate date: original={}, final={}", date, currentDate);
+        ExchangeRate rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, date);
+        if (rate == null) {
+            rate = exchangeRateRepository.findLatestBefore(currencyCode, date);
         }
-
-        return currentDate;
-    }
-
-    /**
-     * Check if date is a weekend
-     *
-     * @param date 日期
-     * @return 是否为周末
-     */
-    private boolean isWeekend(LocalDate date) {
-        DayOfWeek dayOfWeek = date.getDayOfWeek();
-        return dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY;
-    }
-
-    /**
-     * Check if date is a holiday (from database)
-     *
-     * @param date 日期
-     * @return 是否为节假日
-     */
-    private boolean isHoliday(LocalDate date) {
-        try {
-            return holidayMapper.isHoliday(date);
-        } catch (Exception e) {
-            log.warn("Failed to check holiday for date: {}, assuming not holiday", date, e);
-            return false;
+        if (rate == null) {
+            throw new BusinessException(ErrorCode.DATA_NOT_EXIST,
+                    String.format("未找到汇率：货币 %s，日期 %s 及附近无汇率数据，请先在【汇率管理】中导入或同步该日期的汇率", currencyCode, date));
         }
+        exchangeRateCache.put(cacheKey, rate);
+        return RateWithDateDTO.builder()
+                .rate(rate.getRate())
+                .actualDate(rate.getRateDate())
+                .build();
     }
 
     @Override
@@ -298,9 +238,10 @@ public class RateServiceImpl implements RateService {
                         "Unsupported file format. Please use .xlsx, .xls or .csv file"));
 
         log.info("Using import strategy: {}", strategy.getClass().getSimpleName());
-        
-        // 委托给策略执行导入
-        return strategy.importAndSave(file, new ImportContext());
+
+        Map<String, Object> result = strategy.importAndSave(file, new ImportContext());
+        exchangeRateCache.invalidateAll();
+        return result;
     }
 
     @Override
@@ -350,8 +291,4 @@ public class RateServiceImpl implements RateService {
                 .build();
     }
 
-    /**
-     * Rate with date result
-     */
-    public record RateWithDate(BigDecimal rate, LocalDate actualDate) {}
 }

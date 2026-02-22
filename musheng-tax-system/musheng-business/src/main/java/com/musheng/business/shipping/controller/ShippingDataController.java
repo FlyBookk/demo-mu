@@ -67,6 +67,15 @@ public class ShippingDataController {
         return Result.success(importResult);
     }
 
+    @OperationLog(module = "配送数据", operation = "批量导入配送数据")
+    @Operation(summary = "批量导入配送数据", description = "从多个文件批量导入配送数据，支持多选")
+    @PostMapping("/batch-import")
+    public Result<Map<String, Object>> batchImportData(
+            @Parameter(description = "导入文件列表") @RequestParam("files") List<MultipartFile> files) {
+        Map<String, Object> batchResult = shippingDataService.batchImportData(files);
+        return Result.success(batchResult);
+    }
+
     @OperationLog(module = "配送数据", operation = "删除配送数据")
     @Operation(summary = "删除配送数据", description = "根据ID删除配送数据")
     @DeleteMapping("/{id}")

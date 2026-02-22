@@ -22,6 +22,9 @@ public class FieldMappingTemplateQueryRequest {
     @Schema(description = "Is default template")
     private Boolean isDefault;
 
+    @Schema(description = "是否在列表中显示")
+    private Boolean isVisible;
+
     @Schema(description = "Page number (1-based)", example = "1")
     private Integer page = 1;
 

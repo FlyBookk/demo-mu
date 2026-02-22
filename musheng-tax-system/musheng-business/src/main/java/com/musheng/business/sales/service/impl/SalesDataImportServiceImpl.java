@@ -27,6 +27,9 @@ import com.musheng.config.mapping.mapper.FieldMappingTemplateMapper;
 import com.musheng.config.mapping.mapper.TransactionTypeMappingMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
+import com.musheng.config.marketplace.dto.MarketplaceRequest;
+import com.musheng.config.marketplace.service.MarketplaceService;
+import com.musheng.business.common.config.ImportConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -44,6 +47,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -82,6 +86,8 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     private final SalesDataParserFactory parserFactory;
     private final com.musheng.business.rate.service.RateService rateService;
     private final SqlSessionFactory sqlSessionFactory;
+    private final ImportConfig importConfig;
+    private final MarketplaceService marketplaceService;
     
     // 文件缓存（临时存储上传的文件信息）
     private final Map<String, UploadedFileCache> uploadedFileCache = new ConcurrentHashMap<>();
@@ -145,7 +151,12 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             Marketplace marketplace = marketplaceMapper.selectOne(mpWrapper);
 
             if (marketplace == null) {
-                throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found: " + siteCode);
+                if (importConfig.isAutoCreateMarketplace()) {
+                    marketplace = autoCreateMarketplace(siteCode);
+                    log.info("Auto-created marketplace for siteCode: {}", siteCode);
+                } else {
+                    throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found: " + siteCode);
+                }
             }
 
             // Get field mapping template
@@ -174,28 +185,68 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
 
                     CSVParser parser = CSVFormat.DEFAULT.parse(dataReader);
 
+                    // Step 1: 解析所有记录到列表（避免 N+1）
+                    List<SalesData> parsedRecords = new ArrayList<>();
+                    Map<Integer, String> rowErrorMap = new HashMap<>();
+
                     for (CSVRecord record : parser) {
                         totalCount++;
                         try {
                             SalesData salesData = parseSalesRecord(record, headers, fieldMapping,
                                     transactionTypeMapping, siteCode, marketplace, totalCount);
-
                             if (salesData != null) {
-                                // Check for duplicate
-                                if (!isDuplicate(salesData)) {
-                                    salesData.setShopId(shopId);
-                                    salesData.setImportBatchId(importRecord.getId());
-                                    salesDataRepository.save(salesData);
-                                    successCount++;
-                                } else {
-                                    failCount++;
-                                    errors.add(String.format("Row %d: Duplicate order %s", totalCount, salesData.getOrderId()));
-                                }
+                                salesData.setShopId(shopId);
+                                salesData.setImportBatchId(importRecord.getId());
+                                parsedRecords.add(salesData);
                             }
                         } catch (Exception e) {
                             failCount++;
-                            errors.add(String.format("Row %d: %s", totalCount, e.getMessage()));
-                            log.warn("Failed to import sales data at row {}: {}", totalCount, e.getMessage());
+                            rowErrorMap.put(totalCount, e.getMessage());
+                            log.warn("Failed to parse sales data at row {}: {}", totalCount, e.getMessage());
+                        }
+                    }
+
+                    log.info("Parsed {} valid records from {} total rows", parsedRecords.size(), totalCount);
+
+                    // Step 2: 批量检查重复（单次查询）
+                    Set<String> existingKeys = batchCheckDuplicatesSimple(parsedRecords);
+                    List<SalesData> toInsert = new ArrayList<>();
+                    int duplicateCount = 0;
+
+                    for (SalesData data : parsedRecords) {
+                        String uniqueKey = buildUnifiedUniqueKey(data);
+                        if (existingKeys.contains(uniqueKey)) {
+                            duplicateCount++;
+                            if (errors.size() < 10) {
+                                errors.add(String.format("Duplicate: order=%s, site=%s, category=%s, sku=%s",
+                                        data.getOrderId(), data.getSiteCode(), data.getTransactionCategory(), data.getSku()));
+                            }
+                        } else {
+                            toInsert.add(data);
+                        }
+                    }
+
+                    log.info("Duplicate check completed: {} to insert, {} duplicates", toInsert.size(), duplicateCount);
+                    failCount += duplicateCount;
+
+                    // Step 3: 预热汇率缓存 + 填充汇率
+                    preloadExchangeRateCache(toInsert);
+                    for (SalesData data : toInsert) {
+                        fillExchangeRate(data);
+                    }
+                    log.info("Exchange rates filled for {} records", toInsert.size());
+
+                    // Step 4: 批量插入（使用 SqlSession BATCH 模式）
+                    if (!toInsert.isEmpty()) {
+                        int inserted = executeBatchInsert(toInsert, errors, 1);
+                        successCount = inserted;
+                        failCount += toInsert.size() - inserted;
+                    }
+
+                    // 添加解析错误到错误列表
+                    for (Map.Entry<Integer, String> entry : rowErrorMap.entrySet()) {
+                        if (errors.size() < 10) {
+                            errors.add(String.format("Row %d: %s", entry.getKey(), entry.getValue()));
                         }
                     }
                 }
@@ -533,17 +584,21 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             
             List<SalesData> dataList = parseResult.getDataList();
 
-            // 批量设置额外字段和汇率
+            // 批量设置额外字段
             for (SalesData data : dataList) {
                 data.setShopId(shopId);
                 data.setImportBatchId(importRecord.getId());
                 data.setSourceType(request.getSourceType().getCode());
+            }
+
+            // 预热汇率缓存 + 填充汇率
+            preloadExchangeRateCache(dataList);
+            for (SalesData data : dataList) {
                 fillExchangeRate(data);
             }
             
-            // 批量检查重复
-            boolean isErpData = SalesSourceType.ERP.equals(request.getSourceType());
-            Set<String> existingOrderKeys = batchCheckDuplicates(dataList, isErpData);
+            // 批量检查重复（按 订单+站点+transaction_category+SKU 校验，防止原始数据与ERP数据重复）
+            Set<String> existingOrderKeys = batchCheckDuplicatesUnified(dataList);
             
             // 分批处理数据
             List<SalesData> batchToInsert = new ArrayList<>();
@@ -551,22 +606,19 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             
             for (int i = 0; i < dataList.size(); i++) {
                 SalesData data = dataList.get(i);
-                String orderKey = buildOrderKey(data, isErpData);
+                String orderKey = buildUnifiedUniqueKey(data);
                 
-                // 检查重复
+                // 检查重复（不支持覆盖导入，存在即拒绝）
                 if (existingOrderKeys.contains(orderKey)) {
                     if (Boolean.TRUE.equals(request.getSkipDuplicate())) {
                         skipCount++;
                         continue;
-                    } else if (Boolean.TRUE.equals(request.getOverwriteDuplicate())) {
-                        deleteExistingData(data, isErpData);
                     } else {
                         failCount++;
                         if (errors.size() < 100) {
-                            String keyInfo = isErpData 
-                                    ? String.format("结算编号%s+订单%s+来源%s", data.getSettlementId(), data.getOrderId(), data.getTransactionType())
-                                    : String.format("订单%s", data.getOrderId());
-                            errors.add(String.format("第%d行: %s已存在", i + 1, keyInfo));
+                            String keyInfo = String.format("订单%s+站点%s+分类%s+SKU%s",
+                                    data.getOrderId(), data.getSiteCode(), data.getTransactionCategory(), data.getSku());
+                            errors.add(String.format("第%d行: %s已存在，不支持覆盖导入", i + 1, keyInfo));
                         }
                         continue;
                     }
@@ -884,10 +936,126 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     }
 
     /**
+     * 批量检查重复（简单CSV导入路径）
+     * 使用统一唯一键，避免与 ERP 数据重复
+     */
+    private Set<String> batchCheckDuplicatesSimple(List<SalesData> records) {
+        return batchCheckDuplicatesUnified(records);
+    }
+
+    /**
+     * 统一重复校验：按 订单+站点+交易分类(transaction_category)+SKU 判定重复
+     * 同时覆盖原始数据和 ERP 数据，防止跨来源重复
+     */
+    private Set<String> batchCheckDuplicatesUnified(List<SalesData> records) {
+        Set<String> existingKeys = new HashSet<>();
+        if (records == null || records.isEmpty()) {
+            return existingKeys;
+        }
+
+        Long shopId = ShopContext.requireShopId();
+
+        // 提取 orderIds 和 siteCodes
+        Set<String> orderIds = records.stream()
+                .map(SalesData::getOrderId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        Set<String> siteCodes = records.stream()
+                .map(SalesData::getSiteCode)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        if (orderIds.isEmpty()) {
+            return existingKeys;
+        }
+
+        List<String> orderIdList = new ArrayList<>(orderIds);
+        int batchSize = 500;
+
+        for (int i = 0; i < orderIdList.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, orderIdList.size());
+            List<String> batch = orderIdList.subList(i, end);
+
+            LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(SalesData::getShopId, shopId)
+                    .in(SalesData::getOrderId, batch);
+            if (!siteCodes.isEmpty()) {
+                wrapper.in(SalesData::getSiteCode, siteCodes);
+            }
+            wrapper.select(SalesData::getOrderId, SalesData::getSiteCode,
+                    SalesData::getTransactionCategory, SalesData::getSku);
+
+            List<SalesData> existing = salesDataMapper.selectList(wrapper);
+            for (SalesData data : existing) {
+                existingKeys.add(buildUnifiedUniqueKey(data));
+            }
+        }
+
+        log.info("Batch duplicate check (unified): found {} existing records for orderId+siteCode+transactionCategory+sku", existingKeys.size());
+        return existingKeys;
+    }
+
+    /**
+     * 构建统一唯一键：订单+站点+交易分类(transaction_category)+SKU
+     * 用于跨来源（原始数据/ERP）重复校验
+     */
+    private String buildUnifiedUniqueKey(SalesData data) {
+        return String.format("%s|%s|%s|%s",
+                data.getOrderId() != null ? data.getOrderId() : "",
+                data.getSiteCode() != null ? data.getSiteCode() : "",
+                data.getTransactionCategory() != null ? data.getTransactionCategory() : "",
+                data.getSku() != null ? data.getSku() : "");
+    }
+
+    /**
      * 生成批次号
      */
     private String generateBatchNo() {
         return "SALES-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * 预热汇率缓存（批量查询去重的 currencyCode+date 组合）
+     * 避免在 fillExchangeRate 循环中产生 N 次 DB 查询
+     */
+    private void preloadExchangeRateCache(List<SalesData> dataList) {
+        if (dataList == null || dataList.isEmpty()) {
+            return;
+        }
+
+        // 收集唯一的 (currencyCode, date) 组合
+        Set<String> uniquePairs = new HashSet<>();
+        for (SalesData data : dataList) {
+            if (data.getTransactionDate() != null && StringUtils.hasText(data.getCurrencyCode())) {
+                String currencyCode = data.getCurrencyCode();
+                if (!"CNY".equalsIgnoreCase(currencyCode)) {
+                    LocalDate date = data.getTransactionDate().toLocalDate();
+                    uniquePairs.add(currencyCode + "|" + date);
+                }
+            }
+        }
+
+        if (uniquePairs.isEmpty()) {
+            return;
+        }
+
+        log.info("Preloading exchange rate cache for {} unique (currency, date) pairs", uniquePairs.size());
+
+        // 预热缓存：逐个查询（每个组合只查一次，后续 fillExchangeRate 会命中缓存）
+        int loadedCount = 0;
+        for (String pair : uniquePairs) {
+            String[] parts = pair.split("\\|");
+            String currencyCode = parts[0];
+            LocalDate date = LocalDate.parse(parts[1]);
+            try {
+                rateService.getRateWithDate(currencyCode, date);
+                loadedCount++;
+            } catch (Exception e) {
+                log.warn("Failed to preload rate for {}/{}: {}", currencyCode, date, e.getMessage());
+            }
+        }
+
+        log.info("Exchange rate cache preloaded: {}/{} pairs", loadedCount, uniquePairs.size());
     }
 
     /**
@@ -907,20 +1075,13 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             return;
         }
 
-        try {
-            java.time.LocalDate transactionDate = data.getTransactionDate().toLocalDate();
-            BigDecimal rate = rateService.getRate(data.getCurrencyCode(), transactionDate.toString());
-            data.setExchangeRate(rate);
-            data.setExchangeRateDate(transactionDate);
+        java.time.LocalDate transactionDate = data.getTransactionDate().toLocalDate();
+        var rateWithDate = rateService.getRateWithDate(data.getCurrencyCode(), transactionDate);
+        data.setExchangeRate(rateWithDate.getRate());
+        data.setExchangeRateDate(rateWithDate.getActualDate());
 
-            log.debug("Exchange rate filled: currency={}, date={}, rate={}",
-                    data.getCurrencyCode(), transactionDate, rate);
-        } catch (Exception e) {
-            log.warn("Failed to get exchange rate for currency={}, date={}: {}",
-                    data.getCurrencyCode(), data.getTransactionDate(), e.getMessage());
-            data.setExchangeRate(null);
-            data.setExchangeRateDate(null);
-        }
+        log.debug("Exchange rate filled: currency={}, txDate={}, rate={}, actualRateDate={}",
+                data.getCurrencyCode(), transactionDate, rateWithDate.getRate(), rateWithDate.getActualDate());
     }
 
     /**
@@ -1067,95 +1228,6 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     }
 
     /**
-     * 删除已存在的数据（用于覆盖导入）
-     */
-    private void deleteExistingData(SalesData data, boolean isErpData) {
-        LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-        
-        // settlementId
-        if (data.getSettlementId() != null && !data.getSettlementId().isEmpty()) {
-            wrapper.eq(SalesData::getSettlementId, data.getSettlementId());
-        } else {
-            wrapper.and(w -> w.isNull(SalesData::getSettlementId).or().eq(SalesData::getSettlementId, ""));
-        }
-        
-        // orderId
-        if (data.getOrderId() != null && !data.getOrderId().isEmpty()) {
-            wrapper.eq(SalesData::getOrderId, data.getOrderId());
-        } else {
-            wrapper.and(w -> w.isNull(SalesData::getOrderId).or().eq(SalesData::getOrderId, ""));
-        }
-        
-        // transactionType
-        if (data.getTransactionType() != null && !data.getTransactionType().isEmpty()) {
-            wrapper.eq(SalesData::getTransactionType, data.getTransactionType());
-        } else {
-            wrapper.and(w -> w.isNull(SalesData::getTransactionType).or().eq(SalesData::getTransactionType, ""));
-        }
-        
-        // sku
-        if (data.getSku() != null && !data.getSku().isEmpty()) {
-            wrapper.eq(SalesData::getSku, data.getSku());
-        } else {
-            wrapper.and(w -> w.isNull(SalesData::getSku).or().eq(SalesData::getSku, ""));
-        }
-        
-        salesDataMapper.delete(wrapper);
-    }
-
-    /**
-     * 批量检查重复数据
-     */
-    private Set<String> batchCheckDuplicates(List<SalesData> dataList, boolean isErpData) {
-        Set<String> existingKeys = new HashSet<>();
-        
-        if (dataList == null || dataList.isEmpty()) {
-            return existingKeys;
-        }
-        
-        Set<String> settlementIds = dataList.stream()
-                .map(SalesData::getSettlementId)
-                .filter(id -> id != null && !id.isEmpty())
-                .collect(Collectors.toSet());
-        
-        if (settlementIds.isEmpty()) {
-            return existingKeys;
-        }
-        
-        List<String> settlementIdList = new ArrayList<>(settlementIds);
-        int batchSize = 500;
-        
-        for (int i = 0; i < settlementIdList.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, settlementIdList.size());
-            List<String> batch = settlementIdList.subList(i, end);
-            
-            LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-            wrapper.in(SalesData::getSettlementId, batch)
-                    .select(SalesData::getSettlementId, SalesData::getOrderId, 
-                            SalesData::getTransactionType, SalesData::getSku);
-            
-            List<SalesData> existingData = salesDataMapper.selectList(wrapper);
-            
-            for (SalesData data : existingData) {
-                existingKeys.add(buildOrderKey(data, isErpData));
-            }
-        }
-        
-        return existingKeys;
-    }
-
-    /**
-     * 构建订单唯一 key
-     */
-    private String buildOrderKey(SalesData data, boolean isErpData) {
-        return String.format("%s|%s|%s|%s", 
-                data.getSettlementId() != null ? data.getSettlementId() : "",
-                data.getOrderId() != null ? data.getOrderId() : "",
-                data.getTransactionType() != null ? data.getTransactionType() : "",
-                data.getSku() != null ? data.getSku() : "");
-    }
-
-    /**
      * 执行批量插入
      */
     private int executeBatchInsert(List<SalesData> batchList, List<String> errors, int startRow) {
@@ -1207,6 +1279,46 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             case "partial" -> "PARTIAL";
             case "fail" -> "FAIL";
             default -> "PENDING";
+        };
+    }
+
+    /**
+     * 自动创建站点（当 import.auto-create-marketplace=true 时）
+     */
+    private Marketplace autoCreateMarketplace(String siteCode) {
+        String currencyCode = mapSiteCodeToCurrency(siteCode);
+
+        MarketplaceRequest request = new MarketplaceRequest();
+        request.setSiteCode(siteCode);
+        request.setSiteName(siteCode);
+        request.setMarketplaceId("AUTO_" + siteCode);
+        request.setCurrencyCode(currencyCode);
+        request.setStatus(1);
+
+        return marketplaceService.create(request);
+    }
+
+    /**
+     * 根据站点编码推断默认货币
+     */
+    private String mapSiteCodeToCurrency(String siteCode) {
+        if (siteCode == null) {
+            return "USD";
+        }
+        return switch (siteCode.toUpperCase()) {
+            case "US" -> "USD";
+            case "CA" -> "CAD";
+            case "MX" -> "MXN";
+            case "UK", "GB" -> "GBP";
+            case "DE", "FR", "IT", "ES", "NL", "BE", "AT", "PL" -> "EUR";
+            case "JP" -> "JPY";
+            case "AU" -> "AUD";
+            case "SG" -> "SGD";
+            case "AE", "SA" -> "AED";
+            case "IN" -> "INR";
+            case "BR" -> "BRL";
+            case "SE" -> "SEK";
+            default -> "USD";
         };
     }
 }

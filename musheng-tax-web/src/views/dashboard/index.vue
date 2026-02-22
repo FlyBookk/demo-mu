@@ -1,8 +1,19 @@
 <template>
   <div class="dashboard-page">
     <div class="page-header">
-      <h1 class="page-title">首页</h1>
-      <p class="page-desc">{{ dashboardData.currentQuarter }} 数据概览</p>
+      <div class="header-left">
+        <h1 class="page-title">首页</h1>
+        <p class="page-desc">{{ dashboardData.currentQuarter }} 数据概览</p>
+      </div>
+      <div class="header-right">
+        <a-select
+          v-model:value="selectedQuarter"
+          placeholder="选择季度"
+          style="width: 140px"
+          :options="quarterOptions"
+          @change="handleQuarterChange"
+        />
+      </div>
     </div>
 
     <!-- 统计卡片 -->
@@ -142,6 +153,39 @@ import { getImportRecordList } from '@/api/importRecord'
 
 const router = useRouter()
 
+// 季度选择
+/** 获取上一季度（首页默认展示） */
+function getPreviousQuarter(): string {
+  const now = new Date()
+  let year = now.getFullYear()
+  let month = now.getMonth() + 1
+  let q = Math.ceil(month / 3)
+  q--
+  if (q < 1) {
+    q = 4
+    year--
+  }
+  return `${year}-Q${q}`
+}
+
+function generateQuarterOptions(): { label: string; value: string }[] {
+  const options: { label: string; value: string }[] = []
+  let year = new Date().getFullYear()
+  let q = Math.ceil((new Date().getMonth() + 1) / 3)
+  for (let i = 0; i < 8; i++) {
+    options.push({ label: `${year}年 Q${q}`, value: `${year}-Q${q}` })
+    q--
+    if (q < 1) {
+      q = 4
+      year--
+    }
+  }
+  return options
+}
+
+const quarterOptions = generateQuarterOptions()
+const selectedQuarter = ref<string>(getPreviousQuarter())
+
 // 数据
 const loading = ref(false)
 const importLoading = ref(false)
@@ -189,7 +233,7 @@ function formatGrowth(rate: number): string {
 async function fetchDashboard() {
   loading.value = true
   try {
-    const res = await getDashboardData()
+    const res = await getDashboardData(selectedQuarter.value)
     if (res.data) {
       Object.assign(dashboardData, res.data)
       await nextTick()
@@ -200,6 +244,10 @@ async function fetchDashboard() {
   } finally {
     loading.value = false
   }
+}
+
+function handleQuarterChange() {
+  fetchDashboard()
 }
 
 async function fetchRecentImports() {
@@ -363,18 +411,27 @@ onMounted(() => {
   padding: 24px;
 
   .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
     margin-bottom: 24px;
 
-    .page-title {
-      font-size: 20px;
-      font-weight: 500;
-      margin: 0 0 4px 0;
+    .header-left {
+      .page-title {
+        font-size: 20px;
+        font-weight: 500;
+        margin: 0 0 4px 0;
+      }
+
+      .page-desc {
+        color: #999;
+        font-size: 14px;
+        margin: 0;
+      }
     }
 
-    .page-desc {
-      color: #999;
-      font-size: 14px;
-      margin: 0;
+    .header-right {
+      flex-shrink: 0;
     }
   }
 

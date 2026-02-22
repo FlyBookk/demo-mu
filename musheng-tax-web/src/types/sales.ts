@@ -47,6 +47,7 @@ export interface SalesData {
 // 销售数据查询参数
 export interface SalesDataQuery {
   keyword?: string
+  sourceType?: string    // 数据来源(ORIGINAL/ERP)
   siteCode?: string
   settlementId?: string  // 结算ID
   transactionType?: string

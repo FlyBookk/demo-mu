@@ -35,6 +35,12 @@
             <artifactId>easyexcel</artifactId>
         </dependency>
 
+        <!-- Caffeine 本地缓存（汇率查询缓存，避免批量导入 N+1） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

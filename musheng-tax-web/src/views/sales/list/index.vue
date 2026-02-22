@@ -34,6 +34,20 @@
             </a-form-item>
           </a-col>
           <a-col :span="3">
+            <a-form-item label="数据来源">
+              <a-select
+                v-model:value="searchForm.sourceType"
+                placeholder="全部"
+                allow-clear
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option value="ORIGINAL">原始数据</a-select-option>
+                <a-select-option value="ERP">ERP结算</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="3">
             <a-form-item label="站点">
               <a-select
                 v-model:value="searchForm.siteCode"
@@ -174,6 +188,13 @@
             </a-typography-text>
           </template>
 
+          <!-- 数据来源 -->
+          <template v-else-if="column.key === 'sourceType'">
+            <a-tag :color="record.sourceType === 'ERP' ? 'purple' : 'cyan'">
+              {{ record.sourceType === 'ERP' ? 'ERP结算' : '原始数据' }}
+            </a-tag>
+          </template>
+
           <!-- 站点 -->
           <template v-else-if="column.key === 'siteCode'">
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
@@ -234,6 +255,11 @@
         <a-descriptions-item label="订单号" :span="2">
           <a-typography-text copyable>{{ detailData.orderId }}</a-typography-text>
         </a-descriptions-item>
+        <a-descriptions-item label="数据来源">
+          <a-tag :color="detailData.sourceType === 'ERP' ? 'purple' : 'cyan'">
+            {{ detailData.sourceType === 'ERP' ? 'ERP结算数据' : '亚马逊原始数据' }}
+          </a-tag>
+        </a-descriptions-item>
         <a-descriptions-item label="站点">{{ detailData.siteCode }}</a-descriptions-item>
         <a-descriptions-item label="Marketplace">{{ detailData.marketplace }}</a-descriptions-item>
         <a-descriptions-item label="交易日期">{{ formatDate(detailData.transactionDate) }}</a-descriptions-item>
@@ -274,6 +300,7 @@
         </a-descriptions-item>
         <!-- 汇率信息 -->
         <a-descriptions-item label="汇率">{{ detailData.exchangeRate ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="汇率取值日期">{{ detailData.exchangeRateDate ?? '-' }}</a-descriptions-item>
         <a-descriptions-item label="导入时间">{{ detailData.createTime }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
@@ -362,6 +389,7 @@ function formatDate(dateStr?: string): string {
 // ============= 搜索相关 =============
 const searchForm = reactive({
   keyword: '',
+  sourceType: undefined as string | undefined,
   siteCode: undefined as string | undefined,
   transactionCategory: undefined as string | undefined,
   settlementId: ''
@@ -401,6 +429,12 @@ const columns = [
     key: 'settlementId',
     width: 130,
     ellipsis: true
+  },
+  {
+    title: '数据来源',
+    dataIndex: 'sourceType',
+    key: 'sourceType',
+    width: 100
   },
   {
     title: '站点',
@@ -483,6 +517,12 @@ const columns = [
     align: 'right' as const
   },
   {
+    title: '汇率取值日期',
+    dataIndex: 'exchangeRateDate',
+    key: 'exchangeRateDate',
+    width: 120
+  },
+  {
     title: '操作',
     key: 'action',
     width: 120,
@@ -544,6 +584,7 @@ async function fetchData() {
   try {
     const params = {
       keyword: searchForm.keyword || undefined,
+      sourceType: searchForm.sourceType,
       siteCode: searchForm.siteCode,
       settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
@@ -567,6 +608,7 @@ async function fetchSummary() {
   try {
     const params = {
       keyword: searchForm.keyword || undefined,
+      sourceType: searchForm.sourceType,
       siteCode: searchForm.siteCode,
       settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
@@ -588,6 +630,7 @@ function handleSearch() {
 
 function handleReset() {
   searchForm.keyword = ''
+  searchForm.sourceType = undefined
   searchForm.siteCode = undefined
   searchForm.transactionCategory = undefined
   searchForm.settlementId = ''

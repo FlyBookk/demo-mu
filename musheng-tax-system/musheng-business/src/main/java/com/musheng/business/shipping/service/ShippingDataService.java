@@ -44,6 +44,14 @@ public interface ShippingDataService {
     Map<String, Object> importData(MultipartFile file);
 
     /**
+     * 批量导入配送数据（支持多选文件）
+     *
+     * @param files 导入文件列表
+     * @return 批量导入结果
+     */
+    Map<String, Object> batchImportData(List<MultipartFile> files);
+
+    /**
      * 删除配送数据
      *
      * @param id 实体ID

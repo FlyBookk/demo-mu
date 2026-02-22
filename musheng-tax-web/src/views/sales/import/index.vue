@@ -308,13 +308,10 @@
           </div>
         </a-spin>
 
-        <!-- 导入选项 -->
+        <!-- 导入选项（不支持覆盖导入，存在数据仅可跳过） -->
         <div class="import-options">
           <a-checkbox v-model:checked="importOptions.skipDuplicate">
             跳过重复数据
-          </a-checkbox>
-          <a-checkbox v-model:checked="importOptions.overwriteDuplicate" :disabled="importOptions.skipDuplicate">
-            覆盖重复数据
           </a-checkbox>
         </div>
       </div>
@@ -519,8 +516,7 @@ const importing = ref(false)
 const importResult = ref<SalesImportResult | null>(null)
 const showResultModal = ref(false)
 const importOptions = reactive({
-  skipDuplicate: true,
-  overwriteDuplicate: false
+  skipDuplicate: true
 })
 
 // 导入确认弹窗引用
@@ -722,8 +718,7 @@ async function doExecuteImport() {
       siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
       templateId: formState.templateId!,
       quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q'),
-      skipDuplicate: importOptions.skipDuplicate,
-      overwriteDuplicate: importOptions.overwriteDuplicate
+      skipDuplicate: importOptions.skipDuplicate
     })
     importResult.value = res.data
     showResultModal.value = true

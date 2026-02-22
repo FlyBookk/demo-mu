@@ -122,6 +122,13 @@ app:
     purchase-ratio: 0.96
     rate-defer-max-days: 10
 
+  # Import Configuration
+  import:
+    # 自动创建站点（当导入数据中的 siteCode 不存在时）
+    auto-create-marketplace: false
+    # 自动创建货币（当导入数据中的 currencyCode 不存在时）
+    auto-create-currency: false
+
 # Rate Sync Configuration
 rate:
   sync:

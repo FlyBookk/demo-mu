@@ -15,9 +15,10 @@ public interface TaxReportService {
     /**
      * 获取首页仪表盘数据
      *
+     * @param quarter 季度(格式:2024-Q1，不传则默认当前季度)
      * @return 仪表盘数据
      */
-    DashboardData getDashboardData();
+    DashboardData getDashboardData(String quarter);
 
     /**
      * 查询报税汇总数据

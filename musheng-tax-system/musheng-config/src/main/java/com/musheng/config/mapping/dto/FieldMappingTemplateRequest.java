@@ -40,4 +40,7 @@ public class FieldMappingTemplateRequest {
 
     @Schema(description = "是否默认模板", example = "false")
     private Boolean isDefault;
+
+    @Schema(description = "是否在列表中显示", example = "true")
+    private Boolean isVisible;
 }

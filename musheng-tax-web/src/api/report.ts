@@ -47,9 +47,10 @@ export interface DashboardData {
 
 /**
  * 获取首页仪表盘数据
+ * @param quarter 季度(格式:2024-Q1，不传则默认当前季度)
  */
-export function getDashboardData() {
-  return request.get<DashboardData>(`${BASE_URL}/dashboard`)
+export function getDashboardData(quarter?: string) {
+  return request.get<DashboardData>(`${BASE_URL}/dashboard`, quarter ? { quarter } : undefined)
 }
 
 // ============= 报税汇总接口 =============

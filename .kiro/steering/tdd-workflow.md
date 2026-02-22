@@ -122,10 +122,11 @@ git commit -m "feat: 实现 getUserById 方法"
 7. COMMIT: git commit -m "feat: 缓存未命中时从数据库加载"
 ```
 
-## 与 QuickCEP 规范集成
+## 与慕声税务系统规范集成
 
 TDD 过程中仍需遵守：
-- 使用 `@Resource` 注入依赖
+- 使用 `@Resource` 或 `@Autowired` 注入依赖
 - 使用 `StringUtils`/`CollectionUtils` 判断
-- 使用 `ResponseResult` 封装响应
-- 添加标准方法注释
+- 使用 `Result` 封装响应
+- 添加标准方法注释（包含 @author 和时间）
+- 使用中文注释

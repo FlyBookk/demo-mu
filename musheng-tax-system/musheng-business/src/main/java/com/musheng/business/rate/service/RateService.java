@@ -78,6 +78,16 @@ public interface RateService {
     BigDecimal getRate(String currencyCode, String date);
 
     /**
+     * 根据货币编码和日期获取汇率及实际取值日期
+     * 交易日期无汇率时从汇率表顺延到下一个有汇率的日期
+     *
+     * @param currencyCode 货币编码
+     * @param date         查询日期
+     * @return 汇率及实际取值日期（来自汇率表的 rate_date）
+     */
+    com.musheng.business.rate.dto.RateWithDateDTO getRateWithDate(String currencyCode, LocalDate date);
+
+    /**
      * 从文件导入汇率
      *
      * @param file 导入文件

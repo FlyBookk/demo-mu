@@ -91,6 +91,16 @@ public class ExchangeRateRepositoryImpl implements ExchangeRateRepository {
     }
 
     @Override
+    public ExchangeRate findEarliestOnOrAfter(String currencyCode, LocalDate date) {
+        LambdaQueryWrapper<ExchangeRate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ExchangeRate::getCurrencyCode, currencyCode)
+                .ge(ExchangeRate::getRateDate, date)
+                .orderByAsc(ExchangeRate::getRateDate)
+                .last("LIMIT 1");
+        return exchangeRateMapper.selectOne(wrapper);
+    }
+
+    @Override
     public ExchangeRate findLatestBefore(String currencyCode, LocalDate date) {
         // ⚠️ 逻辑与原 RateServiceImpl.getRate() 方法中的回退查询完全一致
         LambdaQueryWrapper<ExchangeRate> wrapper = new LambdaQueryWrapper<>();

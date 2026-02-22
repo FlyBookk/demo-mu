@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: "**/*Controller.java,**/*Api.java,**/controller/**/*.java,**/facade/**/*.java"
+fileMatchPattern: "**/*Controller.java,**/*Api.java,**/controller/**/*.java"
 ---
 
 # API 设计规范
@@ -11,84 +11,114 @@ fileMatchPattern: "**/*Controller.java,**/*Api.java,**/controller/**/*.java,**/f
 
 ```java
 @RestController
-@RequestMapping("/{resource}")
-@Api(tags = "{资源}API")
-public class {Resource}Api {
+@RequestMapping("/v1/{resource}")
+@Tag(name = "{资源}管理")
+@Slf4j
+@CrossOrigin
+public class {Resource}Controller {
 
-    @ApiOperation(value = "查询列表")
+    @Resource
+    private {Service} service;
+
+    @Operation(summary = "查询列表")
     @GetMapping
-    public ResponseResult<PageResult<{Entity}VO>> list(
-            @RequestParam(required = false, defaultValue = "1") Integer pageNum,
-            @RequestParam(required = false, defaultValue = "10") Integer pageSize) {
+    public Result<PageResult<{Entity}>> list(
+            @RequestParam(required = false, defaultValue = "1") Integer current,
+            @RequestParam(required = false, defaultValue = "10") Integer size) {
         // ...
+        return Result.success(data);
     }
 
-    @ApiOperation(value = "查询详情")
+    @Operation(summary = "查询详情")
     @GetMapping("/{id}")
-    public ResponseResult<{Entity}VO> get(@PathVariable("id") Long id) {
+    public Result<{Entity}> getById(@PathVariable Long id) {
         // ...
+        return Result.success(data);
     }
 
-    @ApiOperation(value = "创建")
+    @Operation(summary = "创建")
     @PostMapping
-    public ResponseResult<{Entity}VO> create(@RequestBody @Valid {Entity}DTO dto) {
+    public Result<{Entity}> create(@RequestBody @Valid {Entity}DTO dto) {
         // ...
+        return Result.success(data);
     }
 
-    @ApiOperation(value = "更新")
+    @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public ResponseResult<{Entity}VO> update(
-            @PathVariable("id") Long id,
+    public Result<{Entity}> update(
+            @PathVariable Long id,
             @RequestBody @Valid {Entity}DTO dto) {
         // ...
+        return Result.success(data);
     }
 
-    @ApiOperation(value = "删除")
+    @Operation(summary = "删除")
     @DeleteMapping("/{id}")
-    public ResponseResult<Void> delete(@PathVariable("id") Long id) {
+    public Result<Void> delete(@PathVariable Long id) {
         // ...
+        return Result.success();
     }
 }
 ```
 
 ## 响应格式
 
-使用 `com.quickshop.framework.response.ResponseResult` 封装：
+使用 `com.musheng.common.result.Result` 封装：
 
 ```java
 // 成功响应
-return ResponseResult.success(data);
-return ResponseResult.querySuccess(data);
+return Result.success(data);
+return Result.success();
+return Result.success("操作成功", data);
 
 // 失败响应
-return ResponseResult.failed("error.message.key");
-return ResponseResult.validateFailed("validation.error");
+return Result.error(ErrorCode.PARAM_ERROR);
+return Result.error(ErrorCode.PARAM_ERROR, "自定义错误消息");
+return Result.error(500, "错误消息");
 ```
 
-## Token 校验
+**Result 结构**：
+```java
+{
+    "code": 0,           // 0=成功, 其他=失败
+    "message": "success",
+    "data": {...},
+    "timestamp": 1705660800000,
+    "requestId": "uuid"
+}
+```
+
+## 权限校验
+
+使用 Sa-Token 进行权限校验：
 
 ```java
-// 需要 Token 校验（默认）
-@GetMapping("/protected")
-public ResponseResult<?> protectedApi() { }
+// 角色校验
+@SaCheckRole("admin")
+@DeleteMapping("/{id}")
+public Result<Void> delete(@PathVariable Long id) {
+    // 仅 admin 角色可访问
+}
 
-// 跳过 Token 校验
-@IgnoreToken
-@GetMapping("/public")
-public ResponseResult<?> publicApi() { }
+// 权限校验
+@SaCheckPermission("user:delete")
+@DeleteMapping("/{id}")
+public Result<Void> delete(@PathVariable Long id) {
+    // 需要 user:delete 权限
+}
 ```
 
-## Swagger 注解
+## Knife4j 注解（OpenAPI 3）
 
-- 类级别: `@Api(tags = "资源名称")`
-- 方法级别: `@ApiOperation(value = "操作描述")`
-- 参数级别: `@ApiParam(value = "参数描述")`
+- 类级别: `@Tag(name = "资源名称")`
+- 方法级别: `@Operation(summary = "操作描述")`
+- 参数级别: `@Parameter(description = "参数描述")`
 
 ## 参数校验
 
 使用 `@Valid` 配合 JSR-303 注解：
 ```java
-public ResponseResult<?> create(@RequestBody @Valid CreateDTO dto) { }
+public Result<?> create(@RequestBody @Valid CreateDTO dto) { }
 ```
 
 DTO 中使用校验注解：

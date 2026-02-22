@@ -2,8 +2,9 @@ package com.musheng.business.rate.service;
 
 import com.musheng.business.common.strategy.FileImportStrategy;
 import com.musheng.business.rate.entity.ExchangeRate;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.musheng.business.rate.mapper.ExchangeRateMapper;
-import com.musheng.business.rate.mapper.HolidayMapper;
 import com.musheng.business.rate.repository.ExchangeRateRepository;
 import com.musheng.business.rate.service.impl.RateServiceImpl;
 import com.musheng.common.exception.BusinessException;
@@ -54,10 +55,7 @@ class RateServiceImportErrorTest {
     
     @Mock
     private ExchangeRateMapper exchangeRateMapper;
-    
-    @Mock
-    private HolidayMapper holidayMapper;
-    
+
     private RateServiceImpl rateService;
     
     // 模拟的导入策略列表
@@ -88,12 +86,12 @@ class RateServiceImportErrorTest {
         });
         importStrategies.add(excelStrategy);
         
-        // ⚠️ 更新：使用新的构造函数签名（添加了 ExchangeRateRepository）
+        Cache<String, Object> exchangeRateCache = Caffeine.newBuilder().maximumSize(1000).build();
         rateService = new RateServiceImpl(
                 exchangeRateRepository,
-                exchangeRateMapper, 
-                holidayMapper, 
-                importStrategies
+                exchangeRateMapper,
+                importStrategies,
+                exchangeRateCache
         );
     }
     

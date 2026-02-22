@@ -1,13 +1,9 @@
 package com.musheng.system.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
 import com.musheng.business.advertising.mapper.AdvertisingDataMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
-import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.mapper.SalesDataMapper;
 import com.musheng.business.shipping.mapper.ShippingDataMapper;
-import com.musheng.common.exception.BusinessException;
-import com.musheng.common.result.ErrorCode;
 import com.musheng.system.service.AdminDataDeletionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

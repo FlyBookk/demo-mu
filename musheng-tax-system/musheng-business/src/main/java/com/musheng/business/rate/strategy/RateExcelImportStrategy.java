@@ -152,7 +152,6 @@ public class RateExcelImportStrategy extends AbstractRateImportStrategy {
                             exchangeRate.setCurrencyCode(currencyCode);
                             exchangeRate.setRate(rate);
                             exchangeRate.setSource("IMPORT");
-                            exchangeRate.setIsWorkday(isWeekend(rateDate) ? 0 : 1);
 
                             rates.add(exchangeRate);
                         } catch (Exception e) {
@@ -301,7 +300,6 @@ public class RateExcelImportStrategy extends AbstractRateImportStrategy {
                             exchangeRate.setCurrencyCode(currencyCode);
                             exchangeRate.setRate(rate);
                             exchangeRate.setSource("IMPORT");
-                            exchangeRate.setIsWorkday(isWeekend(rateDate) ? 0 : 1);
 
                             ratesToImport.add(exchangeRate);
 

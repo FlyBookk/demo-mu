@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -30,6 +31,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private final Environment environment;
+
+    public GlobalExceptionHandler(Environment environment) {
+        this.environment = environment;
+    }
 
     /**
      * 处理业务异常
@@ -147,11 +154,22 @@ public class GlobalExceptionHandler {
 
     /**
      * 处理其他未知异常
+     * 开发环境下返回实际异常信息便于调试
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.OK)
     public Result<Void> handleException(Exception e, HttpServletRequest request) {
         log.error("系统异常 {}: {}", request.getRequestURI(), e.getMessage(), e);
-        return Result.error(ResultCode.INTERNAL_ERROR, "系统内部错误");
+        String message = "系统内部错误";
+        if (isDevProfile()) {
+            String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
+            message = message + " [" + detail + "]";
+        }
+        return Result.error(ResultCode.INTERNAL_ERROR, message);
+    }
+
+    private boolean isDevProfile() {
+        return environment != null && java.util.Arrays.stream(environment.getActiveProfiles())
+                .anyMatch(p -> "dev".equals(p) || "local".equals(p));
     }
 }

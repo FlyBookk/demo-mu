@@ -54,7 +54,7 @@ invokeSubAgent({
 **要求**：
 - 使用 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 - 包含字段：id, name, email, createTime
-- 遵循 QuickCEP 代码规范
+- 遵循慕声税务系统代码规范
 
 **验证**：
 - 编译通过
@@ -91,7 +91,7 @@ invokeSubAgent({
 ✅ 包含：
 - 当前任务的详细描述
 - 相关的设计文档
-- QuickCEP 代码规范
+- 慕声税务系统代码规范
 - TDD 工作流规范
 - 代码审查清单
 
@@ -164,7 +164,7 @@ invokeSubAgent({
 3. {要求 3}
 
 ### 遵循规范
-- QuickCEP 代码规范
+- 慕声税务系统代码规范
 - TDD 工作流（如需要）
 - 代码审查清单
 
