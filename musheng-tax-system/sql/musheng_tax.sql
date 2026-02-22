@@ -131,31 +131,6 @@ BEGIN;
 COMMIT;
 
 -- ----------------------------
--- 表结构: t_holiday (节假日配置表)
--- ----------------------------
-DROP TABLE IF EXISTS `t_holiday`;
-CREATE TABLE `t_holiday` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `holiday_date` date NOT NULL COMMENT '节假日日期',
-  `holiday_name` varchar(50) DEFAULT NULL COMMENT '节假日名称',
-  `holiday_type` tinyint DEFAULT '1' COMMENT '类型(1-周末/2-法定节假日/3-调休)',
-  `year` int NOT NULL COMMENT '年份',
-  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `create_by` bigint DEFAULT NULL COMMENT '创建人',
-  `update_by` bigint DEFAULT NULL COMMENT '更新人',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_holiday_date` (`holiday_date`),
-  KEY `idx_year` (`year`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节假日配置表';
-
--- ----------------------------
--- 数据记录: t_holiday
--- ----------------------------
-BEGIN;
-COMMIT;
-
--- ----------------------------
 -- 表结构: t_import_error_detail (导入错误明细表)
 -- ----------------------------
 DROP TABLE IF EXISTS `t_import_error_detail`;
