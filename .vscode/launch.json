@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "启动慕声税务系统 (MushengApplication)",
+      "request": "launch",
+      "mainClass": "com.musheng.MushengApplication",
+      "projectName": "musheng-web"
+    },
+    {
+      "type": "java",
+      "name": "调试慕声税务系统 (MushengApplication)",
+      "request": "launch",
+      "mainClass": "com.musheng.MushengApplication",
+      "projectName": "musheng-web"
+    }
+  ]
+}
