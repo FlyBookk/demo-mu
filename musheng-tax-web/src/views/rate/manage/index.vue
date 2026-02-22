@@ -193,59 +193,30 @@
       </a-form>
     </a-modal>
 
-    <!-- 同步汇率弹窗 -->
+    <!-- 同步汇率弹窗（curl 方式） -->
     <a-modal
       v-model:open="syncVisible"
       title="同步汇率"
       :width="700"
+      :confirm-loading="syncing"
       @ok="handleSync"
       @cancel="syncVisible = false"
     >
       <a-alert
-        message="自动同步说明"
-        description="系统将从中国外汇交易中心自动同步汇率数据，仅同步货币管理中已启用的货币。"
+        message="curl 同步说明"
+        description="请打开中国货币网汇率页面，F12 → Network → 找到 CcprHisNew 请求 → 右键 Copy as cURL，粘贴到下方。"
         type="info"
         show-icon
-        style="margin-bottom: 24px"
+        style="margin-bottom: 16px"
       />
-
-      <a-form
-        :model="syncForm"
-        :label-col="{ span: 6 }"
-        :wrapper-col="{ span: 16 }"
-      >
-        <a-form-item label="同步方式">
-          <a-radio-group v-model:value="syncForm.mode">
-            <a-radio value="recent">最近N天</a-radio>
-            <a-radio value="range">指定日期范围</a-radio>
-          </a-radio-group>
-        </a-form-item>
-
-        <a-form-item v-if="syncForm.mode === 'recent'" label="天数">
-          <a-input-number
-            v-model:value="syncForm.days"
-            :min="1"
-            :max="365"
-            style="width: 200px"
-          />
-          <span style="margin-left: 8px; color: #888">天（建议不超过30天）</span>
-        </a-form-item>
-
-        <template v-else>
-          <a-form-item label="开始日期">
-            <a-date-picker
-              v-model:value="syncForm.startDate"
-              style="width: 100%"
-            />
-          </a-form-item>
-          <a-form-item label="结束日期">
-            <a-date-picker
-              v-model:value="syncForm.endDate"
-              style="width: 100%"
-            />
-          </a-form-item>
-        </template>
-      </a-form>
+      <a-form-item label="curl 命令">
+        <a-textarea
+          v-model:value="syncForm.curl"
+          placeholder="粘贴完整的 curl 命令..."
+          :rows="6"
+          allow-clear
+        />
+      </a-form-item>
     </a-modal>
   </div>
 </template>
@@ -270,8 +241,7 @@ import {
   updateRate,
   deleteRate,
   batchDeleteRates,
-  syncRates,
-  syncRecentDays,
+  syncFromCurl,
   exportRateData
 } from '@/api/rate'
 import { getEnabledCurrencies } from '@/api/currency'
@@ -346,11 +316,9 @@ const formData = reactive<RateRequest & { id?: number }>({
 
 // 同步相关
 const syncVisible = ref(false)
+const syncing = ref(false)
 const syncForm = reactive({
-  mode: 'recent' as 'recent' | 'range',
-  days: 7,
-  startDate: null as Dayjs | null,
-  endDate: null as Dayjs | null
+  curl: ''
 })
 
 // 方法
@@ -488,38 +456,28 @@ function handleBatchDelete() {
 }
 
 function showSyncModal() {
-  syncForm.mode = 'recent'
-  syncForm.days = 7
-  syncForm.startDate = null
-  syncForm.endDate = null
+  syncForm.curl = ''
   syncVisible.value = true
 }
 
 async function handleSync() {
+  const curl = syncForm.curl?.trim()
+  if (!curl) {
+    message.warning('请粘贴 curl 命令')
+    return
+  }
+  syncing.value = true
   try {
-    let result
-    if (syncForm.mode === 'recent') {
-      result = await syncRecentDays(syncForm.days)
-    } else {
-      if (!syncForm.startDate || !syncForm.endDate) {
-        message.warning('请选择日期范围')
-        return
-      }
-      result = await syncRates({
-        startDate: syncForm.startDate.format('YYYY-MM-DD'),
-        endDate: syncForm.endDate.format('YYYY-MM-DD')
-      })
-    }
-
+    const result = await syncFromCurl(curl)
     const data = result.data
-    message.success(
-      `同步完成！总计${data.totalCount}条，新增${data.insertCount}条，更新${data.updateCount}条`
-    )
+    message.success(data?.message || '同步完成')
     syncVisible.value = false
     fetchData()
   } catch (error) {
     console.error('同步失败:', error)
-    message.error('同步失败，请稍后重试')
+    message.error('同步失败，请检查 curl 是否来自中国货币网 CcprHisNew 请求')
+  } finally {
+    syncing.value = false
   }
 }
 

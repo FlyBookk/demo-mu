@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * ERP结算数据解析器
@@ -35,6 +36,12 @@ import java.util.*;
 @Slf4j
 @Component
 public class ErpSettlementParser implements SalesDataParser {
+
+    /**
+     * 亚马逊标准订单号正则（格式：XXX-1234567-1234567）
+     * 不符合此格式的订单号视为非标订单，不进行合并，单条存储
+     */
+    private static final Pattern ORDER_ID_PATTERN_LOOSE = Pattern.compile("[A-Z0-9]{3}-\\d{7}-\\d{7}");
     
     /**
      * ERP数据默认的列名映射
@@ -223,7 +230,7 @@ public class ErpSettlementParser implements SalesDataParser {
             totalRows++;
             
             try {
-                ErpRow erpRow = parseErpRow(record, headerMap, context);
+                ErpRow erpRow = parseErpRow(record, headerMap, context, (int) record.getRecordNumber());
                 
                 if (erpRow.getSiteCode() != null) {
                     detectedSites.add(erpRow.getSiteCode());
@@ -345,8 +352,9 @@ public class ErpSettlementParser implements SalesDataParser {
     
     /**
      * 解析ERP行数据
+     * @param recordNumber CSV行号，用于订单号为空时生成唯一聚合键（不聚合）
      */
-    private ErpRow parseErpRow(CSVRecord record, Map<String, Integer> headerMap, ParseContext context) {
+    private ErpRow parseErpRow(CSVRecord record, Map<String, Integer> headerMap, ParseContext context, int recordNumber) {
         ErpRow row = new ErpRow();
         
         // 使用 Settlement ID（亚马逊原始结算ID）作为 settlementId，便于与原始数据统一去重
@@ -355,6 +363,8 @@ public class ErpSettlementParser implements SalesDataParser {
         String erpSettlementId = getFieldValue(record, headerMap, "结算编号");
         row.setSettlementId(amazonSettlementId != null && !amazonSettlementId.isEmpty() 
                 ? amazonSettlementId : erpSettlementId);
+        // 单独记录 ERP 结算编号，用于重复导入校验；无订单号时用于聚合
+        row.setErpSettlementId(cleanOrderId(erpSettlementId));
         
         row.setOrderId(cleanOrderId(getFieldValue(record, headerMap, "订单号")));
         row.setStoreName(getFieldValue(record, headerMap, "店铺"));
@@ -369,6 +379,7 @@ public class ErpSettlementParser implements SalesDataParser {
         row.setSettlementStatus(getFieldValue(record, headerMap, "结算状态"));
         row.setTransferStatus(getFieldValue(record, headerMap, "转账状态"));
         row.setSource(getFieldValue(record, headerMap, "来源"));
+        row.setRecordNumber(recordNumber);
         
         // 解析金额
         String amountStr = getFieldValue(record, headerMap, "金额");
@@ -414,16 +425,39 @@ public class ErpSettlementParser implements SalesDataParser {
     }
     
     /**
+     * 判断是否为亚马逊标准订单号（格式：XXX-1234567-1234567）
+     */
+    private static boolean isStandardOrderId(String orderId) {
+        return orderId != null && !orderId.isEmpty() && ORDER_ID_PATTERN_LOOSE.matcher(orderId).matches();
+    }
+
+    /**
      * 构建聚合key
-     * 新增来源维度，同一订单在不同来源下分别聚合
-     * 格式：source|orderId|siteCode|sku
+     * 有标准订单号时按 orderId 聚合（一订单多行费用明细合并为一条）；
+     * 无订单号或非标订单号时不再聚合，每行独立
+     * 格式：标准订单号 source|orderId|siteCode|msku；无订单号/非标 source|orderId|siteCode|msku|recordNumber
      */
     private String buildAggregateKey(ErpRow row) {
-        return String.format("%s|%s|%s|%s", 
+        boolean hasOrderId = row.getOrderId() != null && !row.getOrderId().isEmpty();
+        boolean isStandard = hasOrderId && isStandardOrderId(row.getOrderId());
+        String mergeKey = hasOrderId
+                ? row.getOrderId()
+                : (row.getErpSettlementId() != null && !row.getErpSettlementId().isEmpty()
+                        ? row.getErpSettlementId() : "");
+        if (hasOrderId && isStandard) {
+            return String.format("%s|%s|%s|%s",
+                    row.getSource() != null ? row.getSource() : "",
+                    mergeKey,
+                    row.getSiteCode() != null ? row.getSiteCode() : "",
+                    row.getMsku() != null ? row.getMsku() : "");
+        }
+        // 订单号为空或非标订单号：每行独立，不聚合
+        return String.format("%s|%s|%s|%s|%d",
                 row.getSource() != null ? row.getSource() : "",
-                row.getOrderId() != null ? row.getOrderId() : "",
+                mergeKey,
                 row.getSiteCode() != null ? row.getSiteCode() : "",
-                row.getMsku() != null ? row.getMsku() : "");  // 使用MSKU作为聚合键
+                row.getMsku() != null ? row.getMsku() : "",
+                row.getRecordNumber());
     }
     
     /**
@@ -433,10 +467,13 @@ public class ErpSettlementParser implements SalesDataParser {
         ErpAggregateRow aggregate = new ErpAggregateRow();
         aggregate.setOrderId(firstRow.getOrderId());
         aggregate.setSiteCode(firstRow.getSiteCode());
+        // 订单号为空或非标时，description 填充 来源-交易类型
+        aggregate.setNonStandardOrder(!isStandardOrderId(firstRow.getOrderId()));
         // ERP数据使用MSKU作为sku字段值
         aggregate.setSku(firstRow.getMsku());
         aggregate.setMsku(firstRow.getMsku());
         aggregate.setSettlementId(firstRow.getSettlementId());
+        aggregate.setErpSettlementId(firstRow.getErpSettlementId());
         aggregate.setStoreName(firstRow.getStoreName());
         aggregate.setFulfillment(firstRow.getFulfillment());
         aggregate.setCurrencyCode(firstRow.getCurrencyCode());
@@ -448,6 +485,7 @@ public class ErpSettlementParser implements SalesDataParser {
         
         // 设置来源和结算类型
         aggregate.setSource(firstRow.getSource());
+        aggregate.setTransactionType(firstRow.getTransactionType());
         ErpSourceType sourceType = ErpSourceType.fromSourceValue(firstRow.getSource());
         aggregate.setSettlementCategory(sourceType.getSettlementCategory());
         
@@ -521,8 +559,16 @@ public class ErpSettlementParser implements SalesDataParser {
         data.setMarketplace(getMarketplaceBySiteCode(aggregate.getSiteCode()));
         data.setCurrencyCode(aggregate.getCurrencyCode());
         data.setSettlementId(aggregate.getSettlementId());
+        data.setErpSettlementId(aggregate.getErpSettlementId());
         data.setFulfillment(aggregate.getFulfillment());
-        data.setDescription(aggregate.getProductName());
+        // 非标订单：描述字段填充 来源-交易类型，便于识别
+        if (aggregate.isNonStandardOrder()) {
+            String source = aggregate.getSource() != null ? aggregate.getSource() : "";
+            String txType = aggregate.getTransactionType() != null ? aggregate.getTransactionType() : "";
+            data.setDescription(String.format("%s-%s", source, txType));
+        } else {
+            data.setDescription(aggregate.getProductName());
+        }
         data.setQuantity(aggregate.getQuantity());
         data.setTransactionDate(aggregate.getSettlementTime());
         
@@ -574,7 +620,8 @@ public class ErpSettlementParser implements SalesDataParser {
             data.setTransactionCategory("other");
         }
         
-        // 交易类型设置为来源值，便于追溯
+        // 交易类型：统一用来源值（source），与订单号不为空场景保持一致
+        // transactionType 存 Shipment/Refund/ServiceFee 等结算类型，transactionCategory 存 income/refund/fee 等标准分类
         data.setTransactionType(aggregate.getSource() != null ? aggregate.getSource() : "ERP_SETTLEMENT");
         
         return data;
@@ -636,6 +683,8 @@ public class ErpSettlementParser implements SalesDataParser {
     @Data
     private static class ErpRow {
         private String settlementId;
+        /** ERP结算编号（结算编号列），用于按结算编号合并 */
+        private String erpSettlementId;
         private String orderId;
         private String storeName;
         private String siteCode;
@@ -652,6 +701,8 @@ public class ErpSettlementParser implements SalesDataParser {
         private String transferStatus;
         /** ERP来源（Shipment/Refund/ServiceFee等） */
         private String source;
+        /** CSV行号，订单号为空时用于生成唯一聚合键（不聚合） */
+        private int recordNumber;
     }
     
     /**
@@ -664,6 +715,7 @@ public class ErpSettlementParser implements SalesDataParser {
         private String sku;
         private String msku;
         private String settlementId;
+        private String erpSettlementId;
         private String storeName;
         private String fulfillment;
         private String currencyCode;
@@ -676,6 +728,10 @@ public class ErpSettlementParser implements SalesDataParser {
         private String source;
         /** 结算类型（ORDER/REFUND/SERVICE_FEE等） */
         private String settlementCategory;
+        /** 交易类型（Principal/Commission等），订单号为空时用于去重 */
+        private String transactionType;
+        /** 是否非标订单（订单号不符合亚马逊格式），非标订单单条存储，description 填充 来源-交易类型 */
+        private boolean nonStandardOrder;
         
         // 聚合后的金额字段
         private BigDecimal productSales;

@@ -272,6 +272,10 @@
         </a-descriptions-item>
         <a-descriptions-item label="SKU">{{ detailData.sku || '-' }}</a-descriptions-item>
         <a-descriptions-item label="数量">{{ detailData.quantity || 0 }}</a-descriptions-item>
+        <a-descriptions-item label="描述" :span="2">
+          <div v-if="detailData.description" class="detail-description">{{ detailData.description }}</div>
+          <span v-else>-</span>
+        </a-descriptions-item>
         <a-descriptions-item label="货币">{{ detailData.currencyCode }}</a-descriptions-item>
         <a-descriptions-item label="配送方式">{{ detailData.fulfillment || '-' }}</a-descriptions-item>
         <!-- 收入类金额 -->
@@ -774,6 +778,13 @@ onMounted(() => {
   .warning-amount {
     font-weight: 500;
     color: $warning-color;
+  }
+
+  .detail-description {
+    word-break: break-word;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    max-width: 100%;
   }
 }
 </style>

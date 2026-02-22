@@ -51,6 +51,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -88,6 +89,9 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     private final SqlSessionFactory sqlSessionFactory;
     private final ImportConfig importConfig;
     private final MarketplaceService marketplaceService;
+    
+    /** 亚马逊标准订单号正则，不符合的为非标订单，幂等键需包含 transactionType */
+    private static final Pattern ORDER_ID_PATTERN_LOOSE = Pattern.compile("[A-Z0-9]{3}-\\d{7}-\\d{7}");
     
     // 文件缓存（临时存储上传的文件信息）
     private final Map<String, UploadedFileCache> uploadedFileCache = new ConcurrentHashMap<>();
@@ -944,8 +948,8 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     }
 
     /**
-     * 统一重复校验：按 订单+站点+交易分类(transaction_category)+SKU 判定重复
-     * 同时覆盖原始数据和 ERP 数据，防止跨来源重复
+     * 统一重复校验：按 标识+站点+交易分类(transaction_category)+SKU 判定重复
+     * ERP数据用 erp_settlement_id（部分数据无订单号），原始数据用 order_id
      */
     private Set<String> batchCheckDuplicatesUnified(List<SalesData> records) {
         Set<String> existingKeys = new HashSet<>();
@@ -954,36 +958,60 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
         }
 
         Long shopId = ShopContext.requireShopId();
-
-        // 提取 orderIds 和 siteCodes
-        Set<String> orderIds = records.stream()
-                .map(SalesData::getOrderId)
-                .filter(StringUtils::hasText)
-                .collect(Collectors.toSet());
         Set<String> siteCodes = records.stream()
                 .map(SalesData::getSiteCode)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
 
-        if (orderIds.isEmpty()) {
+        // 提取 orderIds 和 erpSettlementIds（ERP 数据可能无订单号）
+        Set<String> orderIds = records.stream()
+                .map(SalesData::getOrderId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        Set<String> erpSettlementIds = records.stream()
+                .map(SalesData::getErpSettlementId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        if (orderIds.isEmpty() && erpSettlementIds.isEmpty()) {
             return existingKeys;
         }
 
-        List<String> orderIdList = new ArrayList<>(orderIds);
         int batchSize = 500;
+        List<String> orderIdList = new ArrayList<>(orderIds);
+        List<String> erpIdList = new ArrayList<>(erpSettlementIds);
+        int maxBatches = Math.max(
+                (orderIdList.size() + batchSize - 1) / batchSize,
+                (erpIdList.size() + batchSize - 1) / batchSize);
+        if (maxBatches == 0) maxBatches = 1;
 
-        for (int i = 0; i < orderIdList.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, orderIdList.size());
-            List<String> batch = orderIdList.subList(i, end);
+        for (int b = 0; b < maxBatches; b++) {
+            int orderStart = b * batchSize;
+            int erpStart = b * batchSize;
+            List<String> orderBatch = orderStart < orderIdList.size()
+                    ? orderIdList.subList(orderStart, Math.min(orderStart + batchSize, orderIdList.size()))
+                    : Collections.emptyList();
+            List<String> erpBatch = erpStart < erpIdList.size()
+                    ? erpIdList.subList(erpStart, Math.min(erpStart + batchSize, erpIdList.size()))
+                    : Collections.emptyList();
+            if (orderBatch.isEmpty() && erpBatch.isEmpty()) continue;
 
             LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SalesData::getShopId, shopId)
-                    .in(SalesData::getOrderId, batch);
+            wrapper.eq(SalesData::getShopId, shopId);
             if (!siteCodes.isEmpty()) {
                 wrapper.in(SalesData::getSiteCode, siteCodes);
             }
-            wrapper.select(SalesData::getOrderId, SalesData::getSiteCode,
-                    SalesData::getTransactionCategory, SalesData::getSku);
+            if (!orderBatch.isEmpty() && !erpBatch.isEmpty()) {
+                wrapper.and(w -> w.in(SalesData::getOrderId, orderBatch).or().in(SalesData::getErpSettlementId, erpBatch));
+            } else if (!orderBatch.isEmpty()) {
+                wrapper.in(SalesData::getOrderId, orderBatch);
+            } else {
+                wrapper.in(SalesData::getErpSettlementId, erpBatch);
+            }
+            // 订单号为空时需 transactionType/total/transactionDate 构建去重键
+            wrapper.select(SalesData::getOrderId, SalesData::getErpSettlementId, SalesData::getSiteCode,
+                    SalesData::getTransactionCategory, SalesData::getSku,
+                    SalesData::getTransactionType, SalesData::getTotal, SalesData::getTransactionDate);
 
             List<SalesData> existing = salesDataMapper.selectList(wrapper);
             for (SalesData data : existing) {
@@ -991,17 +1019,41 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             }
         }
 
-        log.info("Batch duplicate check (unified): found {} existing records for orderId+siteCode+transactionCategory+sku", existingKeys.size());
+        log.info("Batch duplicate check (unified): found {} existing records", existingKeys.size());
         return existingKeys;
     }
 
     /**
-     * 构建统一唯一键：订单+站点+交易分类(transaction_category)+SKU
-     * 用于跨来源（原始数据/ERP）重复校验
+     * 构建统一唯一键：标识+站点+交易分类(transaction_category)+SKU
+     * 有标准订单号：order_id|siteCode|transactionCategory|sku
+     * 非标订单号（不合并，单条存储）：order_id|siteCode|transactionType|sku 幂等
+     * 无订单号（同一结算编号下）：erp_settlement_id|transactionType|transactionDate|total 幂等控制，防重复导入
      */
     private String buildUnifiedUniqueKey(SalesData data) {
+        boolean useErpId = data.getErpSettlementId() != null && !data.getErpSettlementId().isEmpty();
+        boolean hasOrderId = data.getOrderId() != null && !data.getOrderId().isEmpty();
+        String identifier = useErpId && !hasOrderId
+                ? data.getErpSettlementId()
+                : (data.getOrderId() != null ? data.getOrderId() : "");
+        if (useErpId && !hasOrderId) {
+            // 订单号为空：同一结算编号下，交易类型+结算时间+金额 幂等
+            return String.format("%s|%s|%s|%s",
+                    identifier,
+                    data.getTransactionType() != null ? data.getTransactionType() : "",
+                    data.getTransactionDate() != null ? data.getTransactionDate().toString() : "",
+                    data.getTotal() != null ? data.getTotal().toPlainString() : "");
+        }
+        // 非标订单：不合并，每条记录独立，幂等键需包含 transactionType
+        boolean isNonStandardOrder = hasOrderId && !ORDER_ID_PATTERN_LOOSE.matcher(data.getOrderId()).matches();
+        if (isNonStandardOrder) {
+            return String.format("%s|%s|%s|%s",
+                    identifier,
+                    data.getSiteCode() != null ? data.getSiteCode() : "",
+                    data.getTransactionType() != null ? data.getTransactionType() : "",
+                    data.getSku() != null ? data.getSku() : "");
+        }
         return String.format("%s|%s|%s|%s",
-                data.getOrderId() != null ? data.getOrderId() : "",
+                identifier,
                 data.getSiteCode() != null ? data.getSiteCode() : "",
                 data.getTransactionCategory() != null ? data.getTransactionCategory() : "",
                 data.getSku() != null ? data.getSku() : "");

@@ -55,6 +55,12 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
     private String settlementId;
 
     /**
+     * ERP结算编号（ERP数据专用，用于按结算编号合并及重复导入校验）
+     */
+    @FieldMapping(label = "ERP结算编号", description = "ERP系统结算编号", ignore = true)
+    private String erpSettlementId;
+
+    /**
      * 交易类型(保留原始值)
      */
     @FieldMapping(label = "交易类型", description = "订单/退款/服务费等", required = true, maxLength = 50, order = 3)
