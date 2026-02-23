@@ -492,11 +492,23 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .filter(s -> "refund".equals(s.getTransactionCategory()))
                 .collect(Collectors.toList());
 
-        // ========== 3. 收入计算（按新公式） ==========
+        // ========== 3. 收入计算：收入总额取配送数据总计费用（8项之和） ==========
         BigDecimal totalRevenue = BigDecimal.ZERO;
         BigDecimal totalRevenueCny = BigDecimal.ZERO;
+        for (ShippingData shipping : allShipping) {
+            if (shipping.getShipDate() == null || shipping.getShipDate().isBefore(startDate) || shipping.getShipDate().isAfter(endDate)) {
+                continue;
+            }
+            BigDecimal amount = shipping.getTotalAmount();
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) == 0) {
+                amount = calculateShippingTotalAmount(shipping);
+            }
+            totalRevenue = totalRevenue.add(amount);
+            BigDecimal rate = shipping.getExchangeRate();
+            totalRevenueCny = totalRevenueCny.add((rate != null && rate.compareTo(BigDecimal.ZERO) > 0) ? amount.multiply(rate) : amount);
+        }
 
-        // 收入相关费用（仅income类型）
+        // 收入相关费用（仅income类型，来自销售数据）
         BigDecimal incomeConsumptionTax = BigDecimal.ZERO;
         BigDecimal incomeConsumptionTaxCny = BigDecimal.ZERO;
         BigDecimal incomeSellingFees = BigDecimal.ZERO;
@@ -514,11 +526,6 @@ public class TaxReportServiceImpl implements TaxReportService {
             if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) {
                 rate = BigDecimal.ONE;
             }
-
-            // 收入总额 = 产品销售+产品税+运费+运费税+礼品包装费+礼品包装税+监管费+监管费税+促销折扣+促销折扣税
-            BigDecimal revenue = calculateSalesRevenue(income);
-            totalRevenue = totalRevenue.add(revenue);
-            totalRevenueCny = totalRevenueCny.add(revenue.multiply(rate));
 
             // 消费税（平台代扣税）- 保留原正负
             BigDecimal tax = nullToZero(income.getMarketplaceWithheldTax());
