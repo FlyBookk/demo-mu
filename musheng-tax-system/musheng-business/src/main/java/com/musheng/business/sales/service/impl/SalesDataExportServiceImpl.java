@@ -1,7 +1,9 @@
 package com.musheng.business.sales.service.impl;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.musheng.business.common.utils.DateParseUtils;
+import com.musheng.business.sales.dto.SalesDataExportRow;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.mapper.SalesDataMapper;
 import com.musheng.business.sales.service.SalesDataExportService;
@@ -11,27 +13,20 @@ import com.musheng.common.result.ErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 销售数据导出服务实现类
- * 
- * 职责：
- * 1. 导出销售数据到Excel
- * 
+ * 导出原始数据全字段，非列表精简视图
+ *
  * @author wanhua
- * 10:30 2026年02月01日
  */
 @Slf4j
 @Service
@@ -45,7 +40,6 @@ public class SalesDataExportServiceImpl implements SalesDataExportService {
                            HttpServletResponse response) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
-        // 店铺数据隔离
         Long shopId = ShopContext.requireShopId();
         wrapper.eq(SalesData::getShopId, shopId);
 
@@ -61,58 +55,59 @@ public class SalesDataExportServiceImpl implements SalesDataExportService {
         List<SalesData> dataList = salesDataMapper.selectList(wrapper);
 
         try {
-            String fileName = "sales_data_" + System.currentTimeMillis() + ".xlsx";
+            String fileName = "销售数据_原始_" + System.currentTimeMillis() + ".xlsx";
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setHeader("Content-Disposition", "attachment; filename=" +
                     URLEncoder.encode(fileName, StandardCharsets.UTF_8));
 
-            try (XSSFWorkbook workbook = new XSSFWorkbook();
-                 OutputStream outputStream = response.getOutputStream()) {
-
-                Sheet sheet = workbook.createSheet("Sales Data");
-
-                // Create header row
-                Row headerRow = sheet.createRow(0);
-                String[] headers = {"订单号", "站点", "交易日期", "交易类型", "交易分类", "SKU",
-                        "数量", "产品销售", "销售费用", "FBA费用", "合计", "货币"};
-                for (int i = 0; i < headers.length; i++) {
-                    headerRow.createCell(i).setCellValue(headers[i]);
-                }
-
-                // Fill data rows
-                int rowNum = 1;
-                for (SalesData data : dataList) {
-                    Row row = sheet.createRow(rowNum++);
-                    row.createCell(0).setCellValue(data.getOrderId());
-                    row.createCell(1).setCellValue(data.getSiteCode());
-                    row.createCell(2).setCellValue(data.getTransactionDate() != null ? data.getTransactionDate().toString() : "");
-                    row.createCell(3).setCellValue(data.getTransactionType());
-                    row.createCell(4).setCellValue(data.getTransactionCategory());
-                    row.createCell(5).setCellValue(data.getSku());
-                    row.createCell(6).setCellValue(data.getQuantity() != null ? data.getQuantity() : 0);
-                    row.createCell(7).setCellValue(data.getProductSales() != null ? data.getProductSales().doubleValue() : 0);
-                    row.createCell(8).setCellValue(data.getSellingFees() != null ? data.getSellingFees().doubleValue() : 0);
-                    row.createCell(9).setCellValue(data.getFbaFees() != null ? data.getFbaFees().doubleValue() : 0);
-                    row.createCell(10).setCellValue(data.getTotal() != null ? data.getTotal().doubleValue() : 0);
-                    row.createCell(11).setCellValue(data.getCurrencyCode());
-                }
-
-                workbook.write(outputStream);
-                outputStream.flush();
-            }
-        } catch (IOException e) {
+            List<SalesDataExportRow> rows = dataList.stream().map(this::toExportRow).collect(Collectors.toList());
+            EasyExcel.write(response.getOutputStream(), SalesDataExportRow.class)
+                    .sheet("销售数据")
+                    .doWrite(rows);
+        } catch (Exception e) {
             log.error("Failed to export sales data", e);
             throw new BusinessException(ErrorCode.EXPORT_FAILED, "导出失败: " + e.getMessage());
         }
     }
 
-    /**
-     * 添加日期范围过滤条件到查询包装器
-     * 
-     * @param wrapper   查询包装器
-     * @param startDate 开始日期
-     * @param endDate   结束日期
-     */
+    private SalesDataExportRow toExportRow(SalesData d) {
+        SalesDataExportRow row = new SalesDataExportRow();
+        row.setSourceType(d.getSourceType());
+        row.setStoreName(d.getStoreName());
+        row.setTransactionDate(d.getTransactionDate());
+        row.setSettlementId(d.getSettlementId());
+        row.setErpSettlementId(d.getErpSettlementId());
+        row.setTransactionType(d.getTransactionType());
+        row.setTransactionCategory(d.getTransactionCategory());
+        row.setOrderId(d.getOrderId());
+        row.setSku(d.getSku());
+        row.setDescription(d.getDescription());
+        row.setQuantity(d.getQuantity());
+        row.setSiteCode(d.getSiteCode());
+        row.setMarketplace(d.getMarketplace());
+        row.setCurrencyCode(d.getCurrencyCode());
+        row.setFulfillment(d.getFulfillment());
+        row.setProductSales(d.getProductSales());
+        row.setProductSalesTax(d.getProductSalesTax());
+        row.setShippingCredits(d.getShippingCredits());
+        row.setShippingCreditsTax(d.getShippingCreditsTax());
+        row.setGiftWrapCredits(d.getGiftWrapCredits());
+        row.setGiftWrapCreditsTax(d.getGiftWrapCreditsTax());
+        row.setRegulatoryFee(d.getRegulatoryFee());
+        row.setRegulatoryFeeTax(d.getRegulatoryFeeTax());
+        row.setPromotionalRebates(d.getPromotionalRebates());
+        row.setPromotionalRebatesTax(d.getPromotionalRebatesTax());
+        row.setMarketplaceWithheldTax(d.getMarketplaceWithheldTax());
+        row.setSellingFees(d.getSellingFees());
+        row.setFbaFees(d.getFbaFees());
+        row.setOtherTransactionFees(d.getOtherTransactionFees());
+        row.setOther(d.getOther());
+        row.setTotal(d.getTotal());
+        row.setExchangeRate(d.getExchangeRate());
+        row.setExchangeRateDate(d.getExchangeRateDate());
+        return row;
+    }
+
     private void applyDateRangeFilter(LambdaQueryWrapper<SalesData> wrapper, String startDate, String endDate) {
         LocalDateTime start = DateParseUtils.parseStartDate(startDate);
         if (start != null) {

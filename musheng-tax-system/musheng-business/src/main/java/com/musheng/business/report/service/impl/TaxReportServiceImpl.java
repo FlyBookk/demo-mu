@@ -131,9 +131,9 @@ public class TaxReportServiceImpl implements TaxReportService {
             String quarter = getQuarterFromDate(s.getShipDate());
             String site = s.getSiteCode();
             
-            BigDecimal revenue = s.getRevenueTotal();
+            BigDecimal revenue = s.getTotalAmount();
             if (revenue == null || revenue.compareTo(BigDecimal.ZERO) == 0) {
-                revenue = calculateShippingRevenue(s);
+                revenue = calculateShippingTotalAmount(s);
             }
             BigDecimal rate = s.getExchangeRate();
             BigDecimal revenueCny = (rate != null && rate.compareTo(BigDecimal.ZERO) > 0) 
@@ -894,10 +894,10 @@ public class TaxReportServiceImpl implements TaxReportService {
     }
 
     /**
-     * 计算发货单收入
-     * 收入 = 商品价格 + 商品税 + 运费 + 运费税 + 礼品包装价格 + 礼品包装税 + 商品促销折扣 + 货件促销折扣
+     * 计算发货单总计费用（当 totalAmount 为空时回退）
+     * 总计 = 商品价格 + 商品税 + 运费 + 运费税 + 礼品包装价格 + 礼品包装税 + 商品促销折扣 + 货件促销折扣
      */
-    private BigDecimal calculateShippingRevenue(ShippingData shipping) {
+    private BigDecimal calculateShippingTotalAmount(ShippingData shipping) {
         BigDecimal revenue = BigDecimal.ZERO;
         
         if (shipping.getProductPrice() != null) {

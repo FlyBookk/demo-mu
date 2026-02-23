@@ -116,6 +116,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         int successCount = 0;
         int failCount = 0;
         int duplicateCount = 0;
+        int skipCount = 0;  // 空行等静默跳过的行数
 
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
@@ -177,6 +178,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                             shippingData.setShopId(shopId);  // 设置店铺ID
                             shippingData.setImportBatchId(importRecord.getId());
                             parsedRecords.add(shippingData);
+                        } else {
+                            skipCount++;  // 空行（无订单号）静默跳过
                         }
                     } catch (Exception e) {
                         failCount++;
@@ -283,11 +286,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         result.put("successCount", successCount);
         result.put("failCount", failCount);
         result.put("duplicateCount", duplicateCount);
+        result.put("skipCount", skipCount);
         result.put("errors", errors);
         result.put("batchNo", importRecord.getBatchNo());
 
-        log.info("Shipping data import completed: total={}, success={}, fail={}, duplicate={}",
-                totalCount, successCount, failCount, duplicateCount);
+        log.info("Shipping data import completed: total={}, success={}, fail={}, duplicate={}, skip={}",
+                totalCount, successCount, failCount, duplicateCount, skipCount);
 
         return result;
     }
@@ -307,6 +311,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         int successCount = 0;
         int failCount = 0;
         int duplicateCount = 0;
+        int skipCount = 0;
 
         for (MultipartFile file : files) {
             Map<String, Object> fileResult = new HashMap<>();
@@ -321,6 +326,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                 successCount += (Integer) importResult.getOrDefault("successCount", 0);
                 failCount += (Integer) importResult.getOrDefault("failCount", 0);
                 duplicateCount += (Integer) importResult.getOrDefault("duplicateCount", 0);
+                skipCount += (Integer) importResult.getOrDefault("skipCount", 0);
                 successFiles++;
             } catch (Exception e) {
                 log.error("Import file failed: {}", file.getOriginalFilename(), e);
@@ -339,6 +345,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         batchResult.put("successCount", successCount);
         batchResult.put("failCount", failCount);
         batchResult.put("duplicateCount", duplicateCount);
+        batchResult.put("skipCount", skipCount);
         batchResult.put("fileResults", fileResults);
         String batchNo = null;
         for (Map<String, Object> fr : fileResults) {
@@ -350,8 +357,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         }
         batchResult.put("batchNo", batchNo);
 
-        log.info("Batch import completed: files={}/{}, total={}, success={}, fail={}, duplicate={}",
-                successFiles, totalFiles, totalCount, successCount, failCount, duplicateCount);
+        log.info("Batch import completed: files={}/{}, total={}, success={}, fail={}, duplicate={}, skip={}",
+                successFiles, totalFiles, totalCount, successCount, failCount, duplicateCount, skipCount);
 
         return batchResult;
     }
@@ -371,8 +378,15 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             rowData.put(headers.get(i).toLowerCase().trim(), record.get(i).trim());
         }
 
-        // 从CSV中读取销售渠道
-        String salesChannel = getFieldValue(rowData, "sales channel", "销售渠道", "saleschannel");
+        // 空行跳过（无订单号视为空行，不记入失败）
+        String orderIdEarly = getFieldValue(rowData, "order id", "order-id", "orderid", "bestellnummer", "亚马逊订单编号");
+        if (!StringUtils.hasText(orderIdEarly)) {
+            return null;
+        }
+
+        // 从CSV中读取销售渠道（部分 Amazon 导出中 "sales channel" 可能指配送渠道 AFN/MFN，需从 marketplace 列获取实际站点；
+        // 合并文件存在列错位时，销售渠道列可能被填成 AFN，需从整行扫描 amazon.xx）
+        String salesChannel = resolveSalesChannel(rowData);
         if (!StringUtils.hasText(salesChannel)) {
             throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Missing sales channel");
         }
@@ -398,19 +412,16 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         shippingData.setMarketplace(marketplace.getMarketplaceId());
 
         // Parse currency code (优先使用CSV中的货币，否则使用marketplace默认值)
+        // 列错位时货币列可能被填成数量等，需校验；有效货币为3位字母如GBP/USD
         String currencyCode = getFieldValue(rowData, "currency", "货币", "currencycode");
-        if (StringUtils.hasText(currencyCode)) {
-            shippingData.setCurrencyCode(currencyCode);
+        if (StringUtils.hasText(currencyCode) && isValidCurrencyCode(currencyCode)) {
+            shippingData.setCurrencyCode(currencyCode.trim().toUpperCase());
         } else {
             shippingData.setCurrencyCode(marketplace.getCurrencyCode());
         }
 
-        // Parse order ID (支持中文列名)
-        String orderId = getFieldValue(rowData, "order id", "order-id", "orderid", "bestellnummer", "亚马逊订单编号");
-        if (!StringUtils.hasText(orderId)) {
-            return null; // Skip empty rows
-        }
-        shippingData.setOrderId(orderId);
+        // Parse order ID（已在前面用于空行判断）
+        shippingData.setOrderId(orderIdEarly);
 
         // Parse ship date (支持中文列名)
         String dateStr = getFieldValue(rowData, "ship date", "shipment date", "shipped date", "versanddatum", "配送日期");
@@ -455,7 +466,73 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         shippingData.setShipmentPromotionDiscount(parseDecimalFieldMulti(rowData, numberFormatLocale, "ship promotion discount", "shipment promotion", "货件促销折扣"));
         shippingData.setShippingCost(parseDecimalFieldMulti(rowData, numberFormatLocale, "shipping cost", "cost"));
 
+        // 导入时计算总计费用（各分项相加）
+        shippingData.setTotalAmount(calculateShippingTotalAmount(shippingData));
+
         return shippingData;
+    }
+
+    /**
+     * 计算总计费用（各分项相加）
+     * 总计 = 商品价格 + 商品税 + 运费 + 运费税 + 礼品包装价格 + 礼品包装税 + 商品促销折扣 + 货件促销折扣
+     */
+    private BigDecimal calculateShippingTotalAmount(ShippingData d) {
+        BigDecimal sum = BigDecimal.ZERO;
+        if (d.getProductPrice() != null) sum = sum.add(d.getProductPrice());
+        if (d.getProductTax() != null) sum = sum.add(d.getProductTax());
+        if (d.getShippingPrice() != null) sum = sum.add(d.getShippingPrice());
+        if (d.getShippingTax() != null) sum = sum.add(d.getShippingTax());
+        if (d.getGiftWrapPrice() != null) sum = sum.add(d.getGiftWrapPrice());
+        if (d.getGiftWrapTax() != null) sum = sum.add(d.getGiftWrapTax());
+        if (d.getProductPromotionDiscount() != null) sum = sum.add(d.getProductPromotionDiscount());
+        if (d.getShipmentPromotionDiscount() != null) sum = sum.add(d.getShipmentPromotionDiscount());
+        return sum;
+    }
+
+    /**
+     * 解析销售渠道：优先使用 marketplace 格式（amazon.xx），因部分 Amazon 导出中
+     * "sales channel" 列实际为配送渠道（AFN/MFN），需从 marketplace/销售渠道 列获取实际站点。
+     * 合并 CSV 存在列错位时，销售渠道列可能被填成 AFN，需从整行扫描含 amazon. 的值
+     *（如买家电子邮件 xxx@marketplace.amazon.co.uk）。
+     */
+    private String resolveSalesChannel(Map<String, String> rowData) {
+        String[] possibleNames = {"marketplace", "销售渠道", "sales channel", "saleschannel", "店铺"};
+        String fallback = null;
+        for (String name : possibleNames) {
+            String value = rowData.get(name.toLowerCase().trim());
+            if (value != null && !value.trim().isEmpty()) {
+                String v = value.trim();
+                // AFN/MFN 为配送渠道，非销售渠道；优先返回 marketplace 格式（含 amazon.）
+                if (v.toLowerCase().contains("amazon.")) {
+                    return v;
+                }
+                if ("AFN".equalsIgnoreCase(v) || "MFN".equalsIgnoreCase(v)) {
+                    fallback = v; // 暂存，继续查找
+                } else if (fallback == null) {
+                    return v;
+                }
+            }
+        }
+        // 列错位时，已知列可能全是 AFN/MFN；从整行扫描含 amazon. 的值（如 @marketplace.amazon.co.uk）
+        for (String v : rowData.values()) {
+            if (v != null) {
+                String s = v.trim();
+                if (!s.isEmpty()) {
+                    int idx = s.toLowerCase().indexOf("amazon.");
+                    if (idx >= 0) {
+                        String extracted = s.substring(idx);
+                        int slash = extracted.indexOf("/");
+                        if (slash > 0) {
+                            extracted = extracted.substring(0, slash);
+                        }
+                        if (extracted.length() > 7) { // "amazon.x" 至少 8 字符
+                            return extracted;
+                        }
+                    }
+                }
+            }
+        }
+        return fallback != null ? fallback : "";
     }
 
     /**
@@ -530,13 +607,27 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
+     * 校验是否为有效货币代码（3位字母，如 GBP/USD/EUR）
+     * 列错位时货币列可能被填成数字等，需过滤
+     */
+    private boolean isValidCurrencyCode(String code) {
+        if (code == null || code.trim().length() != 3) {
+            return false;
+        }
+        String c = code.trim().toUpperCase();
+        return c.chars().allMatch(Character::isLetter);
+    }
+
+    /**
      * Get field value from row data with multiple possible column names
      */
     private String getFieldValue(Map<String, String> rowData, String... possibleNames) {
         for (String name : possibleNames) {
-            String value = rowData.get(name.toLowerCase());
-            if (value != null && !value.isEmpty()) {
-                return value;
+            if (name == null) continue;
+            String key = name.toLowerCase().trim();
+            String value = rowData.get(key);
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
             }
         }
         return "";
@@ -785,8 +876,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         summary.put("totalShippingCostCny", dataList.stream()
                 .map(d -> convertToCny(d.getShippingCost(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalRevenueTotalCny", dataList.stream()
-                .map(d -> convertToCny(d.getRevenueTotal(), d.getExchangeRate()))
+        summary.put("totalAmountCny", dataList.stream()
+                .map(d -> convertToCny(d.getTotalAmount(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
 
         // 货币统一为人民币
@@ -855,7 +946,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                 // Create header row
                 org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
                 String[] headers = {"订单号", "站点", "发货日期", "SKU", "数量", "产品价格",
-                        "运费价格", "运费成本", "收入合计", "货币", "汇率", "汇率日期", "承运商", "追踪号"};
+                        "运费价格", "运费成本", "总计费用", "货币", "汇率", "汇率日期", "承运商", "追踪号"};
                 for (int i = 0; i < headers.length; i++) {
                     headerRow.createCell(i).setCellValue(headers[i]);
                 }
@@ -872,7 +963,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                     row.createCell(5).setCellValue(data.getProductPrice() != null ? data.getProductPrice().doubleValue() : 0);
                     row.createCell(6).setCellValue(data.getShippingPrice() != null ? data.getShippingPrice().doubleValue() : 0);
                     row.createCell(7).setCellValue(data.getShippingCost() != null ? data.getShippingCost().doubleValue() : 0);
-                    row.createCell(8).setCellValue(data.getRevenueTotal() != null ? data.getRevenueTotal().doubleValue() : 0);
+                    row.createCell(8).setCellValue(data.getTotalAmount() != null ? data.getTotalAmount().doubleValue() : 0);
                     row.createCell(9).setCellValue(data.getCurrencyCode());
                     row.createCell(10).setCellValue(data.getExchangeRate() != null ? data.getExchangeRate().doubleValue() : 0);
                     row.createCell(11).setCellValue(data.getExchangeRateDate() != null ? data.getExchangeRateDate().toString() : "");

@@ -1,5 +1,6 @@
 package com.musheng.business.shipping.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.musheng.common.annotation.FieldMapping;
 import com.musheng.common.entity.BaseEntityWithoutUpdateTime;
@@ -115,10 +116,11 @@ public class ShippingData extends BaseEntityWithoutUpdateTime {
     private BigDecimal shippingCost;
 
     /**
-     * 收入总额(计算值)
+     * 总计费用（导入时由各分项计算：商品价格+税+运费+礼品包装+促销折扣）
      */
-    @FieldMapping(label = "收入总额", description = "计算得出的收入总额", precision = 2, order = 19)
-    private BigDecimal revenueTotal;
+    @TableField("total_amount")
+    @FieldMapping(label = "总计费用", description = "导入时由各分项计算", precision = 2, order = 19)
+    private BigDecimal totalAmount;
 
     /**
      * SKU

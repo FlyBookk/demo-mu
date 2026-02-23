@@ -114,6 +114,9 @@
           <a-descriptions-item label="重复">
             <span class="warning-text">{{ importResult.duplicateRows || 0 }}</span>
           </a-descriptions-item>
+          <a-descriptions-item v-if="(importResult.skipRows ?? 0) > 0" label="跳过（空行）">
+            <span class="secondary-text">{{ importResult.skipRows }}</span>
+          </a-descriptions-item>
         </a-descriptions>
       </div>
     </a-card>
@@ -228,6 +231,7 @@ async function doExecuteImport() {
         successRows: d.successCount as number,
         failedRows: d.failCount as number,
         duplicateRows: (d.duplicateCount as number) || 0,
+        skipRows: (d.skipCount as number) || 0,
         totalFiles: 1,
         successFiles: 1,
         failFiles: 0,
@@ -242,6 +246,7 @@ async function doExecuteImport() {
         successRows: d.successCount as number,
         failedRows: d.failCount as number,
         duplicateRows: (d.duplicateCount as number) || 0,
+        skipRows: (d.skipCount as number) || 0,
         totalFiles: d.totalFiles as number,
         successFiles: d.successFiles as number,
         failFiles: d.failFiles as number,
@@ -292,6 +297,9 @@ function getResultSubTitle(): string {
   }
   if (importResult.value.duplicateRows && importResult.value.duplicateRows > 0) {
     parts.push(`重复 ${importResult.value.duplicateRows} 条`)
+  }
+  if (importResult.value.skipRows && importResult.value.skipRows > 0) {
+    parts.push(`跳过空行 ${importResult.value.skipRows} 条`)
   }
   return parts.join('，')
 }
@@ -380,6 +388,10 @@ onMounted(() => {
   .error-text {
     color: $error-color;
     font-weight: 600;
+  }
+
+  .secondary-text {
+    color: $text-color-secondary;
   }
 
   .warning-text {

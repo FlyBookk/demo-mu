@@ -134,9 +134,9 @@
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
           </template>
 
-          <!-- 收入总额 -->
-          <template v-else-if="column.key === 'revenueTotal'">
-            <span class="amount">{{ formatAmount(record.revenueTotal, record.currencyCode) }}</span>
+          <!-- 总计费用 -->
+          <template v-else-if="column.key === 'totalAmount'">
+            <span class="amount">{{ formatAmount(record.totalAmount, record.currencyCode) }}</span>
           </template>
 
           <!-- 操作 -->
@@ -185,8 +185,8 @@
         <a-descriptions-item label="商品促销折扣">{{ formatAmountValue(detailData.productPromotionDiscount) }}</a-descriptions-item>
         <a-descriptions-item label="货件促销折扣">{{ formatAmountValue(detailData.shipmentPromotionDiscount) }}</a-descriptions-item>
         <a-descriptions-item label="物流费用">{{ formatAmountValue(detailData.shippingCost) }}</a-descriptions-item>
-        <a-descriptions-item label="收入总额">
-          <span class="highlight-amount">{{ formatAmountValue(detailData.revenueTotal) }}</span>
+        <a-descriptions-item label="总计费用">
+          <span class="highlight-amount">{{ formatAmountValue(detailData.totalAmount) }}</span>
         </a-descriptions-item>
         <a-descriptions-item label="承运商">{{ detailData.carrier || '-' }}</a-descriptions-item>
         <a-descriptions-item label="物流单号">{{ detailData.trackingNumber || '-' }}</a-descriptions-item>
@@ -259,7 +259,7 @@ const summary = reactive<ShippingSummary>({
   totalQuantity: 0,
   totalProductPriceCny: 0,
   totalShippingPriceCny: 0,
-  totalRevenueTotalCny: 0,
+  totalAmountCny: 0,
   totalShippingCostCny: 0,
   currencyCode: 'CNY'
 })
@@ -331,6 +331,13 @@ const columns = [
     title: '礼品包装税费',
     dataIndex: 'giftWrapTax',
     key: 'giftWrapTax',
+    width: 110,
+    align: 'right' as const
+  },
+  {
+    title: '总计费用',
+    dataIndex: 'totalAmount',
+    key: 'totalAmount',
     width: 110,
     align: 'right' as const
   },

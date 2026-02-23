@@ -23,8 +23,8 @@ export interface ShippingData {
   shipmentPromotionDiscount: number
   // 物流成本
   shippingCost: number
-  // 计算字段
-  revenueTotal: number
+  // 总计费用（导入时由各分项计算）
+  totalAmount: number
   // 其他信息
   sku?: string
   quantity?: number
@@ -80,7 +80,7 @@ export interface ShippingSummary {
   totalQuantity: number
   totalProductPriceCny: number
   totalShippingPriceCny: number
-  totalRevenueTotalCny: number
+  totalAmountCny: number
   totalShippingCostCny: number
   currencyCode: string
 }

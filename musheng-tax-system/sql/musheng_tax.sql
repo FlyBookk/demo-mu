@@ -457,7 +457,7 @@ CREATE TABLE `t_shipping_data` (
   `product_promotion_discount` decimal(15,4) DEFAULT '0.0000' COMMENT '商品促销折扣',
   `shipment_promotion_discount` decimal(15,4) DEFAULT '0.0000' COMMENT '货件促销折扣',
   `shipping_cost` decimal(15,4) DEFAULT '0.0000' COMMENT '物流费用(成本)',
-  `revenue_total` decimal(15,4) DEFAULT '0.0000' COMMENT '收入总额(计算值)',
+  `total_amount` decimal(15,4) DEFAULT '0.0000' COMMENT '总计费用(导入时由各分项计算)',
   `sku` varchar(100) DEFAULT '' COMMENT 'SKU',
   `quantity` int DEFAULT '0' COMMENT '数量',
   `carrier` varchar(100) DEFAULT '' COMMENT '承运商',
