@@ -73,6 +73,15 @@
           </a-select>
         </a-form-item>
 
+        <a-form-item label="汇率取值日期" name="exchangeRateDate" help="不填则按发票开具日期查询汇率">
+          <a-date-picker
+            v-model:value="formData.exchangeRateDate"
+            placeholder="可选，不填则使用发票开具日期"
+            format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </a-form-item>
+
         <a-form-item label="发票号" name="invoiceNo">
           <a-input
             v-model:value="formData.invoiceNo"
@@ -171,12 +180,13 @@ const currencyOptions = ref<Currency[]>([])
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
-const formData = reactive<AdvertisingDataForm & { yearMonthDate: Dayjs | null }>({
+const formData = reactive<AdvertisingDataForm & { yearMonthDate: Dayjs | null; exchangeRateDate: Dayjs | null }>({
   siteCode: '',
   yearMonth: '',
   yearMonthDate: null,
   amount: undefined as number | undefined,
   currencyCode: '',
+  exchangeRateDate: null,
   invoiceNo: '',
   remark: ''
 })
@@ -292,6 +302,7 @@ async function handleSubmit() {
       yearMonth: formData.yearMonth,
       amount: formData.amount!,
       currencyCode: formData.currencyCode,
+      exchangeRateDate: formData.exchangeRateDate?.format('YYYY-MM-DD'),
       invoiceNo: formData.invoiceNo,
       remark: formData.remark
     }
@@ -319,6 +330,7 @@ async function handleSubmitAndContinue() {
       yearMonth: formData.yearMonth,
       amount: formData.amount!,
       currencyCode: formData.currencyCode,
+      exchangeRateDate: formData.exchangeRateDate?.format('YYYY-MM-DD'),
       invoiceNo: formData.invoiceNo,
       remark: formData.remark
     }
@@ -330,6 +342,7 @@ async function handleSubmitAndContinue() {
     formData.yearMonth = ''
     formData.yearMonthDate = null
     formData.amount = undefined
+    formData.exchangeRateDate = null
     formData.invoiceNo = ''
     formData.remark = ''
     
@@ -353,6 +366,7 @@ function handleReset() {
     yearMonthDate: null,
     amount: undefined,
     currencyCode: '',
+    exchangeRateDate: null,
     invoiceNo: '',
     remark: ''
   })

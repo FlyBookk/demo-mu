@@ -60,64 +60,88 @@
       </a-form>
     </a-card>
 
-    <!-- 汇总统计卡片 -->
+    <!-- 汇总统计卡片（收入+、费用-） -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="4">
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="收入总额(人民币)"
             :value="totalStats.totalRevenueCny"
             :precision="2"
-            prefix="¥"
+            prefix="+¥"
             :value-style="{ color: '#52c41a' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="4">
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="退款-发货归属"
             :value="totalStats.refundByShipmentCny"
             :precision="2"
-            prefix="¥"
+            prefix="-¥"
             :value-style="{ color: '#ff4d4f' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="4">
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="消费税"
             :value="totalStats.consumptionTaxCny"
             :precision="2"
-            prefix="¥"
+            prefix="-¥"
             :value-style="{ color: '#fa8c16' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="4">
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="佣金/服务费"
             :value="totalStats.totalServiceFeeCny"
             :precision="2"
-            prefix="¥"
+            prefix="-¥"
             :value-style="{ color: '#eb2f96' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="4">
+    </a-row>
+    <a-row :gutter="16" class="stat-row">
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="其他费"
             :value="totalStats.miscFeesCny"
             :precision="2"
-            prefix="¥"
+            prefix="-¥"
             :value-style="{ color: '#722ed1' }"
           />
         </a-card>
       </a-col>
-      <a-col :span="4">
+      <a-col :span="6">
+        <a-card class="stat-card">
+          <a-statistic
+            title="广告费"
+            :value="totalStats.advertisingCostCny"
+            :precision="2"
+            prefix="-¥"
+            :value-style="{ color: '#13c2c2' }"
+          />
+        </a-card>
+      </a-col>
+      <a-col :span="6">
+        <a-card class="stat-card">
+          <a-statistic
+            title="总成本"
+            :value="totalStats.totalCost"
+            :precision="2"
+            prefix="-¥"
+            :value-style="{ color: '#ff4d4f' }"
+          />
+        </a-card>
+      </a-col>
+      <a-col :span="6">
         <a-card class="stat-card">
           <a-statistic
             title="发货订单数"
@@ -146,37 +170,37 @@
             <span style="margin-left: 8px">{{ record.siteName }}</span>
           </template>
           <template v-else-if="column.key === 'totalRevenueCny'">
-            <span class="amount positive">¥{{ formatNumber(record.totalRevenueCny) }}</span>
+            <span class="amount positive">{{ formatAmountWithSign(record.totalRevenueCny, true) }}</span>
           </template>
           <template v-else-if="column.key === 'refundBySettlementCny'">
-            <span class="amount negative">¥{{ formatNumber(record.refundBySettlementCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.refundBySettlementCny, false) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.refundCountBySettlement }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'refundByShipmentCny'">
-            <span class="amount negative">¥{{ formatNumber(record.refundByShipmentCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.refundByShipmentCny, false) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.refundCountByShipment }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'consumptionTaxCny'">
-            <span class="amount negative">¥{{ formatNumber(record.consumptionTaxCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.consumptionTaxCny, false) }}</span>
           </template>
           <template v-else-if="column.key === 'sellingFeesCny'">
-            <span class="amount negative">¥{{ formatNumber(record.sellingFeesCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.sellingFeesCny, false) }}</span>
           </template>
           <template v-else-if="column.key === 'fbaFeesCny'">
-            <span class="amount negative">¥{{ formatNumber(record.fbaFeesCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.fbaFeesCny, false) }}</span>
           </template>
           <template v-else-if="column.key === 'totalServiceFeeCny'">
-            <span class="amount negative">¥{{ formatNumber(record.totalServiceFeeCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.totalServiceFeeCny, false) }}</span>
           </template>
           <template v-else-if="column.key === 'miscFeesCny'">
-            <span class="amount negative">¥{{ formatNumber(record.miscFeesCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.miscFeesCny, false) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.miscFeesCount }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'advertisingCostCny'">
-            <span class="amount negative">¥{{ formatNumber(record.advertisingCostCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.advertisingCostCny, false) }}</span>
           </template>
           <template v-else-if="column.key === 'totalCost'">
-            <span class="amount negative">¥{{ formatNumber(record.totalCost) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.totalCost, false) }}</span>
           </template>
         </template>
       </a-table>
@@ -212,7 +236,7 @@
             <a-tag :color="getFeeTypeColor(record.feeCategory)">{{ record.feeType }}</a-tag>
           </template>
           <template v-else-if="column.key === 'amountCny'">
-            <span class="amount negative">¥{{ formatNumber(record.amountCny) }}</span>
+            <span class="amount negative">{{ formatAmountWithSign(record.amountCny, false) }}</span>
           </template>
         </template>
       </a-table>
@@ -268,6 +292,8 @@ const totalStats = computed(() => {
     consumptionTaxCny: data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0),
     totalServiceFeeCny: data.reduce((sum, item) => sum + (item.totalServiceFeeCny || 0), 0),
     miscFeesCny: data.reduce((sum, item) => sum + (item.miscFeesCny || 0), 0),
+    advertisingCostCny: data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0),
+    totalCost: data.reduce((sum, item) => sum + (item.totalCost || 0), 0),
     shippingOrderCount: data.reduce((sum, item) => sum + (item.shippingOrderCount || 0), 0)
   }
 })
@@ -307,6 +333,13 @@ function formatQuarter(quarter: string): string {
 function formatNumber(value: number): string {
   if (value === null || value === undefined) return '0.00'
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** 带正负号的金额格式化：收入用 +¥，费用用 -¥ */
+function formatAmountWithSign(value: number | null | undefined, isPositive: boolean): string {
+  const num = value ?? 0
+  const sign = isPositive ? '+' : '-'
+  return `${sign}¥${formatNumber(Math.abs(num))}`
 }
 
 function getFeeTypeColor(category: string): string {
@@ -400,18 +433,26 @@ async function fetchFeeBreakdown() {
 }
 
 function updateCharts() {
-  if (!feeData.value.length) return
-
-  // 按费用类型汇总
+  // 按费用类型汇总（其他费明细）
   const feeTypeMap = new Map<string, number>()
   feeData.value.forEach(item => {
     const current = feeTypeMap.get(item.feeType) || 0
     feeTypeMap.set(item.feeType, current + item.amountCny)
   })
 
+  // 加入广告费汇总（来自报税汇总数据）
+  const advertisingTotal = totalStats.value.advertisingCostCny
+  if (advertisingTotal > 0) {
+    const current = feeTypeMap.get('广告费') || 0
+    feeTypeMap.set('广告费', current + advertisingTotal)
+  }
+
   const pieDataArr = Array.from(feeTypeMap.entries())
     .map(([name, value]) => ({ name, value: Math.abs(value) }))
+    .filter(item => item.value > 0)
     .sort((a, b) => b.value - a.value)
+
+  if (!pieDataArr.length) return
 
   // 饼图
   if (pieChartRef.value) {
@@ -495,7 +536,8 @@ function updateCharts() {
 }
 
 async function handleQuery() {
-  await Promise.all([fetchSummary(), fetchFeeBreakdown()])
+  await fetchSummary()
+  await fetchFeeBreakdown()
 }
 
 async function handleExport() {

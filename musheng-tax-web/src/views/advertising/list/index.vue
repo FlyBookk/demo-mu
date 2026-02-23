@@ -92,6 +92,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
+        :scroll="{ x: 2220 }"
         row-key="id"
         @change="handleTableChange"
       >
@@ -109,6 +110,17 @@
           <!-- 费用 -->
           <template v-else-if="column.key === 'cost'">
             <span class="amount">{{ formatAmount(record.cost, record.currency) }}</span>
+          </template>
+
+          <!-- 汇率 -->
+          <template v-else-if="column.key === 'exchangeRate'">
+            <span v-if="record.exchangeRate != null">{{ Number(record.exchangeRate).toFixed(6) }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+
+          <!-- 汇率取值日期 -->
+          <template v-else-if="column.key === 'exchangeRateDate'">
+            <span>{{ record.exchangeRateDate ?? '-' }}</span>
           </template>
 
           <!-- 操作 -->
@@ -208,6 +220,12 @@ const columns = [
     width: 220
   },
   {
+    title: '发票开具日期',
+    dataIndex: 'issueDate',
+    key: 'issueDate',
+    width: 120
+  },
+  {
     title: '费用',
     dataIndex: 'cost',
     key: 'cost',
@@ -219,6 +237,19 @@ const columns = [
     dataIndex: 'currency',
     key: 'currency',
     width: 80
+  },
+  {
+    title: '汇率',
+    dataIndex: 'exchangeRate',
+    key: 'exchangeRate',
+    width: 100,
+    align: 'right' as const
+  },
+  {
+    title: '汇率取值日期',
+    dataIndex: 'exchangeRateDate',
+    key: 'exchangeRateDate',
+    width: 120
   },
   {
     title: '广告活动',

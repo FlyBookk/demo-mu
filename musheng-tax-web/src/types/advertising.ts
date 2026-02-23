@@ -29,6 +29,7 @@ export interface AdvertisingData {
   attachmentPath?: string
   remark?: string
   exchangeRate?: number
+  exchangeRateDate?: string
   amountCny?: number
   importBatchId?: string
   createBy?: number
@@ -46,6 +47,8 @@ export interface AdvertisingDataForm {
   invoiceNo?: string
   attachmentPath?: string
   remark?: string
+  /** 汇率取值日期（可选，不填则使用发票开具日期） */
+  exchangeRateDate?: string
 }
 
 // 广告数据查询参数（基础列表查询）

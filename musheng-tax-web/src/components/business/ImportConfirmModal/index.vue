@@ -3,39 +3,30 @@
     v-model:open="visible"
     title="确认导入"
     :mask-closable="false"
-    width="480px"
+    width="400px"
     @ok="handleConfirm"
     @cancel="handleCancel"
   >
     <div class="import-confirm-content">
-      <a-alert type="warning" show-icon class="confirm-alert">
-        <template #message>
-          <div class="alert-content">
-            <p class="alert-title">您即将向以下店铺导入数据：</p>
-            <div class="shop-info">
-              <ShopOutlined class="shop-icon" />
-              <span class="shop-name">{{ shopName }}</span>
-              <a-tag color="blue">{{ shopCode }}</a-tag>
-            </div>
-            <p class="alert-desc">
-              请确认店铺选择正确，导入后数据将归属该店铺，无法更改。
-            </p>
-          </div>
+      <div class="confirm-summary">
+        <template v-if="recordCount != null">
+          <span class="summary-main">将导入 <strong>{{ recordCount }}</strong> 条{{ dataTypeLabel }}到</span>
         </template>
-      </a-alert>
-      
-      <div class="import-info" v-if="fileName">
-        <div class="info-item">
-          <span class="info-label">导入文件：</span>
-          <span class="info-value">{{ fileName }}</span>
-        </div>
-        <div class="info-item" v-if="dataType">
-          <span class="info-label">数据类型：</span>
-          <span class="info-value">{{ dataTypeLabel }}</span>
+        <template v-else>
+          <span class="summary-main">将导入{{ dataTypeLabel }}到</span>
+        </template>
+        <div class="shop-badge">
+          <ShopOutlined class="shop-icon" />
+          <span>{{ shopName || '当前店铺' }}</span>
+          <a-tag v-if="shopCode" size="small">{{ shopCode }}</a-tag>
         </div>
       </div>
+      <p class="confirm-hint" v-if="shopName">导入后数据归属该店铺</p>
+      <div class="import-info" v-if="fileName">
+        <span class="info-label">文件：</span>
+        <span class="info-value">{{ fileName }}</span>
+      </div>
     </div>
-    
     <template #footer>
       <a-button @click="handleCancel">取消</a-button>
       <a-button type="primary" :loading="confirmLoading" @click="handleConfirm">
@@ -53,11 +44,14 @@ import { useShopStore } from '@/stores/modules/shop'
 interface Props {
   fileName?: string
   dataType?: string
+  /** 导入条数，展示「将导入 X 条」 */
+  recordCount?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   fileName: '',
-  dataType: ''
+  dataType: '',
+  recordCount: undefined
 })
 
 const emit = defineEmits<{
@@ -82,7 +76,7 @@ const dataTypeLabel = computed(() => {
     advertising: '广告数据',
     'fba-shipment': 'FBA货件明细'
   }
-  return labels[props.dataType] || props.dataType
+  return labels[props.dataType] || props.dataType || '数据'
 })
 
 // 方法
@@ -117,69 +111,35 @@ defineExpose({
 
 <style lang="scss" scoped>
 .import-confirm-content {
-  .confirm-alert {
-    margin-bottom: 16px;
-    
-    .alert-content {
-      .alert-title {
-        margin: 0 0 12px 0;
-        font-weight: 500;
-        color: #333;
-      }
-      
-      .shop-info {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 16px;
-        background: #f0f5ff;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        
-        .shop-icon {
-          font-size: 20px;
-          color: #1890ff;
-        }
-        
-        .shop-name {
-          font-size: 16px;
-          font-weight: 600;
-          color: #1890ff;
-        }
-      }
-      
-      .alert-desc {
-        margin: 0;
-        color: #666;
-        font-size: 13px;
-      }
+  .confirm-summary {
+    margin-bottom: 12px;
+    .summary-main {
+      display: block;
+      color: #333;
+      margin-bottom: 8px;
+      strong { color: #1890ff; }
+    }
+    .shop-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #f5f7fa;
+      border-radius: 6px;
+      font-size: 14px;
+      .shop-icon { color: #1890ff; font-size: 16px; }
     }
   }
-  
+  .confirm-hint {
+    margin: 0 0 12px 0;
+    font-size: 12px;
+    color: #999;
+  }
   .import-info {
-    padding: 12px 16px;
-    background: #fafafa;
-    border-radius: 6px;
-    
-    .info-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px;
-      
-      &:last-child {
-        margin-bottom: 0;
-      }
-      
-      .info-label {
-        color: #666;
-        width: 80px;
-      }
-      
-      .info-value {
-        color: #333;
-        word-break: break-all;
-      }
-    }
+    font-size: 13px;
+    color: #666;
+    .info-label { margin-right: 4px; }
+    .info-value { word-break: break-all; }
   }
 }
 </style>

@@ -58,6 +58,14 @@
               closable
               class="file-alert"
             />
+            <!-- 解析后即时预览 -->
+            <a-alert
+              v-if="parsedData.length > 0 && uploadTab === 'file'"
+              :message="`解析成功：共 ${parsedData.length} 条，点击「下一步」查看完整预览`"
+              type="info"
+              show-icon
+              class="file-alert"
+            />
           </a-tab-pane>
 
           <!-- 手动录入标签页 -->
@@ -119,8 +127,8 @@
           </a-tab-pane>
         </a-tabs>
 
-        <div class="step-actions">
-          <a-button type="primary" @click="handleNextStep" :disabled="!canProceed">
+        <div class="step-actions step-actions-step1">
+          <a-button type="primary" size="large" @click="handleNextStep" :disabled="!canProceed">
             下一步：数据预览
           </a-button>
         </div>
@@ -129,6 +137,15 @@
       <!-- 步骤2: 数据预览 -->
       <div v-if="currentStep === 1" class="step-content">
         <a-alert
+          v-if="previewValidationErrors.length > 0"
+          message="部分数据校验未通过"
+          :description="`共 ${previewData.length} 条，其中 ${previewValidationErrors.length} 条无效将跳过，仅导入 ${previewData.length - previewValidationErrors.length} 条有效数据`"
+          type="warning"
+          show-icon
+          class="preview-alert"
+        />
+        <a-alert
+          v-else
           message="数据预览"
           :description="`共 ${previewData.length} 条数据，请确认后点击「开始导入」按钮`"
           type="info"
@@ -153,66 +170,63 @@
           </template>
         </a-table>
 
-        <div class="step-actions">
-          <a-space>
-            <a-button @click="handlePrevStep">上一步</a-button>
-            <a-button type="primary" :loading="importing" @click="handleImport">
-              开始导入
-            </a-button>
-          </a-space>
+        <div class="step-actions step-actions-preview">
+          <a-button @click="handlePrevStep">上一步</a-button>
+          <a-popconfirm
+            title="确认导入"
+            :description="`将导入 ${previewData.length - previewValidationErrors.length} 条广告数据，确认继续？`"
+            ok-text="确认导入"
+            cancel-text="取消"
+            @confirm="doExecuteImport"
+          >
+            <template #default>
+              <a-button type="primary" :loading="importing" size="large">
+                开始导入
+              </a-button>
+            </template>
+          </a-popconfirm>
         </div>
       </div>
-
-      <!-- 导入确认弹窗 -->
-      <ImportConfirmModal
-        ref="importConfirmRef"
-        data-type="advertising"
-        @confirm="doExecuteImport"
-      />
 
       <!-- 步骤3: 导入结果 -->
       <div v-if="currentStep === 2" class="step-content">
         <a-result
-          :status="importResult.failedCount > 0 ? 'warning' : 'success'"
-          :title="importResult.failedCount > 0 ? '导入完成（部分失败）' : '导入成功'"
-          :sub-title="`批次ID: ${importResult.importBatchId}`"
+          :status="(importResult.failedCount ?? 0) > 0 ? 'warning' : 'success'"
+          :title="(importResult.failedCount ?? 0) > 0 ? '导入完成（部分失败）' : '导入成功'"
+          :sub-title="`批次ID: ${importResult.importBatchId ?? '-'}`"
         >
           <template #extra>
-            <a-space direction="vertical" style="width: 100%">
-              <a-statistic-group>
-                <a-statistic
-                  title="总记录数"
-                  :value="importResult.totalCount"
-                  suffix="条"
-                />
+            <div class="import-result-extra">
+              <div class="import-stats-row">
+                <a-statistic title="总记录数" :value="importResult.totalCount ?? 0" suffix="条" />
                 <a-statistic
                   title="成功导入"
-                  :value="importResult.importedCount"
+                  :value="importResult.importedCount ?? 0"
                   suffix="条"
                   value-style="color: #52c41a"
                 />
                 <a-statistic
                   title="去重记录"
-                  :value="importResult.duplicatedCount"
+                  :value="importResult.duplicatedCount ?? 0"
                   suffix="条"
                   value-style="color: #faad14"
                 />
                 <a-statistic
                   title="失败记录"
-                  :value="importResult.failedCount"
+                  :value="importResult.failedCount ?? 0"
                   suffix="条"
                   value-style="color: #ff4d4f"
                 />
-              </a-statistic-group>
+              </div>
 
               <!-- 去重记录详情 -->
-              <a-collapse v-if="importResult.duplicatedInvoices.length > 0">
+              <a-collapse v-if="(importResult.duplicatedInvoices?.length ?? 0) > 0">
                 <a-collapse-panel
                   key="duplicated"
-                  :header="`去重的发票编号 (${importResult.duplicatedInvoices.length}个)`"
+                  :header="`去重的发票编号 (${(importResult.duplicatedInvoices ?? []).length}个)`"
                 >
                   <a-tag
-                    v-for="invoice in importResult.duplicatedInvoices"
+                    v-for="invoice in (importResult.duplicatedInvoices ?? [])"
                     :key="invoice"
                     color="warning"
                     class="invoice-tag"
@@ -222,14 +236,14 @@
                 </a-collapse-panel>
               </a-collapse>
 
-              <!-- 失败记录详情 -->
-              <a-collapse v-if="importResult.failedRecords.length > 0">
+              <!-- 失败记录详情（有失败时默认展开，便于用户查看原因） -->
+              <a-collapse v-if="(importResult.failedRecords?.length ?? 0) > 0" :default-active-key="['failed']">
                 <a-collapse-panel
                   key="failed"
-                  :header="`失败记录详情 (${importResult.failedRecords.length}条)`"
+                  :header="`失败记录详情 (${(importResult.failedRecords ?? []).length}条)`"
                 >
                   <a-list
-                    :data-source="importResult.failedRecords"
+                    :data-source="importResult.failedRecords ?? []"
                     size="small"
                   >
                     <template #renderItem="{ item }">
@@ -251,15 +265,15 @@
                 </a-collapse-panel>
               </a-collapse>
 
-              <a-space>
+              <div class="import-result-actions">
                 <a-button type="primary" @click="handleViewList">
                   查看数据列表
                 </a-button>
                 <a-button @click="handleReimport">
                   重新导入
                 </a-button>
-              </a-space>
-            </a-space>
+              </div>
+            </div>
           </template>
         </a-result>
       </div>
@@ -273,7 +287,6 @@ import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { DownloadOutlined, PlusOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import { importAdvertisingData, downloadAdvertisingTemplate } from '@/api/advertising'
-import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import type {
   AdvertisingImportRequest,
   AdvertisingImportResponse
@@ -306,12 +319,12 @@ interface ManualRow {
 const manualDataSource = ref<ManualRow[]>([])
 let rowKeyCounter = 0
 
-// 预览数据
+// 预览数据与校验错误
 const previewData = ref<AdvertisingImportRequest[]>([])
+const previewValidationErrors = ref<{ rowIndex: number; invoiceNumber: string; message: string }[]>([])
 
 // 导入状态
 const importing = ref(false)
-const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
 
 // 导入结果
 const importResult = ref<AdvertisingImportResponse>({
@@ -385,17 +398,43 @@ const handleFileUpload: UploadProps['customRequest'] = async (options) => {
   }
 }
 
-// 读取 Excel 文件
+// 币种映射（支持中文）
+const CURRENCY_MAP: Record<string, string> = {
+  USD: 'USD', CAD: 'CAD', GBP: 'GBP', EUR: 'EUR',
+  美元: 'USD', 加元: 'CAD', 英镑: 'GBP', 欧元: 'EUR'
+}
+
+// 将 Excel 日期（Date/序列号/字符串）转为 YYYY-MM-DD
+function formatExcelDate(val: unknown): string {
+  if (val == null || val === '') return ''
+  if (val instanceof Date) return dayjs(val).format('YYYY-MM-DD')
+  if (typeof val === 'number') {
+    // Excel 序列号：1900-01-01 为 1，25569 ≈ 1970-01-01
+    const d = new Date((val - 25569) * 86400 * 1000)
+    return isNaN(d.getTime()) ? '' : dayjs(d).format('YYYY-MM-DD')
+  }
+  const s = String(val).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  return s || ''
+}
+
+// 读取 Excel 文件（启用 cellDates 正确解析日期）
 const readExcelFile = (file: File): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: 'array' })
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true })
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet)
-        resolve(jsonData)
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet) as any[]
+        // 过滤全空行和空发票编号行
+        const filtered = jsonData.filter(row => {
+          const inv = row?.['发票编号'] ?? row?.invoiceNumber ?? ''
+          const store = row?.['店铺'] ?? row?.storeName ?? ''
+          return String(inv).trim() || String(store).trim()
+        })
+        resolve(filtered)
       } catch (error) {
         reject(error)
       }
@@ -437,24 +476,63 @@ const handleDeleteRow = (index: number) => {
   manualDataSource.value.splice(index, 1)
 }
 
+// 前端预校验单条数据，返回错误信息
+interface ValidationError { rowIndex: number; invoiceNumber: string; message: string }
+function validateImportRow(row: AdvertisingImportRequest, index: number): string | null {
+  if (!row.storeName?.trim()) return '店铺名称不能为空'
+  if (!row.invoiceNumber?.trim()) return '发票编号不能为空'
+  if (!row.billingStartDate) return '账单开始日期不能为空'
+  if (!row.billingEndDate) return '账单结束日期不能为空'
+  if (!row.issueDate) return '开具时间不能为空'
+  if (!row.currency) return '付款币种不能为空'
+  const validCurrencies = ['USD', 'CAD', 'GBP', 'EUR']
+  if (!validCurrencies.includes(row.currency)) return `不支持的币种: ${row.currency}`
+  if (row.invoiceAmount == null || row.invoiceAmount < 0.01) return '账单金额必须大于0'
+  if (row.cost == null || row.cost < 0) return '费用不能为负数'
+  if (row.billingStartDate > row.billingEndDate) return '账单开始日期不能晚于结束日期'
+  return null
+}
+
 // 下一步
 const handleNextStep = () => {
   try {
+    let data: AdvertisingImportRequest[] = []
     if (uploadTab.value === 'file') {
-      // 文件上传模式：转换解析的数据
-      previewData.value = parsedData.value.map(row => convertRowToImportRequest(row))
+      data = parsedData.value.map(row => convertRowToImportRequest(row))
     } else {
-      // 手动录入模式：转换手动录入的数据
-      previewData.value = manualDataSource.value
+      data = manualDataSource.value
         .filter(row => row.storeName && row.invoiceNumber)
         .map(row => convertManualRowToImportRequest(row))
     }
 
-    if (previewData.value.length === 0) {
+    if (data.length === 0) {
       message.warning('没有有效的数据可以导入')
       return
     }
 
+    // 前端预校验
+    const errors: ValidationError[] = []
+    data.forEach((row, i) => {
+      const err = validateImportRow(row, i)
+      if (err) errors.push({ rowIndex: i + 1, invoiceNumber: row.invoiceNumber || '-', message: err })
+    })
+
+    if (errors.length > 0) {
+      const validCount = data.length - errors.length
+      const msg = `共 ${data.length} 条，其中 ${errors.length} 条校验失败。\n示例: 第${errors[0].rowIndex}行 ${errors[0].message}`
+      message.warning({
+        content: msg,
+        duration: 5
+      })
+      // 仍进入预览，但标记错误行；用户可删除无效行或修正后重试
+      previewData.value = data
+      previewValidationErrors.value = errors
+      currentStep.value = 1
+      return
+    }
+
+    previewData.value = data
+    previewValidationErrors.value = []
     currentStep.value = 1
   } catch (error) {
     message.error('数据转换失败: ' + (error as Error).message)
@@ -466,84 +544,112 @@ const handlePrevStep = () => {
   currentStep.value = 0
 }
 
-// 转换Excel行数据为导入请求
+// 转换Excel行数据为导入请求（兼容利润报表-广告发票记录格式）
 const convertRowToImportRequest = (row: any): AdvertisingImportRequest => {
-  // 解析账单周期 - 修正：先按分隔符分割，避免被日期中的 - 干扰
-  const billingPeriod = row['账单周期'] || row['billingPeriod'] || ''
-  // 先按 至/~ 分割，然后trim掉空格
-  const parts = billingPeriod.split(/至|~/).map((p: string) => p.trim())
-  const startDate = parts[0] || ''
-  const endDate = parts[1] || ''
+  // 解析账单周期：支持 "2025-06-30至2025-07-03" 或 Excel 日期
+  const billingPeriodRaw = row['账单周期'] ?? row['billingPeriod'] ?? ''
+  let startDate = ''
+  let endDate = ''
+  if (billingPeriodRaw) {
+    const parts = String(billingPeriodRaw).split(/[至~]/).map((p: string) => p.trim())
+    startDate = formatExcelDate(parts[0] || '') || parts[0] || ''
+    endDate = formatExcelDate(parts[1] || '') || parts[1] || ''
+  }
+  const issueDateRaw = row['开具时间'] ?? row['issueDate'] ?? ''
+  const issueDate = formatExcelDate(issueDateRaw) || dayjs().format('YYYY-MM-DD')
+  if (!startDate || !endDate) {
+    startDate = startDate || issueDate
+    endDate = endDate || issueDate
+  }
+
+  const costVal = parseFloat(row['费用'] ?? row['cost'] ?? '0') || 0
+  const invoiceAmountVal = parseFloat(row['账单金额'] ?? row['invoiceAmount'] ?? '0') || 0
+  // 后端要求 invoiceAmount >= 0.01，空/0 时用 cost 或 0.01 兜底
+  const invoiceAmount = invoiceAmountVal >= 0.01 ? invoiceAmountVal : (costVal >= 0.01 ? costVal : 0.01)
+
+  const currencyRaw = String(row['付款币种'] ?? row['currency'] ?? 'USD').trim()
+  const currency = CURRENCY_MAP[currencyRaw] || (CURRENCY_MAP[currencyRaw.toUpperCase()] ?? 'USD')
 
   return {
-    storeName: row['店铺'] || row['storeName'] || '',
-    invoiceNumber: row['发票编号'] || row['invoiceNumber'] || '',
-    invoiceStatus: row['发票状态'] || row['invoiceStatus'] || 'PAID_IN_FULL',
-    paymentType: row['支付类型'] || row['paymentType'],
-    billingStartDate: startDate,
-    billingEndDate: endDate,
-    issueDate: row['开具时间'] || row['issueDate'] || dayjs().format('YYYY-MM-DD'),
-    currency: row['付款币种'] || row['currency'] || 'USD',
-    invoiceAmount: parseFloat(row['账单金额'] || row['invoiceAmount'] || '0'),
-    cost: parseFloat(row['费用'] || row['cost'] || '0'),
-    otherCost: parseFloat(row['其他费分摊'] || row['otherCost'] || '0'),
-    campaignName: row['广告活动'] || row['campaignName'],
-    campaignId: row['活动ID'] || row['campaignId'],
-    pricingModel: row['计价方式'] || row['pricingModel'],
-    clicks: parseInt(row['点击'] || row['clicks'] || '0'),
-    avgCpc: parseFloat(row['平均点击单价'] || row['avgCpc'] || '0'),
-    dataSource: row['取值来源'] || row['dataSource'],
-    productList: row['承担商品'] || row['productList'],
-    adType: row['广告类型'] || row['adType'],
-    remark: row['备注'] || row['remark']
+    storeName: String(row['店铺'] ?? row['storeName'] ?? '').trim() || '未填写',
+    invoiceNumber: String(row['发票编号'] ?? row['invoiceNumber'] ?? '').trim(),
+    invoiceStatus: String(row['发票状态'] ?? row['invoiceStatus'] ?? 'PAID_IN_FULL').trim() || 'PAID_IN_FULL',
+    paymentType: row['支付类型'] ?? row['paymentType'],
+    billingStartDate: startDate || issueDate,
+    billingEndDate: endDate || issueDate,
+    issueDate,
+    currency,
+    invoiceAmount,
+    cost: costVal,
+    otherCost: parseFloat(row['其他费分摊'] ?? row['otherCost'] ?? '0') || 0,
+    campaignName: row['广告活动'] ?? row['campaignName'],
+    campaignId: row['活动ID'] ?? row['campaignId'],
+    pricingModel: row['计价方式'] ?? row['pricingModel'],
+    clicks: parseInt(row['点击'] ?? row['clicks'] ?? '0', 10) || undefined,
+    avgCpc: parseFloat(row['平均点击单价'] ?? row['avgCpc'] ?? '0') || undefined,
+    dataSource: row['取值来源'] ?? row['dataSource'],
+    productList: row['承担商品'] ?? row['productList'],
+    adType: row['广告类型'] ?? row['adType'],
+    remark: row['备注'] ?? row['remark']
   }
 }
 
-// 转换手动录入行为导入请求
+// 转换手动录入行为导入请求（补全必填字段）
 const convertManualRowToImportRequest = (row: ManualRow): AdvertisingImportRequest => {
   const [startDate, endDate] = row.billingPeriod || []
+  const today = dayjs().format('YYYY-MM-DD')
+  const costVal = row.cost ?? 0
+  const billingStart = startDate ? dayjs(startDate).format('YYYY-MM-DD') : today
+  const billingEnd = endDate ? dayjs(endDate).format('YYYY-MM-DD') : today
 
   return {
-    storeName: row.storeName,
-    invoiceNumber: row.invoiceNumber,
+    storeName: row.storeName?.trim() || '未填写',
+    invoiceNumber: row.invoiceNumber?.trim() || '',
     invoiceStatus: 'PAID_IN_FULL',
-    billingStartDate: startDate ? dayjs(startDate).format('YYYY-MM-DD') : '',
-    billingEndDate: endDate ? dayjs(endDate).format('YYYY-MM-DD') : '',
-    issueDate: dayjs().format('YYYY-MM-DD'),
-    currency: row.currency,
-    invoiceAmount: row.cost || 0,
-    cost: row.cost || 0
+    billingStartDate: billingStart,
+    billingEndDate: billingEnd,
+    issueDate: today,
+    currency: row.currency || 'USD',
+    invoiceAmount: costVal >= 0.01 ? costVal : 0.01,
+    cost: costVal
   }
 }
 
-// 点击开始导入 - 弹出确认窗口
-const handleImport = () => {
-  // 弹出确认窗口
-  importConfirmRef.value?.show()
-}
-
-// 确认导入后执行
+// 执行导入（由 Popconfirm 确认后直接调用）
 const doExecuteImport = async () => {
   importing.value = true
-  importConfirmRef.value?.setLoading(true)
-  
-  try {
-    const response = await importAdvertisingData({
-      data: previewData.value
-    })
 
-    importResult.value = response
-    importConfirmRef.value?.hide()
+  // 若有预校验错误，仅导入有效行
+  const invalidRows = new Set(previewValidationErrors.value.map(e => e.rowIndex))
+  const dataToImport = invalidRows.size > 0
+    ? previewData.value.filter((_, i) => !invalidRows.has(i + 1))
+    : previewData.value
+
+  if (dataToImport.length === 0) {
+    message.error('没有可导入的有效数据，请修正后重试')
+    importing.value = false
+    return
+  }
+
+  try {
+    const res = await importAdvertisingData({
+      data: dataToImport
+    })
+    // API 返回 { code, message, data }，实际导入结果在 data 中
+    const result = (res as any)?.data ?? res
+    importResult.value = result
+
     currentStep.value = 2
 
-    if (response.failedCount === 0) {
-      message.success(`导入成功！共导入 ${response.importedCount} 条数据`)
+    const failed = result?.failedCount ?? 0
+    const imported = result?.importedCount ?? 0
+    if (failed === 0) {
+      message.success(`导入成功！共导入 ${imported} 条数据`)
     } else {
-      message.warning(`导入完成，${response.failedCount} 条失败`)
+      message.warning(`导入完成，${failed} 条失败`)
     }
   } catch (error) {
     message.error('导入失败: ' + (error as Error).message)
-    importConfirmRef.value?.setLoading(false)
   } finally {
     importing.value = false
   }
@@ -571,6 +677,7 @@ const handleReimport = () => {
   parsedData.value = []
   manualDataSource.value = []
   previewData.value = []
+  previewValidationErrors.value = []
 }
 </script>
 
@@ -618,16 +725,42 @@ const handleReimport = () => {
 
 .step-actions {
   margin-top: 24px;
-  text-align: center;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+.step-actions-step1 {
+  text-align: right;
+}
+.step-actions-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .invoice-tag {
   margin: 4px;
 }
 
-:deep(.ant-statistic-group) {
+.import-result-extra {
+  width: 100%;
+}
+.import-stats-row {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap;
+  gap: 32px 48px;
   justify-content: center;
+  margin-bottom: 24px;
+}
+.import-stats-row :deep(.ant-statistic) {
+  min-width: 100px;
+}
+.import-result-extra .ant-collapse {
+  margin-bottom: 16px;
+}
+.import-result-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
 }
 </style>

@@ -166,6 +166,12 @@ public class AdvertisingData extends BaseEntity {
     private BigDecimal exchangeRate;
 
     /**
+     * 汇率取值日期（用于查询汇率的日期）
+     */
+    @FieldMapping(label = "汇率取值日期", ignore = true)
+    private LocalDate exchangeRateDate;
+
+    /**
      * 费用金额（人民币）
      */
     @FieldMapping(label = "人民币金额", ignore = true)

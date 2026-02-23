@@ -10,6 +10,8 @@ import com.musheng.business.advertising.dto.AdvertisingDataRequest;
 import com.musheng.business.advertising.entity.AdvertisingData;
 import com.musheng.business.advertising.mapper.AdvertisingDataMapper;
 import com.musheng.business.advertising.service.AdvertisingDataService;
+import com.musheng.business.rate.dto.RateWithDateDTO;
+import com.musheng.business.rate.service.RateService;
 import com.musheng.common.context.ShopContext;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -32,6 +35,7 @@ import java.util.*;
 public class AdvertisingDataServiceImpl implements AdvertisingDataService {
 
     private final AdvertisingDataMapper advertisingDataMapper;
+    private final RateService rateService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -41,6 +45,9 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
 
         // 设置店铺ID
         entity.setShopId(ShopContext.requireShopId());
+
+        // 按发票开具时间填充汇率（与导入逻辑一致）
+        fillExchangeRate(entity);
 
         // Set created by
         if (StpUtil.isLogin()) {
@@ -175,19 +182,41 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
             index++;
         }
 
+        // 预热汇率缓存 + 按发票开具时间填充汇率（与销售/配送数据模式一致）
+        preloadExchangeRateCache(entitiesToInsert);
+        List<AdvertisingData> entitiesReadyToInsert = new ArrayList<>();
+        for (AdvertisingData entity : entitiesToInsert) {
+            try {
+                fillExchangeRate(entity);
+                entitiesReadyToInsert.add(entity);
+            } catch (Exception e) {
+                log.error("Failed to fill exchange rate: invoiceNumber={}, error={}",
+                        entity.getInvoiceNumber(), e.getMessage());
+                failedRecords.add(AdvertisingDataImportResponse.ImportFailureDetail.builder()
+                        .invoiceNumber(entity.getInvoiceNumber())
+                        .errorMessage("汇率查询失败: " + e.getMessage())
+                        .build());
+            }
+        }
+
         // 批量插入
         int importedCount = 0;
-        for (AdvertisingData entity : entitiesToInsert) {
+        for (AdvertisingData entity : entitiesReadyToInsert) {
             try {
                 advertisingDataMapper.insert(entity);
                 importedCount++;
             } catch (Exception e) {
                 log.error("Failed to insert advertising data: invoiceNumber={}, error={}",
                         entity.getInvoiceNumber(), e.getMessage());
-
+                String errorMsg = e.getMessage();
+                if (errorMsg != null && (errorMsg.contains("Duplicate entry") || errorMsg.contains("uk_invoice_number"))) {
+                    errorMsg = String.format("发票编号 %s 已存在于系统中，请先在【广告数据列表】删除后重新导入", entity.getInvoiceNumber());
+                } else {
+                    errorMsg = "数据库插入失败: " + errorMsg;
+                }
                 failedRecords.add(AdvertisingDataImportResponse.ImportFailureDetail.builder()
                         .invoiceNumber(entity.getInvoiceNumber())
-                        .errorMessage("数据库插入失败: " + e.getMessage())
+                        .errorMessage(errorMsg)
                         .build());
             }
         }
@@ -291,6 +320,11 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
         if (entity.getIssueDate() == null) {
             entity.setIssueDate(LocalDate.now());
         }
+
+        // 汇率取值日期（可选，不填则 fillExchangeRate 使用 issueDate）
+        if (request.getExchangeRateDate() != null) {
+            entity.setExchangeRateDate(request.getExchangeRateDate());
+        }
     }
 
     /**
@@ -346,14 +380,72 @@ public class AdvertisingDataServiceImpl implements AdvertisingDataService {
         entity.setAdType(request.getAdType());
         entity.setAttachmentPath(request.getAttachmentPath());
         entity.setRemark(request.getRemark());
-        entity.setExchangeRate(request.getExchangeRate());
-
-        // 如果提供了汇率，自动计算人民币金额
-        if (request.getExchangeRate() != null && request.getCost() != null) {
-            entity.setAmountCny(request.getCost().multiply(request.getExchangeRate()));
-        }
+        // 汇率由 fillExchangeRate 按发票开具时间从汇率表填充（与销售/配送数据模式一致）
 
         return entity;
+    }
+
+    /**
+     * 预热汇率缓存（按发票开具时间，与销售/配送数据模式一致）
+     */
+    private void preloadExchangeRateCache(List<AdvertisingData> dataList) {
+        if (dataList == null || dataList.isEmpty()) {
+            return;
+        }
+        Set<String> uniquePairs = new HashSet<>();
+        for (AdvertisingData data : dataList) {
+            if (data.getIssueDate() != null && StringUtils.hasText(data.getCurrency())) {
+                String currency = data.getCurrency();
+                if (!"CNY".equalsIgnoreCase(currency)) {
+                    uniquePairs.add(currency + "|" + data.getIssueDate());
+                }
+            }
+        }
+        if (uniquePairs.isEmpty()) {
+            return;
+        }
+        log.info("Preloading exchange rate cache for {} unique (currency, issueDate) pairs", uniquePairs.size());
+        int loadedCount = 0;
+        for (String pair : uniquePairs) {
+            String[] parts = pair.split("\\|");
+            String currencyCode = parts[0];
+            LocalDate date = LocalDate.parse(parts[1]);
+            try {
+                rateService.getRateWithDate(currencyCode, date);
+                loadedCount++;
+            } catch (Exception e) {
+                log.warn("Failed to preload rate for {}/{}: {}", currencyCode, date, e.getMessage());
+            }
+        }
+        log.info("Exchange rate cache preloaded: {}/{} pairs", loadedCount, uniquePairs.size());
+    }
+
+    /**
+     * 按发票开具时间填充汇率及人民币金额（与销售/配送数据模式一致）
+     */
+    private void fillExchangeRate(AdvertisingData data) {
+        if (data.getIssueDate() == null || !StringUtils.hasText(data.getCurrency())) {
+            log.debug("Skipping exchange rate fill: issueDate={}, currency={}",
+                    data.getIssueDate(), data.getCurrency());
+            return;
+        }
+        if ("CNY".equalsIgnoreCase(data.getCurrency())) {
+            data.setExchangeRate(BigDecimal.ONE);
+            data.setExchangeRateDate(data.getIssueDate());
+            if (data.getCost() != null) {
+                data.setAmountCny(data.getCost());
+            }
+            return;
+        }
+        LocalDate rateLookupDate = data.getExchangeRateDate() != null ? data.getExchangeRateDate() : data.getIssueDate();
+        RateWithDateDTO rateWithDate = rateService.getRateWithDate(data.getCurrency(), rateLookupDate);
+        data.setExchangeRate(rateWithDate.getRate());
+        data.setExchangeRateDate(rateWithDate.getActualDate());
+        if (data.getCost() != null) {
+            data.setAmountCny(data.getCost().multiply(rateWithDate.getRate()));
+        }
+        log.debug("Exchange rate filled: currency={}, rateDate={}, rate={}",
+                data.getCurrency(), rateWithDate.getActualDate(), rateWithDate.getRate());
     }
 
     @Override

@@ -47,6 +47,7 @@ CREATE TABLE `t_advertising_data` (
   `attachment_path` varchar(500) DEFAULT NULL COMMENT '发票附件路径',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
   `exchange_rate` decimal(10,6) DEFAULT NULL COMMENT '使用的汇率',
+  `exchange_rate_date` date DEFAULT NULL COMMENT '汇率取值日期（用于查询汇率的日期）',
   `amount_cny` decimal(15,4) DEFAULT NULL COMMENT '费用金额（人民币）',
   `import_batch_id` varchar(50) DEFAULT NULL COMMENT '导入批次ID',
   `create_by` bigint DEFAULT NULL COMMENT '创建人',

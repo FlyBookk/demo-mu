@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * Advertising Data Request DTO
@@ -43,4 +44,7 @@ public class AdvertisingDataRequest {
 
     @Schema(description = "Remark")
     private String remark;
+
+    @Schema(description = "汇率取值日期（可选，不填则使用发票开具日期）")
+    private LocalDate exchangeRateDate;
 }
