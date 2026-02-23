@@ -487,9 +487,14 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .filter(s -> s.getOrderId() != null && shippingOrderIds.contains(s.getOrderId()))
                 .collect(Collectors.toList());
 
-        // 退款数据：transaction_category = 'refund'
+        // 退款数据：按配送数据订单维度，仅统计订单号在配送数据中的 refund
+        Set<String> allShippingOrderIds = allShipping.stream()
+                .filter(s -> s.getOrderId() != null)
+                .map(ShippingData::getOrderId)
+                .collect(Collectors.toSet());
         List<SalesData> refundList = allSalesData.stream()
                 .filter(s -> "refund".equals(s.getTransactionCategory()))
+                .filter(s -> s.getOrderId() != null && allShippingOrderIds.contains(s.getOrderId()))
                 .collect(Collectors.toList());
 
         // ========== 3. 收入计算：收入总额取配送数据总计费用（8项之和） ==========
@@ -578,32 +583,30 @@ public class TaxReportServiceImpl implements TaxReportService {
             String orderId = refund.getOrderId();
             LocalDate shipDate = refundShipDateMap.get(orderId);
 
-            // 退款总额 = 产品销售+产品税+运费+运费税+礼品包装费+礼品包装税+监管费+监管费税+促销折扣+促销折扣税（保留原正负）
-            BigDecimal refundAmount = calculateSalesRevenue(refund);
+            // 退款金额 = 产品销售+产品税+运费支出+运费税+礼品包装费+礼品包装税+促销折扣（不含监管费）
+            BigDecimal refundAmount = calculateRefundAmount(refund);
 
-            // 维度一：按结算时间（使用销售数据自带汇率）
+            // 费率取退款交易日期（refund.getExchangeRate()）
+            BigDecimal rate = refund.getExchangeRate();
+            if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
+
+            // 维度一：按结算时间（交易日期在季度内）
             if (refund.getTransactionDate() != null) {
                 LocalDate transDate = refund.getTransactionDate().toLocalDate();
                 if (!transDate.isBefore(startDate) && !transDate.isAfter(endDate)) {
-                    BigDecimal rate = refund.getExchangeRate();
-                    if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-
                     refundBySettlement = refundBySettlement.add(refundAmount);
                     refundBySettlementCny = refundBySettlementCny.add(refundAmount.multiply(rate));
                     refundCountBySettlement++;
                 }
             }
 
-            // 维度二：按发货归属（使用配送汇率）
+            // 维度二：按发货归属（发货日期在季度内）
             if (shipDate != null && !shipDate.isBefore(startDate) && !shipDate.isAfter(endDate)) {
-                BigDecimal rate = orderRateMap.getOrDefault(orderId, refund.getExchangeRate());
-                if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-
                 refundByShipment = refundByShipment.add(refundAmount);
                 refundByShipmentCny = refundByShipmentCny.add(refundAmount.multiply(rate));
                 refundCountByShipment++;
 
-                // 退款相关费用（只统计按发货归属的）- 保留原正负
+                // 退款相关费用（只统计按发货归属的）- 保留原正负，汇率使用退款交易日期
                 BigDecimal tax = nullToZero(refund.getMarketplaceWithheldTax());
                 refundConsumptionTax = refundConsumptionTax.add(tax);
                 refundConsumptionTaxCny = refundConsumptionTaxCny.add(tax.multiply(rate));
@@ -759,20 +762,18 @@ public class TaxReportServiceImpl implements TaxReportService {
     }
 
     /**
-     * 计算销售数据的收入/退款总额
-     * 公式：产品销售+产品税+运费+运费税+礼品包装费+礼品包装税+监管费+监管费税+促销折扣+促销折扣税
+     * 计算退款金额（refund 类型，不含监管费）
+     * 公式：产品销售+产品税+运费支出+运费税+礼品包装费+礼品包装税+促销折扣
      */
-    private BigDecimal calculateSalesRevenue(SalesData sales) {
-        return nullToZero(sales.getProductSales())
-                .add(nullToZero(sales.getProductSalesTax()))
-                .add(nullToZero(sales.getShippingCredits()))
-                .add(nullToZero(sales.getShippingCreditsTax()))
-                .add(nullToZero(sales.getGiftWrapCredits()))
-                .add(nullToZero(sales.getGiftWrapCreditsTax()))
-                .add(nullToZero(sales.getRegulatoryFee()))
-                .add(nullToZero(sales.getRegulatoryFeeTax()))
-                .add(nullToZero(sales.getPromotionalRebates()))
-                .add(nullToZero(sales.getPromotionalRebatesTax()));
+    private BigDecimal calculateRefundAmount(SalesData refund) {
+        return nullToZero(refund.getProductSales())
+                .add(nullToZero(refund.getProductSalesTax()))
+                .add(nullToZero(refund.getShippingCredits()))
+                .add(nullToZero(refund.getShippingCreditsTax()))
+                .add(nullToZero(refund.getGiftWrapCredits()))
+                .add(nullToZero(refund.getGiftWrapCreditsTax()))
+                .add(nullToZero(refund.getPromotionalRebates()))
+                .add(nullToZero(refund.getPromotionalRebatesTax()));
     }
 
     /**
