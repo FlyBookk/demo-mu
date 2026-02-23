@@ -8,11 +8,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 销售数据导出行（销售数据底数，非统计汇总）
- * 去除不必要字段（shopId、importBatchId、createTime 等），填充配送数据汇率和配送日期
+ * 销售数据导出行（收入/退款页，不含人民币金额列）
  */
 @Data
-public class TaxReportDetailExportRow {
+public class TaxReportDetailExportRowNoCny {
 
     @ExcelProperty("数据源类型")
     private String sourceType;
@@ -107,15 +106,9 @@ public class TaxReportDetailExportRow {
     @ExcelProperty("合计")
     private BigDecimal total;
 
-    /** 汇率（取自配送数据，若无则用销售数据） */
     @ExcelProperty("汇率")
     private BigDecimal exchangeRate;
 
-    /** 配送日期（取自配送数据，用于明确统计归属时间范围） */
     @ExcelProperty("配送日期")
     private LocalDate shipDate;
-
-    /** 人民币金额（合计×汇率，ServiceFee/其它数据页用于直接统计） */
-    @ExcelProperty("人民币金额")
-    private BigDecimal totalCny;
 }

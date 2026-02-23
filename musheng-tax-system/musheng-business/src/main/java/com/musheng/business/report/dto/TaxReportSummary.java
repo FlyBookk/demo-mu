@@ -102,13 +102,13 @@ public class TaxReportSummary implements Serializable {
 
     // ========== 其他费拆分（非收入/退款类型） ==========
 
-    @Schema(description = "其他费-ServiceFee（原币）- fee类型非CouponPayment")
+    @Schema(description = "其他费-ServiceFee（原币）- transaction_type=ServiceFee，保留原正负")
     private BigDecimal miscServiceFee;
 
     @Schema(description = "其他费-ServiceFee（人民币）")
     private BigDecimal miscServiceFeeCny;
 
-    @Schema(description = "其他费-其他（原币）- adjustment/other + fee的CouponPayment")
+    @Schema(description = "其他费-其他（原币）- transaction_type非ServiceFee，保留原正负")
     private BigDecimal otherFees;
 
     @Schema(description = "其他费-其他（人民币）")

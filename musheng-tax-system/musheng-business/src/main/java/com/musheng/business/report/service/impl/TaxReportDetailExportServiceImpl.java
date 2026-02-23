@@ -6,6 +6,7 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.report.dto.TaxReportDetailExportRow;
+import com.musheng.business.report.dto.TaxReportDetailExportRowNoCny;
 import com.musheng.business.report.service.TaxReportDetailExportService;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.sales.mapper.SalesDataMapper;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -76,6 +78,8 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
         LocalDateTime extendedStart = minStartDate.minusMonths(1).atStartOfDay();
         LocalDateTime extendedEnd = maxEndDate.plusMonths(2).plusDays(1).atStartOfDay();
         LocalDateTime otherEnd = maxEndDate.plusDays(1).atStartOfDay();
+        /** ServiceFee/其它数据与报表一致：按季度范围，不使用扩展的 extendedStart */
+        LocalDateTime quarterStart = minStartDate.atStartOfDay();
 
         // 1. 预统计总行数
         long totalRows = countRows(shopId, sites, extendedStart, extendedEnd, otherEnd);
@@ -83,9 +87,9 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
 
         try {
             if (totalRows > EXCEL_ROW_THRESHOLD) {
-                exportAsCsvZip(shopId, sites, extendedStart, extendedEnd, otherEnd, response);
+                exportAsCsvZip(shopId, sites, extendedStart, extendedEnd, otherEnd, quarterStart, response);
             } else {
-                exportAsExcel(shopId, sites, extendedStart, extendedEnd, otherEnd, response);
+                exportAsExcel(shopId, sites, extendedStart, extendedEnd, otherEnd, quarterStart, response);
             }
         } catch (IOException e) {
             log.error("Export tax summary detail failed", e);
@@ -114,24 +118,24 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
 
     private void exportAsExcel(Long shopId, List<String> sites,
                                LocalDateTime extendedStart, LocalDateTime extendedEnd, LocalDateTime otherEnd,
-                               HttpServletResponse response) throws IOException {
+                               LocalDateTime quarterStart, HttpServletResponse response) throws IOException {
         String fileName = "tax_summary_detail_" + System.currentTimeMillis() + ".xlsx";
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8));
         response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
-        try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), TaxReportDetailExportRow.class)
+        try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), TaxReportDetailExportRowNoCny.class)
                 .autoCloseStream(Boolean.FALSE).build()) {
 
             WriteSheet sheet1 = EasyExcel.writerSheet("收入数据").build();
             WriteSheet sheet2 = EasyExcel.writerSheet("退款数据").build();
-            WriteSheet sheet3 = EasyExcel.writerSheet("ServiceFee").build();
-            WriteSheet sheet4 = EasyExcel.writerSheet("其它数据").build();
+            WriteSheet sheet3 = EasyExcel.writerSheet("ServiceFee").head(TaxReportDetailExportRow.class).build();
+            WriteSheet sheet4 = EasyExcel.writerSheet("其它数据").head(TaxReportDetailExportRow.class).build();
 
             writeSheetIncremental(excelWriter, sheet1, shopId, sites, "income", extendedStart, extendedEnd);
             writeSheetIncremental(excelWriter, sheet2, shopId, sites, "refund", extendedStart, extendedEnd);
-            writePageByPage(excelWriter, sheet3, buildServiceFeeWrapper(shopId, sites, extendedStart, otherEnd));
-            writePageByPage(excelWriter, sheet4, buildOtherWrapper(shopId, sites, extendedStart, otherEnd));
+            writePageByPage(excelWriter, sheet3, buildServiceFeeWrapper(shopId, sites, quarterStart, otherEnd), true, true);
+            writePageByPage(excelWriter, sheet4, buildOtherWrapper(shopId, sites, quarterStart, otherEnd), true, true);
         }
         response.getOutputStream().flush();
     }
@@ -143,7 +147,7 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
                 .eq(SalesData::getTransactionCategory, category)
                 .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
                 .orderByAsc(SalesData::getId);
-        writePageByPage(excelWriter, sheet, w);
+        writePageByPage(excelWriter, sheet, w, false, false);
     }
 
     private void writeSheetIncremental(ExcelWriter excelWriter, WriteSheet sheet, Long shopId, List<String> sites,
@@ -153,17 +157,22 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
                 .in(SalesData::getTransactionCategory, categories)
                 .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
                 .orderByAsc(SalesData::getId);
-        writePageByPage(excelWriter, sheet, w);
+        writePageByPage(excelWriter, sheet, w, false, false);
     }
 
-    private void writePageByPage(ExcelWriter excelWriter, WriteSheet sheet, LambdaQueryWrapper<SalesData> wrapper) {
+    private void writePageByPage(ExcelWriter excelWriter, WriteSheet sheet, LambdaQueryWrapper<SalesData> wrapper,
+                                 boolean useSalesRateOnly, boolean includeCny) {
         long page = 1;
         List<SalesData> batch;
         do {
             Page<SalesData> p = new Page<>(page, BATCH_SIZE);
             batch = salesDataMapper.selectPage(p, wrapper).getRecords();
             if (!batch.isEmpty()) {
-                excelWriter.write(toExportRows(batch), sheet);
+                if (includeCny) {
+                    excelWriter.write(toExportRows(batch, useSalesRateOnly), sheet);
+                } else {
+                    excelWriter.write(toExportRowsNoCny(batch, useSalesRateOnly), sheet);
+                }
             }
             page++;
         } while (batch.size() == BATCH_SIZE);
@@ -171,23 +180,23 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
 
     private void exportAsCsvZip(Long shopId, List<String> sites,
                                 LocalDateTime extendedStart, LocalDateTime extendedEnd, LocalDateTime otherEnd,
-                                HttpServletResponse response) throws IOException {
+                                LocalDateTime quarterStart, HttpServletResponse response) throws IOException {
         String zipName = "tax_summary_detail_" + System.currentTimeMillis() + ".zip";
         response.setContentType("application/zip");
         response.setHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(zipName, StandardCharsets.UTF_8));
         response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
         try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
-            writeCsvToZip(zos, "收入数据.csv", shopId, sites, "income", extendedStart, extendedEnd);
-            writeCsvToZip(zos, "退款数据.csv", shopId, sites, "refund", extendedStart, extendedEnd);
-            writeCsvToZip(zos, "ServiceFee.csv", buildServiceFeeWrapper(shopId, sites, extendedStart, otherEnd));
-            writeCsvToZip(zos, "其它数据.csv", buildOtherWrapper(shopId, sites, extendedStart, otherEnd));
+            writeCsvToZip(zos, "收入数据.csv", shopId, sites, "income", extendedStart, extendedEnd, false);
+            writeCsvToZip(zos, "退款数据.csv", shopId, sites, "refund", extendedStart, extendedEnd, false);
+            writeCsvToZip(zos, "ServiceFee.csv", buildServiceFeeWrapper(shopId, sites, quarterStart, otherEnd), true, true);
+            writeCsvToZip(zos, "其它数据.csv", buildOtherWrapper(shopId, sites, quarterStart, otherEnd), true, true);
         }
         response.getOutputStream().flush();
     }
 
     private void writeCsvToZip(ZipOutputStream zos, String entryName, Long shopId, List<String> sites,
-                               String category, LocalDateTime start, LocalDateTime end) throws IOException {
+                               String category, LocalDateTime start, LocalDateTime end, boolean includeCny) throws IOException {
         zos.putNextEntry(new ZipEntry(entryName));
         try {
             LambdaQueryWrapper<SalesData> w = new LambdaQueryWrapper<>();
@@ -195,65 +204,54 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
                     .eq(SalesData::getTransactionCategory, category)
                     .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
                     .orderByAsc(SalesData::getId);
-            writeCsvIncremental(zos, w);
+            writeCsvIncremental(zos, w, false, includeCny);
         } finally {
             zos.closeEntry();
         }
     }
 
-    private void writeCsvToZip(ZipOutputStream zos, String entryName, Long shopId, List<String> sites,
-                               List<String> categories, LocalDateTime start, LocalDateTime end) throws IOException {
+    private void writeCsvToZip(ZipOutputStream zos, String entryName, LambdaQueryWrapper<SalesData> wrapper,
+                               boolean useSalesRateOnly, boolean includeCny) throws IOException {
         zos.putNextEntry(new ZipEntry(entryName));
         try {
-            LambdaQueryWrapper<SalesData> w = new LambdaQueryWrapper<>();
-            w.eq(SalesData::getShopId, shopId).in(SalesData::getSiteCode, sites)
-                    .in(SalesData::getTransactionCategory, categories)
-                    .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
-                    .orderByAsc(SalesData::getId);
-            writeCsvIncremental(zos, w);
+            writeCsvIncremental(zos, wrapper, useSalesRateOnly, includeCny);
         } finally {
             zos.closeEntry();
         }
     }
 
-    private void writeCsvToZip(ZipOutputStream zos, String entryName, LambdaQueryWrapper<SalesData> wrapper) throws IOException {
-        zos.putNextEntry(new ZipEntry(entryName));
-        try {
-            writeCsvIncremental(zos, wrapper);
-        } finally {
-            zos.closeEntry();
-        }
-    }
-
-    /** ServiceFee：费用数据，排除 CouponPayment（CouponPayment 归入其它数据） */
+    /** ServiceFee：transaction_type = 'ServiceFee' 的销售数据（与报表一致，仅费用类数据） */
     private LambdaQueryWrapper<SalesData> buildServiceFeeWrapper(Long shopId, List<String> sites,
                                                                  LocalDateTime start, LocalDateTime end) {
         LambdaQueryWrapper<SalesData> w = new LambdaQueryWrapper<>();
         w.eq(SalesData::getShopId, shopId).in(SalesData::getSiteCode, sites)
-                .eq(SalesData::getTransactionCategory, "fee")
-                .and(w2 -> w2.ne(SalesData::getTransactionType, "CouponPayment").or().isNull(SalesData::getTransactionType))
+                .notIn(SalesData::getTransactionCategory, List.of("income", "refund"))
+                .eq(SalesData::getTransactionType, "ServiceFee")
                 .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
                 .orderByAsc(SalesData::getId);
         return w;
     }
 
-    /** 其它数据：adjustment、other，以及 fee 中的 CouponPayment */
+    /** 其它数据：transaction_type NOT IN (Refund, Shipment, ServiceFee) 的销售数据（与报表一致，仅费用类数据） */
     private LambdaQueryWrapper<SalesData> buildOtherWrapper(Long shopId, List<String> sites,
                                                             LocalDateTime start, LocalDateTime end) {
         LambdaQueryWrapper<SalesData> w = new LambdaQueryWrapper<>();
         w.eq(SalesData::getShopId, shopId).in(SalesData::getSiteCode, sites)
-                .and(w2 -> w2.in(SalesData::getTransactionCategory, List.of("adjustment", "other"))
-                        .or(w3 -> w3.eq(SalesData::getTransactionCategory, "fee").eq(SalesData::getTransactionType, "CouponPayment")))
+                .notIn(SalesData::getTransactionCategory, List.of("income", "refund"))
+                .and(w2 -> w2.notIn(SalesData::getTransactionType, List.of("Refund", "Shipment", "ServiceFee"))
+                        .or().isNull(SalesData::getTransactionType))
                 .ge(SalesData::getTransactionDate, start).lt(SalesData::getTransactionDate, end)
                 .orderByAsc(SalesData::getId);
         return w;
     }
 
-    private void writeCsvIncremental(ZipOutputStream zos, LambdaQueryWrapper<SalesData> wrapper) throws IOException {
+    private void writeCsvIncremental(ZipOutputStream zos, LambdaQueryWrapper<SalesData> wrapper,
+                                     boolean useSalesRateOnly, boolean includeCny) throws IOException {
         zos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}); // UTF-8 BOM
-        String header = "数据源类型,店铺名称,交易日期,结算ID,ERP结算编号,交易类型,交易分类,订单号,SKU,描述,数量,站点,站点域名,货币,配送方式,"
+        String headerBase = "数据源类型,店铺名称,交易日期,结算ID,ERP结算编号,交易类型,交易分类,订单号,SKU,描述,数量,站点,站点域名,货币,配送方式,"
                 + "产品销售额,产品税,运费收入,运费税,礼品包装收入,礼品包装税,监管费,监管费税,促销折扣,促销折扣税,平台代扣税,"
-                + "销售费用,FBA费用,其他交易费,其他,合计,汇率,配送日期\n";
+                + "销售费用,FBA费用,其他交易费,其他,合计,汇率,配送日期";
+        String header = includeCny ? headerBase + ",人民币金额\n" : headerBase + "\n";
         zos.write(header.getBytes(StandardCharsets.UTF_8));
 
         Long shopId = ShopContext.requireShopId();
@@ -262,17 +260,23 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
         do {
             Page<SalesData> p = new Page<>(page, BATCH_SIZE);
             batch = salesDataMapper.selectPage(p, wrapper).getRecords();
-            Map<String, ShippingInfo> shippingInfoMap = buildShippingInfoMap(shopId, batch);
+            Map<String, ShippingInfo> shippingInfoMap = useSalesRateOnly ? Map.of() : buildShippingInfoMap(shopId, batch);
             for (SalesData d : batch) {
-                zos.write(toCsvLine(d, shippingInfoMap).getBytes(StandardCharsets.UTF_8));
+                zos.write(toCsvLine(d, shippingInfoMap, includeCny).getBytes(StandardCharsets.UTF_8));
             }
             page++;
         } while (batch.size() == BATCH_SIZE);
     }
 
-    private String toCsvLine(SalesData d, Map<String, ShippingInfo> shippingInfoMap) {
+    private String toCsvLine(SalesData d, Map<String, ShippingInfo> shippingInfoMap, boolean includeCny) {
         BigDecimal rate = resolveExchangeRate(d, shippingInfoMap);
         LocalDate shipDate = resolveShipDate(d, shippingInfoMap);
+        BigDecimal totalCny = null;
+        if (includeCny) {
+            BigDecimal total = d.getTotal();
+            totalCny = (total != null && rate != null && rate.compareTo(BigDecimal.ZERO) > 0)
+                    ? total.multiply(rate).setScale(2, RoundingMode.HALF_UP) : null;
+        }
 
         return escapeCsv(d.getSourceType()) + "," + escapeCsv(d.getStoreName()) + ","
                 + (d.getTransactionDate() != null ? d.getTransactionDate().toString() : "") + ","
@@ -299,7 +303,8 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
                 + (d.getOther() != null ? d.getOther() : "") + ","
                 + (d.getTotal() != null ? d.getTotal() : "") + ","
                 + (rate != null ? rate : "") + ","
-                + (shipDate != null ? shipDate.toString() : "") + "\n";
+                + (shipDate != null ? shipDate.toString() : "")
+                + (includeCny ? "," + (totalCny != null ? totalCny : "") : "") + "\n";
     }
 
     private String escapeCsv(String s) {
@@ -310,16 +315,68 @@ public class TaxReportDetailExportServiceImpl implements TaxReportDetailExportSe
         return s;
     }
 
-    private List<TaxReportDetailExportRow> toExportRows(List<SalesData> list) {
+    private List<TaxReportDetailExportRow> toExportRows(List<SalesData> list, boolean useSalesRateOnly) {
         Long shopId = ShopContext.requireShopId();
-        Map<String, ShippingInfo> shippingInfoMap = buildShippingInfoMap(shopId, list);
+        Map<String, ShippingInfo> shippingInfoMap = useSalesRateOnly ? Map.of() : buildShippingInfoMap(shopId, list);
 
         List<TaxReportDetailExportRow> rows = new ArrayList<>(list.size());
         for (SalesData d : list) {
             BigDecimal rate = resolveExchangeRate(d, shippingInfoMap);
             LocalDate shipDate = resolveShipDate(d, shippingInfoMap);
+            BigDecimal total = d.getTotal();
+            BigDecimal totalCny = (total != null && rate != null && rate.compareTo(BigDecimal.ZERO) > 0)
+                    ? total.multiply(rate).setScale(2, RoundingMode.HALF_UP) : null;
 
             TaxReportDetailExportRow row = new TaxReportDetailExportRow();
+            row.setSourceType(d.getSourceType());
+            row.setStoreName(d.getStoreName());
+            row.setTransactionDate(d.getTransactionDate());
+            row.setSettlementId(d.getSettlementId());
+            row.setErpSettlementId(d.getErpSettlementId());
+            row.setTransactionType(d.getTransactionType());
+            row.setTransactionCategory(d.getTransactionCategory());
+            row.setOrderId(d.getOrderId());
+            row.setSku(d.getSku());
+            row.setDescription(d.getDescription());
+            row.setQuantity(d.getQuantity());
+            row.setSiteCode(d.getSiteCode());
+            row.setMarketplace(d.getMarketplace());
+            row.setCurrencyCode(d.getCurrencyCode());
+            row.setFulfillment(d.getFulfillment());
+            row.setProductSales(d.getProductSales());
+            row.setProductSalesTax(d.getProductSalesTax());
+            row.setShippingCredits(d.getShippingCredits());
+            row.setShippingCreditsTax(d.getShippingCreditsTax());
+            row.setGiftWrapCredits(d.getGiftWrapCredits());
+            row.setGiftWrapCreditsTax(d.getGiftWrapCreditsTax());
+            row.setRegulatoryFee(d.getRegulatoryFee());
+            row.setRegulatoryFeeTax(d.getRegulatoryFeeTax());
+            row.setPromotionalRebates(d.getPromotionalRebates());
+            row.setPromotionalRebatesTax(d.getPromotionalRebatesTax());
+            row.setMarketplaceWithheldTax(d.getMarketplaceWithheldTax());
+            row.setSellingFees(d.getSellingFees());
+            row.setFbaFees(d.getFbaFees());
+            row.setOtherTransactionFees(d.getOtherTransactionFees());
+            row.setOther(d.getOther());
+            row.setTotal(d.getTotal());
+            row.setExchangeRate(rate);
+            row.setShipDate(shipDate);
+            row.setTotalCny(totalCny);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<TaxReportDetailExportRowNoCny> toExportRowsNoCny(List<SalesData> list, boolean useSalesRateOnly) {
+        Long shopId = ShopContext.requireShopId();
+        Map<String, ShippingInfo> shippingInfoMap = useSalesRateOnly ? Map.of() : buildShippingInfoMap(shopId, list);
+
+        List<TaxReportDetailExportRowNoCny> rows = new ArrayList<>(list.size());
+        for (SalesData d : list) {
+            BigDecimal rate = resolveExchangeRate(d, shippingInfoMap);
+            LocalDate shipDate = resolveShipDate(d, shippingInfoMap);
+
+            TaxReportDetailExportRowNoCny row = new TaxReportDetailExportRowNoCny();
             row.setSourceType(d.getSourceType());
             row.setStoreName(d.getStoreName());
             row.setTransactionDate(d.getTransactionDate());

@@ -157,7 +157,7 @@ public class TaxReportServiceImpl implements TaxReportService {
             String quarter = getQuarterFromDate(shipDate);
             String site = r.getSiteCode();
             
-            BigDecimal refundAmt = r.getTotal() != null ? r.getTotal().abs() : BigDecimal.ZERO;
+            BigDecimal refundAmt = r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO;
             BigDecimal rate = r.getExchangeRate();
             BigDecimal refundCny = (rate != null && rate.compareTo(BigDecimal.ZERO) > 0)
                     ? refundAmt.multiply(rate) : refundAmt;
@@ -300,6 +300,7 @@ public class TaxReportServiceImpl implements TaxReportService {
         if (previous == null || previous.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
+        // 增长率分母用 abs：当 previous 为负时需正分母，否则百分比无意义（非金额汇总）
         return current.subtract(previous)
                 .divide(previous.abs(), 4, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal("100"))
@@ -519,28 +520,28 @@ public class TaxReportServiceImpl implements TaxReportService {
             totalRevenue = totalRevenue.add(revenue);
             totalRevenueCny = totalRevenueCny.add(revenue.multiply(rate));
 
-            // 消费税（平台代扣税）
-            BigDecimal tax = nullToZero(income.getMarketplaceWithheldTax()).abs();
+            // 消费税（平台代扣税）- 保留原正负
+            BigDecimal tax = nullToZero(income.getMarketplaceWithheldTax());
             incomeConsumptionTax = incomeConsumptionTax.add(tax);
             incomeConsumptionTaxCny = incomeConsumptionTaxCny.add(tax.multiply(rate));
 
-            // 销售费用
-            BigDecimal selling = nullToZero(income.getSellingFees()).abs();
+            // 销售费用 - 保留原正负
+            BigDecimal selling = nullToZero(income.getSellingFees());
             incomeSellingFees = incomeSellingFees.add(selling);
             incomeSellingFeesCny = incomeSellingFeesCny.add(selling.multiply(rate));
 
-            // FBA费用
-            BigDecimal fba = nullToZero(income.getFbaFees()).abs();
+            // FBA费用 - 保留原正负
+            BigDecimal fba = nullToZero(income.getFbaFees());
             incomeFbaFees = incomeFbaFees.add(fba);
             incomeFbaFeesCny = incomeFbaFeesCny.add(fba.multiply(rate));
 
-            // 其他交易费
-            BigDecimal otherTrans = nullToZero(income.getOtherTransactionFees()).abs();
+            // 其他交易费 - 保留原正负
+            BigDecimal otherTrans = nullToZero(income.getOtherTransactionFees());
             incomeOtherTransFees = incomeOtherTransFees.add(otherTrans);
             incomeOtherTransFeesCny = incomeOtherTransFeesCny.add(otherTrans.multiply(rate));
 
-            // 其他
-            BigDecimal other = nullToZero(income.getOther()).abs();
+            // 其他 - 保留原正负
+            BigDecimal other = nullToZero(income.getOther());
             incomeOther = incomeOther.add(other);
             incomeOtherCny = incomeOtherCny.add(other.multiply(rate));
         }
@@ -570,8 +571,8 @@ public class TaxReportServiceImpl implements TaxReportService {
             String orderId = refund.getOrderId();
             LocalDate shipDate = refundShipDateMap.get(orderId);
 
-            // 退款总额 = 产品销售+产品税+运费+运费税+礼品包装费+礼品包装税+监管费+监管费税+促销折扣+促销折扣税
-            BigDecimal refundAmount = calculateSalesRevenue(refund).abs();
+            // 退款总额 = 产品销售+产品税+运费+运费税+礼品包装费+礼品包装税+监管费+监管费税+促销折扣+促销折扣税（保留原正负）
+            BigDecimal refundAmount = calculateSalesRevenue(refund);
 
             // 维度一：按结算时间（使用销售数据自带汇率）
             if (refund.getTransactionDate() != null) {
@@ -595,32 +596,33 @@ public class TaxReportServiceImpl implements TaxReportService {
                 refundByShipmentCny = refundByShipmentCny.add(refundAmount.multiply(rate));
                 refundCountByShipment++;
 
-                // 退款相关费用（只统计按发货归属的）
-                BigDecimal tax = nullToZero(refund.getMarketplaceWithheldTax()).abs();
+                // 退款相关费用（只统计按发货归属的）- 保留原正负
+                BigDecimal tax = nullToZero(refund.getMarketplaceWithheldTax());
                 refundConsumptionTax = refundConsumptionTax.add(tax);
                 refundConsumptionTaxCny = refundConsumptionTaxCny.add(tax.multiply(rate));
 
-                BigDecimal selling = nullToZero(refund.getSellingFees()).abs();
+                BigDecimal selling = nullToZero(refund.getSellingFees());
                 refundSellingFees = refundSellingFees.add(selling);
                 refundSellingFeesCny = refundSellingFeesCny.add(selling.multiply(rate));
 
-                BigDecimal fba = nullToZero(refund.getFbaFees()).abs();
+                BigDecimal fba = nullToZero(refund.getFbaFees());
                 refundFbaFees = refundFbaFees.add(fba);
                 refundFbaFeesCny = refundFbaFeesCny.add(fba.multiply(rate));
 
-                BigDecimal otherTrans = nullToZero(refund.getOtherTransactionFees()).abs();
+                BigDecimal otherTrans = nullToZero(refund.getOtherTransactionFees());
                 refundOtherTransFees = refundOtherTransFees.add(otherTrans);
                 refundOtherTransFeesCny = refundOtherTransFeesCny.add(otherTrans.multiply(rate));
 
-                BigDecimal other = nullToZero(refund.getOther()).abs();
+                BigDecimal other = nullToZero(refund.getOther());
                 refundOther = refundOther.add(other);
                 refundOtherCny = refundOtherCny.add(other.multiply(rate));
             }
         }
 
         // ========== 5. 其他费计算（非income/refund类型），拆分为 ServiceFee 和 其他 ==========
-        // ServiceFee: fee 类型且 非 CouponPayment
-        // 其他: adjustment + other + (fee 且 CouponPayment)
+        // ServiceFee: transaction_type = 'ServiceFee' 的销售数据总计
+        // 其他: transaction_type NOT IN (Refund, Shipment, ServiceFee) 的销售数据总计
+        // 注：allOtherData 已排除 income/refund，故不含 Refund/Shipment，其他 = 非 ServiceFee 的剩余数据
         BigDecimal miscServiceFee = BigDecimal.ZERO;
         BigDecimal miscServiceFeeCny = BigDecimal.ZERO;
         BigDecimal otherFees = BigDecimal.ZERO;
@@ -628,36 +630,19 @@ public class TaxReportServiceImpl implements TaxReportService {
         int miscFeesCount = 0;
 
         for (SalesData other : allOtherData) {
-            boolean isServiceFee = "fee".equals(other.getTransactionCategory())
-                    && !"CouponPayment".equals(other.getTransactionType());
-            boolean isOther = !isServiceFee;
+            // 仅按结算时间判断是否命中季度
+            if (other.getTransactionDate() == null) continue;
+            LocalDate transDate = other.getTransactionDate().toLocalDate();
+            if (transDate.isBefore(startDate) || transDate.isAfter(endDate)) continue;
 
-            String orderId = other.getOrderId();
-            LocalDate shipDate = orderId != null ? refundShipDateMap.get(orderId) : null;
+            boolean isServiceFee = "ServiceFee".equalsIgnoreCase(other.getTransactionType());
 
-            BigDecimal amount = nullToZero(other.getTotal()).abs();
+            BigDecimal amount = nullToZero(other.getTotal());
             if (amount.compareTo(BigDecimal.ZERO) == 0) continue;
 
-            BigDecimal amountCny;
-            // 有订单号且订单在本季度发货：使用配送汇率
-            if (shipDate != null && !shipDate.isBefore(startDate) && !shipDate.isAfter(endDate)) {
-                BigDecimal rate = orderRateMap.getOrDefault(orderId, other.getExchangeRate());
-                if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-                amountCny = amount.multiply(rate);
-            }
-            // 无订单号或订单不在本季度：按结算时间判断
-            else if (other.getTransactionDate() != null) {
-                LocalDate transDate = other.getTransactionDate().toLocalDate();
-                if (!transDate.isBefore(startDate) && !transDate.isAfter(endDate)) {
-                    BigDecimal rate = other.getExchangeRate();
-                    if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-                    amountCny = amount.multiply(rate);
-                } else {
-                    continue;
-                }
-            } else {
-                continue;
-            }
+            BigDecimal rate = other.getExchangeRate();
+            if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
+            BigDecimal amountCny = amount.multiply(rate);
 
             miscFeesCount++;
             if (isServiceFee) {
@@ -749,7 +734,7 @@ public class TaxReportServiceImpl implements TaxReportService {
         summary.setTotalServiceFee(totalServiceFee.setScale(2, RoundingMode.HALF_UP));
         summary.setTotalServiceFeeCny(totalServiceFeeCny.setScale(2, RoundingMode.HALF_UP));
 
-        // 其他费（拆分）
+        // 其他费（拆分）- 按 transaction_type 区分：ServiceFee=仅ServiceFee类型，其他=非ServiceFee
         summary.setMiscServiceFee(miscServiceFee.setScale(2, RoundingMode.HALF_UP));
         summary.setMiscServiceFeeCny(miscServiceFeeCny.setScale(2, RoundingMode.HALF_UP));
         summary.setOtherFees(otherFees.setScale(2, RoundingMode.HALF_UP));
@@ -867,7 +852,7 @@ public class TaxReportServiceImpl implements TaxReportService {
             BigDecimal totalAmountCny = BigDecimal.ZERO;
 
             for (SalesData fee : fees) {
-                BigDecimal amount = sumFeeFields(fee).abs();
+                BigDecimal amount = sumFeeFields(fee);
                 totalAmount = totalAmount.add(amount);
 
                 BigDecimal rate = fee.getExchangeRate();
@@ -890,8 +875,8 @@ public class TaxReportServiceImpl implements TaxReportService {
             results.add(breakdown);
         }
 
-        // 按金额降序排序
-        results.sort((a, b) -> b.getAmountCny().compareTo(a.getAmountCny()));
+        // 按金额降序排序（费用多为负，数值越小影响越大，故用 a.compareTo(b) 使更负的排前）
+        results.sort((a, b) -> a.getAmountCny().compareTo(b.getAmountCny()));
 
         return results;
     }

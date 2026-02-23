@@ -72,10 +72,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="收入总额(人民币)"
-              :value="totalStats.totalRevenueCny"
+              :value="Math.abs(totalStats.totalRevenueCny ?? 0)"
               :precision="2"
-              prefix="+¥"
-              :value-style="{ color: '#52c41a' }"
+              :prefix="(totalStats.totalRevenueCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.totalRevenueCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
@@ -83,10 +83,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="退款总额"
-              :value="totalStats.refundByShipmentCny"
+              :value="Math.abs(totalStats.refundByShipmentCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#ff4d4f' }"
+              :prefix="(totalStats.refundByShipmentCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.refundByShipmentCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
@@ -94,10 +94,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="平台代扣税"
-              :value="totalStats.consumptionTaxCny"
+              :value="Math.abs(totalStats.consumptionTaxCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#fa8c16' }"
+              :prefix="(totalStats.consumptionTaxCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.consumptionTaxCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
@@ -105,10 +105,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="销售费用+FBA费用+交易费+其他"
-              :value="totalStats.totalServiceFeeCny"
+              :value="Math.abs(totalStats.totalServiceFeeCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#eb2f96' }"
+              :prefix="(totalStats.totalServiceFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.totalServiceFeeCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
@@ -121,10 +121,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="ServiceFee"
-              :value="totalStats.miscServiceFeeCny"
+              :value="Math.abs(totalStats.miscServiceFeeCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#722ed1' }"
+              :prefix="(totalStats.miscServiceFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.miscServiceFeeCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
             />
           </a-card>
         </a-col>
@@ -132,10 +132,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="其他"
-              :value="totalStats.otherFeesCny"
+              :value="Math.abs(totalStats.otherFeesCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#722ed1' }"
+              :prefix="(totalStats.otherFeesCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.otherFeesCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
             />
           </a-card>
         </a-col>
@@ -148,10 +148,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="广告费"
-              :value="totalStats.advertisingCostCny"
+              :value="Math.abs(totalStats.advertisingCostCny ?? 0)"
               :precision="2"
-              prefix="-¥"
-              :value-style="{ color: '#13c2c2' }"
+              :prefix="(totalStats.advertisingCostCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.advertisingCostCny ?? 0) >= 0 ? '#52c41a' : '#13c2c2' }"
             />
           </a-card>
         </a-col>
@@ -176,37 +176,37 @@
             <span style="margin-left: 8px">{{ record.siteName }}</span>
           </template>
           <template v-else-if="column.key === 'totalRevenueCny'">
-            <span class="amount positive">{{ formatAmountWithSign(record.totalRevenueCny, true) }}</span>
+            <span :class="['amount', (record.totalRevenueCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalRevenueCny) }}</span>
           </template>
           <template v-else-if="column.key === 'refundBySettlementCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.refundBySettlementCny, false) }}</span>
+            <span :class="['amount', (record.refundBySettlementCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundBySettlementCny) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.refundCountBySettlement }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'refundByShipmentCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.refundByShipmentCny, false) }}</span>
+            <span :class="['amount', (record.refundByShipmentCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundByShipmentCny) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.refundCountByShipment }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'consumptionTaxCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.consumptionTaxCny, false) }}</span>
+            <span :class="['amount', (record.consumptionTaxCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.consumptionTaxCny) }}</span>
           </template>
           <template v-else-if="column.key === 'sellingFeesCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.sellingFeesCny, false) }}</span>
+            <span :class="['amount', (record.sellingFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.sellingFeesCny) }}</span>
           </template>
           <template v-else-if="column.key === 'fbaFeesCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.fbaFeesCny, false) }}</span>
+            <span :class="['amount', (record.fbaFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.fbaFeesCny) }}</span>
           </template>
           <template v-else-if="column.key === 'totalServiceFeeCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.totalServiceFeeCny, false) }}</span>
+            <span :class="['amount', (record.totalServiceFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalServiceFeeCny) }}</span>
           </template>
           <template v-else-if="column.key === 'miscServiceFeeCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.miscServiceFeeCny, false) }}</span>
+            <span :class="['amount', (record.miscServiceFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.miscServiceFeeCny) }}</span>
           </template>
           <template v-else-if="column.key === 'otherFeesCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.otherFeesCny, false) }}</span>
+            <span :class="['amount', (record.otherFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.otherFeesCny) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.miscFeesCount }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'advertisingCostCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.advertisingCostCny, false) }}</span>
+            <span :class="['amount', (record.advertisingCostCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.advertisingCostCny) }}</span>
           </template>
         </template>
       </a-table>
@@ -242,7 +242,7 @@
             <a-tag :color="getFeeTypeColor(record.feeCategory)">{{ record.feeType }}</a-tag>
           </template>
           <template v-else-if="column.key === 'amountCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.amountCny, false) }}</span>
+            <span :class="['amount', (record.amountCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.amountCny) }}</span>
           </template>
         </template>
       </a-table>
@@ -341,11 +341,11 @@ function formatNumber(value: number): string {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** 带正负号的金额格式化：收入用 +¥，费用用 -¥ */
-function formatAmountWithSign(value: number | null | undefined, isPositive: boolean): string {
+/** 金额格式化：正数不标符号，负数显示负号 */
+function formatAmountWithSign(value: number | null | undefined): string {
   const num = value ?? 0
-  const sign = isPositive ? '+' : '-'
-  return `${sign}¥${formatNumber(Math.abs(num))}`
+  const prefix = num < 0 ? '-¥' : '¥'
+  return `${prefix}${formatNumber(Math.abs(num))}`
 }
 
 function getFeeTypeColor(category: string): string {
@@ -447,17 +447,18 @@ function updateCharts() {
     feeTypeMap.set(item.feeType, current + item.amountCny)
   })
 
-  // 加入广告费汇总（来自报税汇总数据）
+  // 加入广告费汇总（来自报税汇总数据），按原始正负值累加
   const advertisingTotal = totalStats.value.advertisingCostCny
-  if (advertisingTotal > 0) {
+  if (advertisingTotal != null && advertisingTotal !== 0) {
     const current = feeTypeMap.get('广告费') || 0
     feeTypeMap.set('广告费', current + advertisingTotal)
   }
 
+  // 按原始值排序，图表展示用原始值（柱状图可显示负值）
   const pieDataArr = Array.from(feeTypeMap.entries())
-    .map(([name, value]) => ({ name, value: Math.abs(value) }))
-    .filter(item => item.value > 0)
-    .sort((a, b) => b.value - a.value)
+    .map(([name, value]) => ({ name, value, displayValue: Math.abs(value) }))
+    .filter(item => item.value !== 0)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
 
   if (!pieDataArr.length) return
 
@@ -469,7 +470,11 @@ function updateCharts() {
     pieChart.setOption({
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: ¥{c} ({d}%)'
+        formatter: (params: any) => {
+          const actual = params.data.actualValue ?? params.value
+          const prefix = actual < 0 ? '-¥' : '¥'
+          return `${params.name}: ${prefix}${formatNumber(Math.abs(actual))} (${params.percent}%)`
+        }
       },
       legend: {
         orient: 'vertical',
@@ -480,7 +485,7 @@ function updateCharts() {
         type: 'pie',
         radius: ['40%', '70%'],
         center: ['40%', '50%'],
-        data: pieDataArr,
+        data: pieDataArr.map(item => ({ name: item.name, value: item.displayValue, actualValue: item.value })),
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -505,7 +510,9 @@ function updateCharts() {
         trigger: 'axis',
         formatter: (params: any) => {
           const item = params[0]
-          return `${item.name}: ¥${item.value.toLocaleString()}`
+          const v = item.value
+          const prefix = v < 0 ? '-¥' : '¥'
+          return `${item.name}: ${prefix}${formatNumber(Math.abs(v))}`
         }
       },
       grid: {
