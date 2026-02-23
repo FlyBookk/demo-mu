@@ -83,67 +83,59 @@
       </a-form>
     </a-card>
 
-    <!-- 统计汇总：第一行各项费用，第二行总发货数/总数量/总计费用 -->
-    <a-row :gutter="16" class="stat-row">
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="商品价格" :value="summary.totalProductPriceCny" :precision="2" :value-style="{ color: '#52c41a' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="商品税" :value="summary.totalProductTaxCny" :precision="2" :value-style="{ color: '#13c2c2' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="运费" :value="summary.totalShippingPriceCny" :precision="2" :value-style="{ color: '#faad14' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="运费税" :value="summary.totalShippingTaxCny" :precision="2" :value-style="{ color: '#eb2f96' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="礼品包装" :value="(summary.totalGiftWrapPriceCny ?? 0) + (summary.totalGiftWrapTaxCny ?? 0)" :precision="2" :value-style="{ color: '#9254de' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="4">
-        <a-card class="stat-card">
-          <a-statistic title="促销折扣" :value="(summary.totalProductPromotionDiscountCny ?? 0) + (summary.totalShipmentPromotionDiscountCny ?? 0)" :precision="2" :value-style="{ color: '#ff7a45' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-    </a-row>
-    <a-row :gutter="16" class="stat-row">
-      <a-col :span="12">
-        <a-card class="stat-card">
-          <a-statistic title="总发货数" :value="summary.totalOrders" :value-style="{ color: '#1890ff' }">
-            <template #prefix><SendOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="12">
-        <a-card class="stat-card">
-          <a-statistic title="总计费用 (CNY)" :value="summary.totalAmountCny" :precision="2" :value-style="{ color: '#722ed1', fontWeight: 600 }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-    </a-row>
+    <!-- 统计汇总：核心指标突出，费用明细紧凑分组 -->
+    <div class="stat-overview">
+      <div class="stat-hero">
+        <div class="stat-hero-item stat-hero-orders">
+          <div class="stat-hero-label">总发货数</div>
+          <div class="stat-hero-value">
+            <SendOutlined class="stat-hero-icon" />
+            {{ (summary.totalOrders ?? 0).toLocaleString() }}
+          </div>
+        </div>
+        <div class="stat-hero-item stat-hero-total">
+          <div class="stat-hero-label">总计费用 (CNY)</div>
+          <div class="stat-hero-value">¥ {{ (summary.totalAmountCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</div>
+        </div>
+      </div>
+      <div class="stat-fee-breakdown">
+        <div class="stat-fee-title">费用构成（8项之和）</div>
+        <div class="stat-fee-grid">
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">商品价格</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalProductPriceCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">商品税</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalProductTaxCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">运费</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalShippingPriceCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">运费税</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalShippingTaxCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">礼品包装价格</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalGiftWrapPriceCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item">
+            <span class="stat-fee-label">礼品包装税费</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalGiftWrapTaxCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item stat-fee-discount">
+            <span class="stat-fee-label">商品促销折扣</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalProductPromotionDiscountCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="stat-fee-item stat-fee-discount">
+            <span class="stat-fee-label">货件促销折扣</span>
+            <span class="stat-fee-value">¥ {{ (summary.totalShipmentPromotionDiscountCny ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 数据表格 -->
     <a-card class="table-card">
@@ -153,7 +145,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 1720 }"
+        :scroll="{ x: 2050 }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -344,6 +336,13 @@ const columns = [
     align: 'right' as const
   },
   {
+    title: '商品税',
+    dataIndex: 'productTax',
+    key: 'productTax',
+    width: 90,
+    align: 'right' as const
+  },
+  {
     title: '运费',
     dataIndex: 'shippingPrice',
     key: 'shippingPrice',
@@ -368,6 +367,20 @@ const columns = [
     title: '礼品包装税费',
     dataIndex: 'giftWrapTax',
     key: 'giftWrapTax',
+    width: 110,
+    align: 'right' as const
+  },
+  {
+    title: '商品促销折扣',
+    dataIndex: 'productPromotionDiscount',
+    key: 'productPromotionDiscount',
+    width: 110,
+    align: 'right' as const
+  },
+  {
+    title: '货件促销折扣',
+    dataIndex: 'shipmentPromotionDiscount',
+    key: 'shipmentPromotionDiscount',
     width: 110,
     align: 'right' as const
   },
@@ -624,12 +637,104 @@ onMounted(() => {
     margin-bottom: $spacing-md;
   }
 
-  .stat-row {
-    margin-bottom: $spacing-md;
+  .stat-overview {
+    margin-bottom: $spacing-lg;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: $border-radius-lg;
+    padding: $spacing-lg;
+    border: 1px solid $border-color-light;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
 
-    .stat-card {
-      text-align: center;
+  .stat-hero {
+    display: flex;
+    gap: $spacing-xl;
+    margin-bottom: $spacing-lg;
+  }
+
+  .stat-hero-item {
+    flex: 1;
+    padding: $spacing-lg $spacing-xl;
+    border-radius: $border-radius-md;
+    min-width: 0;
+  }
+
+  .stat-hero-orders {
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.25);
+  }
+
+  .stat-hero-total {
+    background: linear-gradient(135deg, #2f54eb 0%, #1d39c4 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(47, 84, 235, 0.25);
+  }
+
+  .stat-hero-label {
+    font-size: $font-size-sm;
+    opacity: 0.9;
+    margin-bottom: $spacing-xs;
+  }
+
+  .stat-hero-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+  }
+
+  .stat-hero-icon {
+    font-size: 24px;
+    opacity: 0.9;
+  }
+
+  .stat-fee-breakdown {
+    background: #fff;
+    border-radius: $border-radius-md;
+    padding: $spacing-md $spacing-lg;
+    border: 1px solid $border-color-light;
+  }
+
+  .stat-fee-title {
+    font-size: $font-size-sm;
+    color: $text-color-secondary;
+    margin-bottom: $spacing-md;
+    font-weight: 500;
+  }
+
+  .stat-fee-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: $spacing-md $spacing-xl;
+  }
+
+  .stat-fee-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: $spacing-sm 0;
+
+    &:nth-child(-n+4) {
+      border-bottom: 1px dashed $border-color-light;
     }
+  }
+
+  .stat-fee-label {
+    font-size: $font-size-sm;
+    color: $text-color-secondary;
+  }
+
+  .stat-fee-value {
+    font-size: $font-size-md;
+    font-weight: 500;
+    color: $text-color;
+  }
+
+  .stat-fee-discount .stat-fee-value {
+    color: #cf1322;
   }
 
   .amount {

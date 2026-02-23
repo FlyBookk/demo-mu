@@ -895,9 +895,12 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         summary.put("totalShippingCostCny", dataList.stream()
                 .map(d -> convertToCny(d.getShippingCost(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
-        summary.put("totalAmountCny", dataList.stream()
-                .map(d -> convertToCny(d.getTotalAmount(), d.getExchangeRate()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        // 总计费用(CNY) = 8项费用之和：商品价格+商品税+运费+运费税+礼品包装价格+礼品包装税费+商品促销折扣+货件促销折扣
+        BigDecimal totalAmountCny = ((BigDecimal) summary.get("totalProductPriceCny")).add((BigDecimal) summary.get("totalProductTaxCny"))
+                .add((BigDecimal) summary.get("totalShippingPriceCny")).add((BigDecimal) summary.get("totalShippingTaxCny"))
+                .add((BigDecimal) summary.get("totalGiftWrapPriceCny")).add((BigDecimal) summary.get("totalGiftWrapTaxCny"))
+                .add((BigDecimal) summary.get("totalProductPromotionDiscountCny")).add((BigDecimal) summary.get("totalShipmentPromotionDiscountCny"));
+        summary.put("totalAmountCny", totalAmountCny);
 
         // 货币统一为人民币
         summary.put("currencyCode", "CNY");
@@ -927,6 +930,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     public void exportData(String siteCode, String startDate, String endDate,
                            jakarta.servlet.http.HttpServletResponse response) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ShippingData::getShopId, ShopContext.requireShopId());
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(ShippingData::getSiteCode, siteCode);
@@ -964,8 +968,10 @@ public class ShippingDataServiceImpl implements ShippingDataService {
 
                 // Create header row
                 org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
-                String[] headers = {"订单号", "站点", "发货日期", "SKU", "数量", "产品价格",
-                        "运费价格", "运费成本", "总计费用", "货币", "汇率", "汇率日期", "承运商", "追踪号"};
+                String[] headers = {"订单号", "站点", "发货日期", "SKU", "数量",
+                        "商品价格", "商品税", "运费", "运费税", "礼品包装价格", "礼品包装税",
+                        "商品促销折扣", "货件促销折扣", "物流费用", "货币", "总计费用",
+                        "汇率", "总计费用(CNY)", "汇率日期"};
                 for (int i = 0; i < headers.length; i++) {
                     headerRow.createCell(i).setCellValue(headers[i]);
                 }
@@ -980,14 +986,19 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                     row.createCell(3).setCellValue(data.getSku());
                     row.createCell(4).setCellValue(data.getQuantity() != null ? data.getQuantity() : 0);
                     row.createCell(5).setCellValue(data.getProductPrice() != null ? data.getProductPrice().doubleValue() : 0);
-                    row.createCell(6).setCellValue(data.getShippingPrice() != null ? data.getShippingPrice().doubleValue() : 0);
-                    row.createCell(7).setCellValue(data.getShippingCost() != null ? data.getShippingCost().doubleValue() : 0);
-                    row.createCell(8).setCellValue(data.getTotalAmount() != null ? data.getTotalAmount().doubleValue() : 0);
-                    row.createCell(9).setCellValue(data.getCurrencyCode());
-                    row.createCell(10).setCellValue(data.getExchangeRate() != null ? data.getExchangeRate().doubleValue() : 0);
-                    row.createCell(11).setCellValue(data.getExchangeRateDate() != null ? data.getExchangeRateDate().toString() : "");
-                    row.createCell(12).setCellValue(data.getCarrier());
-                    row.createCell(13).setCellValue(data.getTrackingNumber());
+                    row.createCell(6).setCellValue(data.getProductTax() != null ? data.getProductTax().doubleValue() : 0);
+                    row.createCell(7).setCellValue(data.getShippingPrice() != null ? data.getShippingPrice().doubleValue() : 0);
+                    row.createCell(8).setCellValue(data.getShippingTax() != null ? data.getShippingTax().doubleValue() : 0);
+                    row.createCell(9).setCellValue(data.getGiftWrapPrice() != null ? data.getGiftWrapPrice().doubleValue() : 0);
+                    row.createCell(10).setCellValue(data.getGiftWrapTax() != null ? data.getGiftWrapTax().doubleValue() : 0);
+                    row.createCell(11).setCellValue(data.getProductPromotionDiscount() != null ? data.getProductPromotionDiscount().doubleValue() : 0);
+                    row.createCell(12).setCellValue(data.getShipmentPromotionDiscount() != null ? data.getShipmentPromotionDiscount().doubleValue() : 0);
+                    row.createCell(13).setCellValue(data.getShippingCost() != null ? data.getShippingCost().doubleValue() : 0);
+                    row.createCell(14).setCellValue(data.getCurrencyCode());
+                    row.createCell(15).setCellValue(data.getTotalAmount() != null ? data.getTotalAmount().doubleValue() : 0);
+                    row.createCell(16).setCellValue(data.getExchangeRate() != null ? data.getExchangeRate().doubleValue() : 0);
+                    row.createCell(17).setCellValue(convertToCny(data.getTotalAmount(), data.getExchangeRate()).doubleValue());
+                    row.createCell(18).setCellValue(data.getExchangeRateDate() != null ? data.getExchangeRateDate().toString() : "");
                 }
 
                 workbook.write(outputStream);
