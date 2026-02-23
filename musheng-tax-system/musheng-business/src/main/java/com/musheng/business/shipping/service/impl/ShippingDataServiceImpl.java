@@ -838,6 +838,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     @Override
     public Map<String, Object> getSummary(String siteCode, String startDate, String endDate) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ShippingData::getShopId, ShopContext.requireShopId());
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(ShippingData::getSiteCode, siteCode);
@@ -870,8 +871,26 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         summary.put("totalProductPriceCny", dataList.stream()
                 .map(d -> convertToCny(d.getProductPrice(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalProductTaxCny", dataList.stream()
+                .map(d -> convertToCny(d.getProductTax(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
         summary.put("totalShippingPriceCny", dataList.stream()
                 .map(d -> convertToCny(d.getShippingPrice(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalShippingTaxCny", dataList.stream()
+                .map(d -> convertToCny(d.getShippingTax(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalGiftWrapPriceCny", dataList.stream()
+                .map(d -> convertToCny(d.getGiftWrapPrice(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalGiftWrapTaxCny", dataList.stream()
+                .map(d -> convertToCny(d.getGiftWrapTax(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalProductPromotionDiscountCny", dataList.stream()
+                .map(d -> convertToCny(d.getProductPromotionDiscount(), d.getExchangeRate()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        summary.put("totalShipmentPromotionDiscountCny", dataList.stream()
+                .map(d -> convertToCny(d.getShipmentPromotionDiscount(), d.getExchangeRate()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
         summary.put("totalShippingCostCny", dataList.stream()
                 .map(d -> convertToCny(d.getShippingCost(), d.getExchangeRate()))

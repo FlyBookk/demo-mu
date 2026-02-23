@@ -79,7 +79,13 @@ export interface ShippingSummary {
   totalOrders: number
   totalQuantity: number
   totalProductPriceCny: number
+  totalProductTaxCny: number
   totalShippingPriceCny: number
+  totalShippingTaxCny: number
+  totalGiftWrapPriceCny: number
+  totalGiftWrapTaxCny: number
+  totalProductPromotionDiscountCny: number
+  totalShipmentPromotionDiscountCny: number
   totalAmountCny: number
   totalShippingCostCny: number
   currencyCode: string

@@ -83,25 +83,62 @@
       </a-form>
     </a-card>
 
-    <!-- 统计卡片（按汇率换算为人民币汇总） -->
+    <!-- 统计汇总：第一行各项费用，第二行总发货数/总数量/总计费用 -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="8">
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="商品价格" :value="summary.totalProductPriceCny" :precision="2" :value-style="{ color: '#52c41a' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="商品税" :value="summary.totalProductTaxCny" :precision="2" :value-style="{ color: '#13c2c2' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="运费" :value="summary.totalShippingPriceCny" :precision="2" :value-style="{ color: '#faad14' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="运费税" :value="summary.totalShippingTaxCny" :precision="2" :value-style="{ color: '#eb2f96' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="礼品包装" :value="(summary.totalGiftWrapPriceCny ?? 0) + (summary.totalGiftWrapTaxCny ?? 0)" :precision="2" :value-style="{ color: '#9254de' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="4">
+        <a-card class="stat-card">
+          <a-statistic title="促销折扣" :value="(summary.totalProductPromotionDiscountCny ?? 0) + (summary.totalShipmentPromotionDiscountCny ?? 0)" :precision="2" :value-style="{ color: '#ff7a45' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+    </a-row>
+    <a-row :gutter="16" class="stat-row">
+      <a-col :span="12">
         <a-card class="stat-card">
           <a-statistic title="总发货数" :value="summary.totalOrders" :value-style="{ color: '#1890ff' }">
             <template #prefix><SendOutlined /></template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :span="8">
+      <a-col :span="12">
         <a-card class="stat-card">
-          <a-statistic title="商品价格(CNY)" :value="summary.totalProductPriceCny" :precision="2" :value-style="{ color: '#52c41a' }">
-            <template #prefix>¥</template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="8">
-        <a-card class="stat-card">
-          <a-statistic title="运费支出(CNY)" :value="summary.totalShippingPriceCny" :precision="2" :value-style="{ color: '#faad14' }">
+          <a-statistic title="总计费用 (CNY)" :value="summary.totalAmountCny" :precision="2" :value-style="{ color: '#722ed1', fontWeight: 600 }">
             <template #prefix>¥</template>
           </a-statistic>
         </a-card>
@@ -258,7 +295,13 @@ const summary = reactive<ShippingSummary>({
   totalOrders: 0,
   totalQuantity: 0,
   totalProductPriceCny: 0,
+  totalProductTaxCny: 0,
   totalShippingPriceCny: 0,
+  totalShippingTaxCny: 0,
+  totalGiftWrapPriceCny: 0,
+  totalGiftWrapTaxCny: 0,
+  totalProductPromotionDiscountCny: 0,
+  totalShipmentPromotionDiscountCny: 0,
   totalAmountCny: 0,
   totalShippingCostCny: 0,
   currencyCode: 'CNY'
@@ -278,12 +321,6 @@ const columns = [
     dataIndex: 'siteCode',
     key: 'siteCode',
     width: 80
-  },
-  {
-    title: '发货日期',
-    dataIndex: 'shipDate',
-    key: 'shipDate',
-    width: 120
   },
   {
     title: 'SKU',
@@ -346,6 +383,12 @@ const columns = [
     dataIndex: 'currencyCode',
     key: 'currencyCode',
     width: 80
+  },
+  {
+    title: '发货日期',
+    dataIndex: 'shipDate',
+    key: 'shipDate',
+    width: 120
   },
   {
     title: '汇率',
