@@ -221,14 +221,23 @@ export const request = {
 
   /**
    * 下载并保存文件
+   * 优先使用响应头 Content-Disposition 中的文件名（含正确扩展名），否则使用传入的 filename
    */
   async downloadAndSave(url: string, filename: string, params?: any): Promise<void> {
     try {
       const response = await this.download(url, params)
+      const disposition = response.headers?.['content-disposition'] as string | undefined
+      let downloadFilename = filename
+      if (disposition) {
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+        if (match?.[1]) {
+          downloadFilename = decodeURIComponent(match[1].trim())
+        }
+      }
       const blob = new Blob([response.data])
       const link = document.createElement('a')
       link.href = window.URL.createObjectURL(blob)
-      link.download = filename
+      link.download = downloadFilename
       link.click()
       window.URL.revokeObjectURL(link.href)
     } catch (error) {

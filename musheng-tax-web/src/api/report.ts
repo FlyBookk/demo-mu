@@ -66,7 +66,6 @@ export interface TaxReportSummary {
   // 收入（按发货）
   totalRevenue: number
   totalRevenueCny: number
-  shippingOrderCount: number
   // 退款-按发货归属
   refundByShipment: number
   refundByShipmentCny: number
@@ -89,9 +88,11 @@ export interface TaxReportSummary {
   otherAmountCny: number
   totalServiceFee: number
   totalServiceFeeCny: number
-  // 其他费
-  miscFees: number
-  miscFeesCny: number
+  // 其他费（拆分）
+  miscServiceFee: number
+  miscServiceFeeCny: number
+  otherFees: number
+  otherFeesCny: number
   miscFeesCount: number
   // 广告费
   advertisingCost: number
@@ -133,4 +134,14 @@ export function getFeeBreakdown(params: { siteCode?: string; startQuarter: strin
 export function exportTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
   const filename = `报税汇总_${new Date().toISOString().slice(0, 10)}.xlsx`
   return request.downloadAndSave(`${BASE_URL}/tax-summary/export`, filename, params)
+}
+
+/**
+ * 导出报税统计明细（参与统计的原始数据，分 sheet：收入/退款/费用/其它）
+ * 数据量>10万时自动降级为 CSV+ZIP
+ */
+export function exportTaxSummaryDetail(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+  const ts = new Date().toISOString().slice(0, 10)
+  // 服务端会通过 Content-Disposition 返回正确文件名（.xlsx 或 .zip），此处作为兜底
+  return request.downloadAndSave(`${BASE_URL}/tax-summary/export-detail`, `报税统计明细_${ts}.xlsx`, params)
 }

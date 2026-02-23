@@ -3,6 +3,7 @@ package com.musheng.business.report.controller;
 import com.musheng.business.report.dto.DashboardData;
 import com.musheng.business.report.dto.FeeBreakdown;
 import com.musheng.business.report.dto.TaxReportSummary;
+import com.musheng.business.report.service.TaxReportDetailExportService;
 import com.musheng.business.report.service.TaxReportService;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +25,7 @@ import java.util.List;
 public class TaxReportController {
 
     private final TaxReportService taxReportService;
+    private final TaxReportDetailExportService taxReportDetailExportService;
 
     @Operation(summary = "首页仪表盘数据", description = "获取首页核心指标和图表数据，支持按季度筛选")
     @GetMapping("/dashboard")
@@ -61,5 +63,15 @@ public class TaxReportController {
             @Parameter(description = "结束季度") @RequestParam String endQuarter,
             HttpServletResponse response) {
         taxReportService.exportTaxSummary(siteCode, startQuarter, endQuarter, response);
+    }
+
+    @Operation(summary = "导出报税统计明细", description = "导出参与统计的原始数据，分sheet：收入/退款/费用/其它。数据量>10万时自动降级为CSV+ZIP")
+    @GetMapping("/tax-summary/export-detail")
+    public void exportTaxSummaryDetail(
+            @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
+            @Parameter(description = "开始季度") @RequestParam String startQuarter,
+            @Parameter(description = "结束季度") @RequestParam String endQuarter,
+            HttpServletResponse response) {
+        taxReportDetailExportService.exportTaxSummaryDetail(siteCode, startQuarter, endQuarter, response);
     }
 }

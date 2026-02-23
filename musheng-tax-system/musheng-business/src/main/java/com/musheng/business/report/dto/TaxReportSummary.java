@@ -38,9 +38,6 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "收入总额（人民币）")
     private BigDecimal totalRevenueCny;
 
-    @Schema(description = "发货订单数")
-    private Integer shippingOrderCount;
-
     // ========== 退款数据（双维度） ==========
 
     // 维度一：按发货订单归属（主要报税维度）
@@ -103,15 +100,21 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "佣金/服务费合计（人民币）")
     private BigDecimal totalServiceFeeCny;
 
-    // ========== 其他费（非收入/退款类型） ==========
+    // ========== 其他费拆分（非收入/退款类型） ==========
 
-    @Schema(description = "其他费（原币）- 非收入/退款类型的total汇总")
-    private BigDecimal miscFees;
+    @Schema(description = "其他费-ServiceFee（原币）- fee类型非CouponPayment")
+    private BigDecimal miscServiceFee;
 
-    @Schema(description = "其他费（人民币）")
-    private BigDecimal miscFeesCny;
+    @Schema(description = "其他费-ServiceFee（人民币）")
+    private BigDecimal miscServiceFeeCny;
 
-    @Schema(description = "其他费笔数")
+    @Schema(description = "其他费-其他（原币）- adjustment/other + fee的CouponPayment")
+    private BigDecimal otherFees;
+
+    @Schema(description = "其他费-其他（人民币）")
+    private BigDecimal otherFeesCny;
+
+    @Schema(description = "其他费笔数（ServiceFee+其他合计）")
     private Integer miscFeesCount;
 
     // ========== 广告费 ==========

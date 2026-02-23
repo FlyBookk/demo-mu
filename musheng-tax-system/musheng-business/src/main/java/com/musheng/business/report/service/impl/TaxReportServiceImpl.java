@@ -618,26 +618,32 @@ public class TaxReportServiceImpl implements TaxReportService {
             }
         }
 
-        // ========== 5. 其他费计算（非income/refund类型） ==========
-        BigDecimal miscFees = BigDecimal.ZERO;
-        BigDecimal miscFeesCny = BigDecimal.ZERO;
+        // ========== 5. 其他费计算（非income/refund类型），拆分为 ServiceFee 和 其他 ==========
+        // ServiceFee: fee 类型且 非 CouponPayment
+        // 其他: adjustment + other + (fee 且 CouponPayment)
+        BigDecimal miscServiceFee = BigDecimal.ZERO;
+        BigDecimal miscServiceFeeCny = BigDecimal.ZERO;
+        BigDecimal otherFees = BigDecimal.ZERO;
+        BigDecimal otherFeesCny = BigDecimal.ZERO;
         int miscFeesCount = 0;
 
         for (SalesData other : allOtherData) {
+            boolean isServiceFee = "fee".equals(other.getTransactionCategory())
+                    && !"CouponPayment".equals(other.getTransactionType());
+            boolean isOther = !isServiceFee;
+
             String orderId = other.getOrderId();
             LocalDate shipDate = orderId != null ? refundShipDateMap.get(orderId) : null;
 
             BigDecimal amount = nullToZero(other.getTotal()).abs();
             if (amount.compareTo(BigDecimal.ZERO) == 0) continue;
 
+            BigDecimal amountCny;
             // 有订单号且订单在本季度发货：使用配送汇率
             if (shipDate != null && !shipDate.isBefore(startDate) && !shipDate.isAfter(endDate)) {
                 BigDecimal rate = orderRateMap.getOrDefault(orderId, other.getExchangeRate());
                 if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-
-                miscFees = miscFees.add(amount);
-                miscFeesCny = miscFeesCny.add(amount.multiply(rate));
-                miscFeesCount++;
+                amountCny = amount.multiply(rate);
             }
             // 无订单号或订单不在本季度：按结算时间判断
             else if (other.getTransactionDate() != null) {
@@ -645,11 +651,21 @@ public class TaxReportServiceImpl implements TaxReportService {
                 if (!transDate.isBefore(startDate) && !transDate.isAfter(endDate)) {
                     BigDecimal rate = other.getExchangeRate();
                     if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-
-                    miscFees = miscFees.add(amount);
-                    miscFeesCny = miscFeesCny.add(amount.multiply(rate));
-                    miscFeesCount++;
+                    amountCny = amount.multiply(rate);
+                } else {
+                    continue;
                 }
+            } else {
+                continue;
+            }
+
+            miscFeesCount++;
+            if (isServiceFee) {
+                miscServiceFee = miscServiceFee.add(amount);
+                miscServiceFeeCny = miscServiceFeeCny.add(amountCny);
+            } else {
+                otherFees = otherFees.add(amount);
+                otherFeesCny = otherFeesCny.add(amountCny);
             }
         }
 
@@ -693,8 +709,8 @@ public class TaxReportServiceImpl implements TaxReportService {
         BigDecimal totalServiceFee = sellingFees.add(fbaFees).add(otherTransactionFees).add(otherAmount);
         BigDecimal totalServiceFeeCny = sellingFeesCny.add(fbaFeesCny).add(otherTransactionFeesCny).add(otherAmountCny);
 
-        // 总成本 = 佣金/服务费 + 其他费 + 广告费
-        BigDecimal totalCost = totalServiceFeeCny.add(miscFeesCny).add(advertisingCostCny);
+        // 总成本 = 佣金/服务费 + 其他费(ServiceFee+其他) + 广告费
+        BigDecimal totalCost = totalServiceFeeCny.add(miscServiceFeeCny).add(otherFeesCny).add(advertisingCostCny);
 
         // ========== 8. 构建汇总结果 ==========
         TaxReportSummary summary = new TaxReportSummary();
@@ -704,7 +720,6 @@ public class TaxReportServiceImpl implements TaxReportService {
         summary.setCurrencyCode(currencyCode);
 
         // 收入
-        summary.setShippingOrderCount(shippingOrderIds.size());
         summary.setTotalRevenue(totalRevenue.setScale(2, RoundingMode.HALF_UP));
         summary.setTotalRevenueCny(totalRevenueCny.setScale(2, RoundingMode.HALF_UP));
 
@@ -734,9 +749,11 @@ public class TaxReportServiceImpl implements TaxReportService {
         summary.setTotalServiceFee(totalServiceFee.setScale(2, RoundingMode.HALF_UP));
         summary.setTotalServiceFeeCny(totalServiceFeeCny.setScale(2, RoundingMode.HALF_UP));
 
-        // 其他费
-        summary.setMiscFees(miscFees.setScale(2, RoundingMode.HALF_UP));
-        summary.setMiscFeesCny(miscFeesCny.setScale(2, RoundingMode.HALF_UP));
+        // 其他费（拆分）
+        summary.setMiscServiceFee(miscServiceFee.setScale(2, RoundingMode.HALF_UP));
+        summary.setMiscServiceFeeCny(miscServiceFeeCny.setScale(2, RoundingMode.HALF_UP));
+        summary.setOtherFees(otherFees.setScale(2, RoundingMode.HALF_UP));
+        summary.setOtherFeesCny(otherFeesCny.setScale(2, RoundingMode.HALF_UP));
         summary.setMiscFeesCount(miscFeesCount);
 
         // 广告费
@@ -999,11 +1016,11 @@ public class TaxReportServiceImpl implements TaxReportService {
 
                 Sheet sheet = workbook.createSheet("报税汇总");
 
-                // 表头 - V2版本
+                // 表头 - V2版本（移除发货订单数，其他费拆分为 ServiceFee + 其他）
                 Row headerRow = sheet.createRow(0);
                 String[] headers = {
                         "站点", "季度", "币种",
-                        "收入总额(原币)", "收入总额(人民币)", "发货订单数",
+                        "收入总额(原币)", "收入总额(人民币)",
                         "退款-发货(原币)", "退款-发货(人民币)", "退款笔数-发货",
                         "退款-结算(原币)", "退款-结算(人民币)", "退款笔数-结算",
                         "消费税(原币)", "消费税(人民币)",
@@ -1012,7 +1029,8 @@ public class TaxReportServiceImpl implements TaxReportService {
                         "其他交易费(原币)", "其他交易费(人民币)",
                         "其他(原币)", "其他(人民币)",
                         "佣金/服务费合计(原币)", "佣金/服务费合计(人民币)",
-                        "其他费(原币)", "其他费(人民币)", "其他费笔数",
+                        "其他费-ServiceFee(原币)", "其他费-ServiceFee(人民币)",
+                        "其他费-其他(原币)", "其他费-其他(人民币)", "其他费笔数",
                         "广告费(原币)", "广告费(人民币)",
                         "总成本(人民币)"
                 };
@@ -1038,7 +1056,6 @@ public class TaxReportServiceImpl implements TaxReportService {
                     row.createCell(col++).setCellValue(s.getCurrencyCode());
                     row.createCell(col++).setCellValue(toDouble(s.getTotalRevenue()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalRevenueCny()));
-                    row.createCell(col++).setCellValue(s.getShippingOrderCount() != null ? s.getShippingOrderCount() : 0);
                     // 退款-发货
                     row.createCell(col++).setCellValue(toDouble(s.getRefundByShipment()));
                     row.createCell(col++).setCellValue(toDouble(s.getRefundByShipmentCny()));
@@ -1061,9 +1078,11 @@ public class TaxReportServiceImpl implements TaxReportService {
                     row.createCell(col++).setCellValue(toDouble(s.getOtherAmountCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalServiceFee()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalServiceFeeCny()));
-                    // 其他费
-                    row.createCell(col++).setCellValue(toDouble(s.getMiscFees()));
-                    row.createCell(col++).setCellValue(toDouble(s.getMiscFeesCny()));
+                    // 其他费（拆分）
+                    row.createCell(col++).setCellValue(toDouble(s.getMiscServiceFee()));
+                    row.createCell(col++).setCellValue(toDouble(s.getMiscServiceFeeCny()));
+                    row.createCell(col++).setCellValue(toDouble(s.getOtherFees()));
+                    row.createCell(col++).setCellValue(toDouble(s.getOtherFeesCny()));
                     row.createCell(col++).setCellValue(s.getMiscFeesCount() != null ? s.getMiscFeesCount() : 0);
                     // 广告费
                     row.createCell(col++).setCellValue(toDouble(s.getAdvertisingCost()));

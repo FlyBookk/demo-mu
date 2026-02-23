@@ -55,102 +55,108 @@
             <a-button @click="handleExport" :loading="exporting">
               <DownloadOutlined /> 导出Excel
             </a-button>
+            <a-button @click="handleExportDetail" :loading="exportDetailLoading">
+              <DownloadOutlined /> 导出统计明细
+            </a-button>
           </a-space>
         </a-form-item>
       </a-form>
     </a-card>
 
-    <!-- 汇总统计卡片（收入+、费用-） -->
-    <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="收入总额(人民币)"
-            :value="totalStats.totalRevenueCny"
-            :precision="2"
-            prefix="+¥"
-            :value-style="{ color: '#52c41a' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="退款-发货归属"
-            :value="totalStats.refundByShipmentCny"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#ff4d4f' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="消费税"
-            :value="totalStats.consumptionTaxCny"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#fa8c16' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="佣金/服务费"
-            :value="totalStats.totalServiceFeeCny"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#eb2f96' }"
-          />
-        </a-card>
-      </a-col>
-    </a-row>
-    <a-row :gutter="16" class="stat-row">
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="其他费"
-            :value="totalStats.miscFeesCny"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#722ed1' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="广告费"
-            :value="totalStats.advertisingCostCny"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#13c2c2' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="总成本"
-            :value="totalStats.totalCost"
-            :precision="2"
-            prefix="-¥"
-            :value-style="{ color: '#ff4d4f' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card class="stat-card">
-          <a-statistic
-            title="发货订单数"
-            :value="totalStats.shippingOrderCount"
-            :value-style="{ color: '#1890ff' }"
-          />
-        </a-card>
-      </a-col>
-    </a-row>
+    <!-- 汇总统计卡片 -->
+    <!-- 收入/退款维度 -->
+    <div class="stat-section">
+      <div class="stat-section-label">收入/退款维度</div>
+      <a-row :gutter="16" class="stat-row">
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="收入总额(人民币)"
+              :value="totalStats.totalRevenueCny"
+              :precision="2"
+              prefix="+¥"
+              :value-style="{ color: '#52c41a' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="退款总额"
+              :value="totalStats.refundByShipmentCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#ff4d4f' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="平台代扣税"
+              :value="totalStats.consumptionTaxCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#fa8c16' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="销售费用+FBA费用+交易费+其他"
+              :value="totalStats.totalServiceFeeCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#eb2f96' }"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+    <!-- 其他费用（ServiceFee + 其他） -->
+    <div class="stat-section">
+      <a-row :gutter="16" class="stat-row">
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="ServiceFee"
+              :value="totalStats.miscServiceFeeCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#722ed1' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="其他"
+              :value="totalStats.otherFeesCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#722ed1' }"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+    <!-- 广告费 -->
+    <div class="stat-section">
+      <a-row :gutter="16" class="stat-row">
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="广告费"
+              :value="totalStats.advertisingCostCny"
+              :precision="2"
+              prefix="-¥"
+              :value-style="{ color: '#13c2c2' }"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
 
     <!-- 汇总表格 -->
     <a-card title="报税汇总数据" class="data-card">
@@ -192,15 +198,15 @@
           <template v-else-if="column.key === 'totalServiceFeeCny'">
             <span class="amount negative">{{ formatAmountWithSign(record.totalServiceFeeCny, false) }}</span>
           </template>
-          <template v-else-if="column.key === 'miscFeesCny'">
-            <span class="amount negative">{{ formatAmountWithSign(record.miscFeesCny, false) }}</span>
+          <template v-else-if="column.key === 'miscServiceFeeCny'">
+            <span class="amount negative">{{ formatAmountWithSign(record.miscServiceFeeCny, false) }}</span>
+          </template>
+          <template v-else-if="column.key === 'otherFeesCny'">
+            <span class="amount negative">{{ formatAmountWithSign(record.otherFeesCny, false) }}</span>
             <a-tag size="small" style="margin-left: 4px">{{ record.miscFeesCount }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'advertisingCostCny'">
             <span class="amount negative">{{ formatAmountWithSign(record.advertisingCostCny, false) }}</span>
-          </template>
-          <template v-else-if="column.key === 'totalCost'">
-            <span class="amount negative">{{ formatAmountWithSign(record.totalCost, false) }}</span>
           </template>
         </template>
       </a-table>
@@ -245,7 +251,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import * as echarts from 'echarts'
@@ -253,6 +259,7 @@ import {
   getTaxSummary,
   getFeeBreakdown,
   exportTaxSummary,
+  exportTaxSummaryDetail,
   type TaxReportSummary,
   type FeeBreakdown
 } from '@/api/report'
@@ -273,6 +280,7 @@ const availableQuarters = ref<string[]>([])
 const loading = ref(false)
 const feeLoading = ref(false)
 const exporting = ref(false)
+const exportDetailLoading = ref(false)
 
 const summaryData = ref<(TaxReportSummary & { key: string })[]>([])
 const feeData = ref<(FeeBreakdown & { key: string })[]>([])
@@ -291,10 +299,9 @@ const totalStats = computed(() => {
     refundByShipmentCny: data.reduce((sum, item) => sum + (item.refundByShipmentCny || 0), 0),
     consumptionTaxCny: data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0),
     totalServiceFeeCny: data.reduce((sum, item) => sum + (item.totalServiceFeeCny || 0), 0),
-    miscFeesCny: data.reduce((sum, item) => sum + (item.miscFeesCny || 0), 0),
-    advertisingCostCny: data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0),
-    totalCost: data.reduce((sum, item) => sum + (item.totalCost || 0), 0),
-    shippingOrderCount: data.reduce((sum, item) => sum + (item.shippingOrderCount || 0), 0)
+    miscServiceFeeCny: data.reduce((sum, item) => sum + (item.miscServiceFeeCny || 0), 0),
+    otherFeesCny: data.reduce((sum, item) => sum + (item.otherFeesCny || 0), 0),
+    advertisingCostCny: data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0)
   }
 })
 
@@ -303,16 +310,15 @@ const summaryColumns = [
   { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 150, fixed: 'left' },
   { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
   { title: '收入(人民币)', dataIndex: 'totalRevenueCny', key: 'totalRevenueCny', width: 140, align: 'right' },
-  { title: '订单数', dataIndex: 'shippingOrderCount', key: 'shippingOrderCount', width: 80, align: 'right' },
-  { title: '退款-发货归属', dataIndex: 'refundByShipmentCny', key: 'refundByShipmentCny', width: 150, align: 'right' },
+  { title: '退款总额', dataIndex: 'refundByShipmentCny', key: 'refundByShipmentCny', width: 150, align: 'right' },
   { title: '退款-结算', dataIndex: 'refundBySettlementCny', key: 'refundBySettlementCny', width: 150, align: 'right' },
-  { title: '消费税', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 120, align: 'right' },
+  { title: '平台代扣税', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 120, align: 'right' },
   { title: '销售费用', dataIndex: 'sellingFeesCny', key: 'sellingFeesCny', width: 120, align: 'right' },
   { title: 'FBA费用', dataIndex: 'fbaFeesCny', key: 'fbaFeesCny', width: 120, align: 'right' },
-  { title: '佣金/服务费', dataIndex: 'totalServiceFeeCny', key: 'totalServiceFeeCny', width: 130, align: 'right' },
-  { title: '其他费', dataIndex: 'miscFeesCny', key: 'miscFeesCny', width: 140, align: 'right' },
-  { title: '广告费', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 120, align: 'right' },
-  { title: '总成本', dataIndex: 'totalCost', key: 'totalCost', width: 120, align: 'right' }
+  { title: '销售费用+FBA费用+交易费+其他', dataIndex: 'totalServiceFeeCny', key: 'totalServiceFeeCny', width: 180, align: 'right' },
+  { title: 'ServiceFee', dataIndex: 'miscServiceFeeCny', key: 'miscServiceFeeCny', width: 130, align: 'right' },
+  { title: '其他', dataIndex: 'otherFeesCny', key: 'otherFeesCny', width: 120, align: 'right' },
+  { title: '广告费', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 120, align: 'right' }
 ]
 
 const feeColumns = [
@@ -367,10 +373,11 @@ function generateAvailableQuarters() {
   }
 
   availableQuarters.value = quarters
-  // 默认选择当前季度
-  if (!filterForm.startQuarter && quarters.length > 0) {
-    filterForm.startQuarter = quarters[0]
-    filterForm.endQuarter = quarters[0]
+  // 默认选择上一季度
+  if (!filterForm.startQuarter && quarters.length > 1) {
+    const prevQuarter = quarters[1]
+    filterForm.startQuarter = prevQuarter
+    filterForm.endQuarter = prevQuarter
   }
 }
 
@@ -562,6 +569,28 @@ async function handleExport() {
   }
 }
 
+async function handleExportDetail() {
+  if (!filterForm.startQuarter || !filterForm.endQuarter) {
+    message.warning('请选择查询季度范围')
+    return
+  }
+
+  exportDetailLoading.value = true
+  try {
+    await exportTaxSummaryDetail({
+      siteCode: filterForm.siteCode,
+      startQuarter: filterForm.startQuarter,
+      endQuarter: filterForm.endQuarter
+    })
+    message.success('导出成功（收入/退款/费用/其它 分 sheet 或分文件）')
+  } catch (error) {
+    console.error('导出统计明细失败:', error)
+    message.error('导出失败')
+  } finally {
+    exportDetailLoading.value = false
+  }
+}
+
 // 窗口大小变化时重绘图表
 function handleResize() {
   pieChart?.resize()
@@ -604,11 +633,20 @@ onMounted(async () => {
     margin-bottom: 16px;
   }
 
-  .stat-row {
+  .stat-section {
     margin-bottom: 16px;
 
-    .stat-card {
-      text-align: center;
+    .stat-section-label {
+      font-size: 13px;
+      color: #8c8c8c;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .stat-row {
+      .stat-card {
+        text-align: center;
+      }
     }
   }
 

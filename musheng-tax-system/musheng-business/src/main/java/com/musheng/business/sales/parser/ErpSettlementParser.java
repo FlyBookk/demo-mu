@@ -467,7 +467,6 @@ public class ErpSettlementParser implements SalesDataParser {
         ErpAggregateRow aggregate = new ErpAggregateRow();
         aggregate.setOrderId(firstRow.getOrderId());
         aggregate.setSiteCode(firstRow.getSiteCode());
-        // 订单号为空或非标时，description 填充 来源-交易类型
         aggregate.setNonStandardOrder(!isStandardOrderId(firstRow.getOrderId()));
         // ERP数据使用MSKU作为sku字段值
         aggregate.setSku(firstRow.getMsku());
@@ -561,14 +560,10 @@ public class ErpSettlementParser implements SalesDataParser {
         data.setSettlementId(aggregate.getSettlementId());
         data.setErpSettlementId(aggregate.getErpSettlementId());
         data.setFulfillment(aggregate.getFulfillment());
-        // 非标订单：描述字段填充 来源-交易类型，便于识别
-        if (aggregate.isNonStandardOrder()) {
-            String source = aggregate.getSource() != null ? aggregate.getSource() : "";
-            String txType = aggregate.getTransactionType() != null ? aggregate.getTransactionType() : "";
-            data.setDescription(String.format("%s-%s", source, txType));
-        } else {
-            data.setDescription(aggregate.getProductName());
-        }
+        // 描述字段统一赋值：ERP表来源列-交易类型列
+        String source = aggregate.getSource() != null ? aggregate.getSource() : "";
+        String txType = aggregate.getTransactionType() != null ? aggregate.getTransactionType() : "";
+        data.setDescription(source + "-" + txType);
         data.setQuantity(aggregate.getQuantity());
         data.setTransactionDate(aggregate.getSettlementTime());
         
@@ -730,7 +725,7 @@ public class ErpSettlementParser implements SalesDataParser {
         private String settlementCategory;
         /** 交易类型（Principal/Commission等），订单号为空时用于去重 */
         private String transactionType;
-        /** 是否非标订单（订单号不符合亚马逊格式），非标订单单条存储，description 填充 来源-交易类型 */
+        /** 是否非标订单（订单号不符合亚马逊格式），非标订单单条存储 */
         private boolean nonStandardOrder;
         
         // 聚合后的金额字段
