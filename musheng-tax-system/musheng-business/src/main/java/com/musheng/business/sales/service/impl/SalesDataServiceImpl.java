@@ -42,53 +42,45 @@ public class SalesDataServiceImpl implements SalesDataService {
 
     @Override
     public Page<SalesData> list(SalesQueryRequest request) {
-        // 委托给 QueryService
         return queryService.list(request);
     }
 
     @Override
     public SalesData getById(Long id) {
-        // 委托给 QueryService
         return queryService.getById(id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> importData(String siteCode, MultipartFile file) {
-        // 委托给 ImportService
         return importService.importData(siteCode, file);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        // 委托给 QueryService
         queryService.delete(id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void batchDelete(List<Long> ids) {
-        // 委托给 QueryService
         queryService.batchDelete(ids);
     }
 
     @Override
     public Map<String, Object> getSummary(String keyword, String siteCode, String settlementId, String transactionCategory, String startDate, String endDate) {
-        // 委托给 StatisticsService
         return statisticsService.getSummary(keyword, siteCode, settlementId, transactionCategory, startDate, endDate);
     }
 
     @Override
     public List<Map<String, Object>> getStatByType(String siteCode, String startDate, String endDate) {
-        // 委托给 StatisticsService
         return statisticsService.getStatByType(siteCode, startDate, endDate);
     }
 
     @Override
     public void exportData(String siteCode, String transactionCategory, String startDate, String endDate,
                            jakarta.servlet.http.HttpServletResponse response) {
-        // 委托给 ExportService
         exportService.exportData(siteCode, transactionCategory, startDate, endDate, response);
     }
     
@@ -96,26 +88,22 @@ public class SalesDataServiceImpl implements SalesDataService {
     
     @Override
     public SalesUploadResult uploadFile(MultipartFile file, SalesSourceType sourceType, String siteCode) {
-        // 委托给 ImportService
         return importService.uploadFile(file, sourceType, siteCode);
     }
     
     @Override
     public SalesPreviewResult previewImport(SalesPreviewRequest request) {
-        // 委托给 ImportService
         return importService.previewImport(request);
     }
     
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalesImportResult executeImport(SalesImportRequest request) {
-        // 委托给 ImportService
         return importService.executeImport(request);
     }
     
     @Override
     public SalesImportProgress getImportProgress(String batchNo) {
-        // 委托给 ImportService
         return importService.getImportProgress(batchNo);
     }
 }
