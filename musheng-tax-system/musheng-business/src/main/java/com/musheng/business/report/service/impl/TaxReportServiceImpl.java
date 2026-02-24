@@ -586,8 +586,8 @@ public class TaxReportServiceImpl implements TaxReportService {
             // 退款金额 = 产品销售+产品税+运费支出+运费税+礼品包装费+礼品包装税+促销折扣（不含监管费）
             BigDecimal refundAmount = calculateRefundAmount(refund);
 
-            // 费率取退款交易日期（refund.getExchangeRate()）
-            BigDecimal rate = refund.getExchangeRate();
+            // 汇率使用配送数据汇率（原订单配送日期的汇率），若无则回退到退款交易日期汇率
+            BigDecimal rate = orderRateMap.getOrDefault(orderId, refund.getExchangeRate());
             if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
 
             // 维度一：按结算时间（交易日期在季度内）
@@ -606,7 +606,7 @@ public class TaxReportServiceImpl implements TaxReportService {
                 refundByShipmentCny = refundByShipmentCny.add(refundAmount.multiply(rate));
                 refundCountByShipment++;
 
-                // 退款相关费用（只统计按发货归属的）- 保留原正负，汇率使用退款交易日期
+                // 退款相关费用（只统计按发货归属的）- 保留原正负，汇率使用配送数据汇率
                 BigDecimal tax = nullToZero(refund.getMarketplaceWithheldTax());
                 refundConsumptionTax = refundConsumptionTax.add(tax);
                 refundConsumptionTaxCny = refundConsumptionTaxCny.add(tax.multiply(rate));
