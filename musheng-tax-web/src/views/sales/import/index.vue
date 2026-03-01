@@ -175,6 +175,7 @@
             v-model:file-list="fileList"
             name="file"
             :multiple="false"
+            :max-count="1"
             :before-upload="beforeUpload"
             :custom-request="handleUpload"
             accept=".csv"
@@ -631,7 +632,10 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
 const handleUpload: UploadProps['customRequest'] = async (options) => {
   const { file, onSuccess, onError } = options
   uploading.value = true
+  // 新文件上传时清除旧结果，仅保留当前文件（单文件导入，所见即所导）
   uploadResult.value = null
+  previewResult.value = null
+  fileList.value = [{ ...file, uid: (file as any).uid || String(Date.now()), name: (file as File).name, status: 'uploading' }] as UploadFile[]
   
   try {
     const res = await uploadSalesFile(
