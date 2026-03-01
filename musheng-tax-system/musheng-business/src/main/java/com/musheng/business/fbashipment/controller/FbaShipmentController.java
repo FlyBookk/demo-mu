@@ -30,15 +30,6 @@ public class FbaShipmentController {
 
     private final FbaShipmentService fbaShipmentService;
 
-    @OperationLog(module = "FBA货件", operation = "导入FBA货件")
-    @Operation(summary = "导入FBA货件", description = "从Excel文件导入FBA货件明细")
-    @PostMapping("/import")
-    public Result<Map<String, Object>> importData(
-            @Parameter(description = "Excel文件") @RequestParam("file") MultipartFile file) {
-        Map<String, Object> importResult = fbaShipmentService.importData(file);
-        return Result.success(importResult);
-    }
-
     @OperationLog(module = "FBA货件", operation = "批量导入FBA货件")
     @Operation(summary = "批量导入FBA货件", description = "从多个Excel文件批量导入FBA货件明细，支持幂等性")
     @PostMapping("/batch-import")
@@ -125,12 +116,5 @@ public class FbaShipmentController {
     public Result<List<String>> getCountryList() {
         List<String> countries = fbaShipmentService.getCountryList();
         return Result.success(countries);
-    }
-
-    @Operation(summary = "获取店铺列表", description = "获取所有已导入货件的店铺名称列表（去重）")
-    @GetMapping("/shop-names")
-    public Result<List<String>> getShopNameList() {
-        List<String> shopNames = fbaShipmentService.getShopNameList();
-        return Result.success(shopNames);
     }
 }

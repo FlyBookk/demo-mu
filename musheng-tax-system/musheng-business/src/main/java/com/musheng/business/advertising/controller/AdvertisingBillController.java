@@ -17,7 +17,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -47,25 +46,6 @@ public class AdvertisingBillController {
     public Result<AdvertisingDataImportResponse> importData(
             @Valid @RequestBody AdvertisingDataImportBatchRequest request) {
         return Result.success(advertisingBillService.importData(request));
-    }
-
-    @Operation(summary = "发票列表", description = "分页查询广告发票主表")
-    @GetMapping
-    public Result<PageResult<AdvertisingBill>> list(
-            @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
-            @Parameter(description = "年月(YYYY-MM)") @RequestParam(required = false) String yearMonth,
-            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int page,
-            @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
-        LocalDate start = null, end = null;
-        if (StringUtils.hasText(yearMonth)) {
-            try {
-                start = LocalDate.parse(yearMonth + "-01");
-                end = start.withDayOfMonth(start.lengthOfMonth());
-            } catch (Exception ignored) {}
-        }
-        Page<AdvertisingBill> pageResult = advertisingBillService.list(siteCode, start, end, null, page, size);
-        return Result.success(PageResult.of(pageResult.getRecords(), pageResult.getTotal(),
-                (int) pageResult.getCurrent(), (int) pageResult.getSize()));
     }
 
     @Operation(summary = "汇总统计", description = "按当前筛选条件汇总发票数、活动数、费用")

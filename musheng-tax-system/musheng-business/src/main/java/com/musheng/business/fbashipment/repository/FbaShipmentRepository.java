@@ -138,17 +138,6 @@ public interface FbaShipmentRepository {
     List<String> findDistinctCountries();
 
     /**
-     * 获取所有店铺名称列表（去重）
-     * 
-     * 用于前端筛选下拉框
-     *
-     * @return 店铺名称列表
-     * @author wanhua
-     * 10:30 2026年02月02日
-     */
-    List<String> findDistinctShopNames();
-
-    /**
      * 统计符合条件的货件数量
      *
      * @param status 货件状态（可选）

@@ -8,26 +8,13 @@ import type { PageResult } from '@/types/api'
 import type {
   FbaShipment,
   FbaShipmentQuery,
-  FbaShipmentImportResult,
   FbaShipmentBatchImportResult,
   FbaShipmentSummary,
   FbaShipmentItem,
-  FbaShipmentItemQuery,
-  // 旧类型（兼容性）
-  FbaShipmentDetail,
-  FbaShipmentDetailQuery
+  FbaShipmentItemQuery
 } from '@/types/fbaShipment'
 
 const BASE_URL = '/api/v1/business/fba-shipment'
-
-/**
- * 导入FBA货件（Excel文件）
- */
-export function importFbaShipment(file: File) {
-  const formData = new FormData()
-  formData.append('file', file)
-  return request.upload<FbaShipmentImportResult>(`${BASE_URL}/import`, formData)
-}
 
 /**
  * 批量导入FBA货件（多个Excel文件，支持幂等性）
@@ -102,27 +89,4 @@ export function getFbaShipmentItemList(params: FbaShipmentItemQuery) {
  */
 export function getFbaShipmentCountries() {
   return request.get<string[]>(`${BASE_URL}/countries`)
-}
-
-/**
- * 获取店铺名称列表（动态）
- */
-export function getFbaShipmentShopNames() {
-  return request.get<string[]>(`${BASE_URL}/shop-names`)
-}
-
-// ========== 以下为旧API接口，保留用于兼容性 ==========
-
-/**
- * 新增FBA货件明细（旧）
- */
-export function addFbaShipment(data: Partial<FbaShipmentDetail>) {
-  return request.post<number>(BASE_URL, data)
-}
-
-/**
- * 更新FBA货件明细（旧）
- */
-export function updateFbaShipment(id: number, data: Partial<FbaShipmentDetail>) {
-  return request.put<void>(`${BASE_URL}/${id}`, data)
 }

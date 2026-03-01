@@ -98,11 +98,4 @@ public interface FbaShipmentService {
      * @return 国家列表
      */
     List<String> getCountryList();
-
-    /**
-     * 获取所有店铺名称列表（去重）
-     *
-     * @return 店铺名称列表
-     */
-    List<String> getShopNameList();
 }

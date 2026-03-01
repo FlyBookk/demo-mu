@@ -204,7 +204,6 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
 
     @Override
     public List<String> findDistinctCountries() {
-        // ⚠️ 逻辑与原 FbaShipmentServiceImpl.getCountryList() 方法完全一致
         Long shopId = ShopContext.requireShopId();
 
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
@@ -216,25 +215,6 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         List<FbaShipment> list = fbaShipmentMapper.selectList(wrapper);
         return list.stream()
                 .map(FbaShipment::getCountry)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<String> findDistinctShopNames() {
-        // ⚠️ 逻辑与原 FbaShipmentServiceImpl.getShopNameList() 方法完全一致
-        Long shopId = ShopContext.requireShopId();
-
-        LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FbaShipment::getShopId, shopId)
-                .select(FbaShipment::getShopName)
-                .groupBy(FbaShipment::getShopName)
-                .orderByAsc(FbaShipment::getShopName);
-
-        List<FbaShipment> list = fbaShipmentMapper.selectList(wrapper);
-        return list.stream()
-                .map(FbaShipment::getShopName)
                 .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());

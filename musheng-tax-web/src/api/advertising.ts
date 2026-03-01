@@ -8,23 +8,13 @@ import type { PageResult } from '@/types/api'
 import type {
   AdvertisingBill,
   AdvertisingBillItem,
-  AdvertisingDataQuery,
-  AdvertisingDataForm,
   AdvertisingSummary,
-  AdvertisingStatByType,
   AdvertisingImportBatchRequest,
   AdvertisingImportResponse,
   AdvertisingSearchQuery
 } from '@/types/advertising'
 
 const BASE_URL = '/api/v1/advertising'
-
-/**
- * 获取广告发票列表
- */
-export function getAdvertisingList(params: AdvertisingDataQuery) {
-  return request.get<PageResult<AdvertisingBill>>(BASE_URL, params)
-}
 
 /**
  * 根据ID获取广告发票详情（含明细）
@@ -68,13 +58,6 @@ export function batchPhysicalDeleteAdvertising(ids: number[]) {
 }
 
 /**
- * 按批次删除广告数据
- */
-export function deleteAdvertisingByBatch(batchNo: string) {
-  return request.delete<void>(`${BASE_URL}/batch/${batchNo}`)
-}
-
-/**
  * 获取广告数据汇总（与搜索条件一致）
  */
 export function getAdvertisingSummary(params: {
@@ -84,21 +67,6 @@ export function getAdvertisingSummary(params: {
   invoiceNumber?: string
 }) {
   return request.get<AdvertisingSummary>(`${BASE_URL}/summary`, params)
-}
-
-/**
- * 获取广告数据按类型统计
- */
-export function getAdvertisingStatByType(params: AdvertisingDataQuery) {
-  return request.get<AdvertisingStatByType[]>(`${BASE_URL}/stat-by-type`, params)
-}
-
-/**
- * 导出广告数据
- */
-export function exportAdvertisingData(params: AdvertisingDataQuery) {
-  const filename = `广告数据_${new Date().toISOString().slice(0, 10)}.xlsx`
-  return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }
 
 /**

@@ -350,12 +350,6 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         return fbaShipmentRepository.findDistinctCountries();
     }
 
-    @Override
-    public List<String> getShopNameList() {
-        // 使用 Repository 查询
-        return fbaShipmentRepository.findDistinctShopNames();
-    }
-
     /**
      * 计算文件哈希值（MD5）
      * 用于记录文件标识，不用于阻止导入
