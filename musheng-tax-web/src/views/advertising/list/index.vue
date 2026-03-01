@@ -70,8 +70,11 @@
               <a-button @click="handleGoToDetailView">
                 <UnorderedListOutlined /> 活动明细视图
               </a-button>
-              <a-button type="primary" @click="handleImport">
-                <PlusOutlined /> 批量导入
+              <a-button type="primary" @click="handleShowAddModal">
+                <PlusOutlined /> 新增
+              </a-button>
+              <a-button @click="handleImport">
+                <CloudUploadOutlined /> 批量导入
               </a-button>
               <a-button
                 danger
@@ -209,6 +212,82 @@
         </div>
       </div>
     </a-modal>
+
+    <!-- 新增弹窗 -->
+    <a-modal
+      v-model:open="addModalVisible"
+      title="新增广告费"
+      width="560px"
+      :mask-closable="false"
+      @cancel="handleCloseAddModal"
+    >
+      <a-form
+        ref="addFormRef"
+        :model="addFormData"
+        :rules="addFormRules"
+        :label-col="{ span: 6 }"
+        :wrapper-col="{ span: 16 }"
+      >
+        <a-form-item label="店铺名称" name="storeName">
+          <a-input v-model:value="addFormData.storeName" placeholder="如：慕声欧洲-UK" :maxlength="100" />
+        </a-form-item>
+        <a-form-item label="站点" name="siteCode">
+          <a-select
+            v-model:value="addFormData.siteCode"
+            placeholder="请选择站点"
+            show-search
+            :filter-option="filterAddOption"
+            style="width: 100%"
+            @change="handleAddSiteChange"
+          >
+            <a-select-option v-for="m in marketplaceOptions" :key="m.siteCode" :value="m.siteCode">
+              {{ m.siteCode }} - {{ m.siteName }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="月份" name="yearMonth">
+          <a-month-picker
+            v-model:value="addFormData.yearMonthDate"
+            placeholder="请选择月份"
+            style="width: 100%"
+            @change="handleAddYearMonthChange"
+          />
+        </a-form-item>
+        <a-form-item label="广告费用" name="amount">
+          <a-input-number
+            v-model:value="addFormData.amount"
+            :min="0"
+            :precision="2"
+            :step="100"
+            placeholder="请输入广告费用"
+            style="width: 100%"
+          >
+            <template #addonAfter>{{ addFormData.currencyCode || '货币' }}</template>
+          </a-input-number>
+        </a-form-item>
+        <a-form-item label="货币" name="currencyCode">
+          <a-select v-model:value="addFormData.currencyCode" placeholder="请选择货币" style="width: 100%">
+            <a-select-option v-for="c in validCurrencyOptions" :key="c.currencyCode" :value="c.currencyCode">
+              {{ c.currencyCode }} - {{ c.currencyName }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="发票号" name="invoiceNo">
+          <a-input v-model:value="addFormData.invoiceNo" placeholder="选填，不填则自动生成" :maxlength="100" />
+        </a-form-item>
+        <a-form-item label="备注" name="remark">
+          <a-textarea v-model:value="addFormData.remark" placeholder="选填" :rows="2" :maxlength="500" show-count />
+        </a-form-item>
+      </a-form>
+      <template #footer>
+        <a-space>
+          <a-button @click="handleCloseAddModal">取消</a-button>
+          <a-button type="primary" :loading="addSubmitting" @click="handleAddSubmit">
+            <SaveOutlined /> 保存
+          </a-button>
+        </a-space>
+      </template>
+    </a-modal>
   </div>
 </template>
 
@@ -216,6 +295,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import type { FormInstance } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import type { TableRowSelection } from 'ant-design-vue/es/table/interface'
 import type { Dayjs } from 'dayjs'
@@ -224,7 +304,9 @@ import {
   ReloadOutlined,
   PlusOutlined,
   DeleteOutlined,
-  UnorderedListOutlined
+  UnorderedListOutlined,
+  CloudUploadOutlined,
+  SaveOutlined
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import {
@@ -233,11 +315,17 @@ import {
   batchDeleteAdvertising,
   batchPhysicalDeleteAdvertising,
   searchAdvertisingData,
-  getAdvertisingSummary
+  getAdvertisingSummary,
+  importAdvertisingData
 } from '@/api/advertising'
 import { getEnabledMarketplaces } from '@/api/marketplace'
+import { getEnabledCurrencies } from '@/api/currency'
 import type { AdvertisingBill, AdvertisingSummary } from '@/types/advertising'
 import type { Marketplace } from '@/types/marketplace'
+import type { Currency } from '@/types/currency'
+import dayjs from 'dayjs'
+
+const VALID_CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR']
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -397,6 +485,36 @@ const rowSelection = computed<TableRowSelection>(() => ({
 const detailModalVisible = ref(false)
 const detailData = ref<AdvertisingBill | null>(null)
 
+// ============= 新增弹窗 =============
+const addModalVisible = ref(false)
+const addFormRef = ref<FormInstance>()
+const addSubmitting = ref(false)
+const addFormData = reactive({
+  storeName: '',
+  siteCode: '',
+  yearMonth: '',
+  yearMonthDate: null as Dayjs | null,
+  amount: undefined as number | undefined,
+  currencyCode: '',
+  invoiceNo: '',
+  remark: ''
+})
+const addFormRules = {
+  storeName: [{ required: true, message: '请输入店铺名称', trigger: 'blur' }],
+  siteCode: [{ required: true, message: '请选择站点', trigger: 'change' }],
+  yearMonth: [{ required: true, message: '请选择月份', trigger: 'change' }],
+  amount: [
+    { required: true, message: '请输入广告费用', trigger: 'blur' },
+    { type: 'number' as const, min: 0.01, message: '广告费用必须大于 0', trigger: 'blur' }
+  ],
+  currencyCode: [
+    { required: true, message: '请选择货币', trigger: 'change' },
+    { validator: (_: any, v: string) => (!v || VALID_CURRENCIES.includes(v) ? Promise.resolve() : Promise.reject('仅支持 USD/CAD/GBP/EUR')), trigger: 'change' }
+  ]
+}
+const currencyOptions = ref<Currency[]>([])
+const validCurrencyOptions = computed(() => currencyOptions.value.filter(c => VALID_CURRENCIES.includes(c.currencyCode)))
+
 function handleViewDetail(record: AdvertisingBill) {
   getAdvertisingById(record.id).then(res => {
     detailData.value = res.data
@@ -410,6 +528,91 @@ function handleGoToDetailView() {
 
 function handleImport() {
   router.push({ name: 'AdvertisingImport' })
+}
+
+function handleShowAddModal() {
+  addModalVisible.value = true
+  Object.assign(addFormData, {
+    storeName: '',
+    siteCode: '',
+    yearMonth: '',
+    yearMonthDate: null,
+    amount: undefined,
+    currencyCode: '',
+    invoiceNo: '',
+    remark: ''
+  })
+  addFormRef.value?.clearValidate()
+}
+
+function handleCloseAddModal() {
+  addModalVisible.value = false
+}
+
+function filterAddOption(input: string, option: any) {
+  const m = marketplaceOptions.value.find(x => x.siteCode === option.value)
+  if (!m) return false
+  const s = input.toLowerCase()
+  return m.siteCode.toLowerCase().includes(s) || m.siteName.toLowerCase().includes(s)
+}
+
+function handleAddSiteChange(siteCode: string) {
+  const m = marketplaceOptions.value.find(x => x.siteCode === siteCode)
+  if (m?.currencyCode && VALID_CURRENCIES.includes(m.currencyCode)) {
+    addFormData.currencyCode = m.currencyCode
+  }
+  if (!addFormData.storeName) addFormData.storeName = `慕声-${siteCode}`
+}
+
+function handleAddYearMonthChange(date: Dayjs | null) {
+  addFormData.yearMonth = date?.format('YYYY-MM') || ''
+}
+
+function buildAddImportRequest() {
+  const start = addFormData.yearMonth ? `${addFormData.yearMonth}-01` : dayjs().format('YYYY-MM-DD')
+  const end = addFormData.yearMonth
+    ? dayjs(`${addFormData.yearMonth}-01`).endOf('month').format('YYYY-MM-DD')
+    : dayjs().format('YYYY-MM-DD')
+  const invoiceNo = addFormData.invoiceNo?.trim() || `MANUAL-${Date.now()}`
+  const amount = Math.max(0, addFormData.amount ?? 0)
+  return {
+    storeName: addFormData.storeName.trim(),
+    siteCode: addFormData.siteCode || undefined,
+    invoiceNumber: invoiceNo,
+    invoiceStatus: 'PAID_IN_FULL',
+    billingStartDate: start,
+    billingEndDate: end,
+    issueDate: end,
+    currency: addFormData.currencyCode || 'USD',
+    invoiceAmount: amount >= 0.01 ? amount : 0.01,
+    cost: amount,
+    otherCost: 0,
+    remark: addFormData.remark?.trim() || undefined
+  }
+}
+
+async function handleAddSubmit() {
+  try {
+    await addFormRef.value?.validate()
+    addSubmitting.value = true
+    const item = buildAddImportRequest()
+    const res = await importAdvertisingData({ data: [item] }) as any
+    const result = res?.data ?? res
+    const failed = result?.failedCount ?? 0
+    if (failed > 0) {
+      const msg = result?.failedRecords?.[0]?.errorMessage || '录入失败'
+      message.error(msg)
+      return
+    }
+    message.success('录入成功')
+    addModalVisible.value = false
+    fetchData()
+  } catch (e: any) {
+    if (e?.errorFields) return
+    message.error('录入失败: ' + (e?.message || e))
+  } finally {
+    addSubmitting.value = false
+  }
 }
 
 async function fetchMarketplaces() {
@@ -523,8 +726,18 @@ function handleBatchDelete() {
 // 初始化
 onMounted(() => {
   fetchMarketplaces()
+  fetchCurrencies()
   fetchData()
 })
+
+async function fetchCurrencies() {
+  try {
+    const res = await getEnabledCurrencies() as any
+    currencyOptions.value = res?.data ?? res ?? []
+  } catch {
+    currencyOptions.value = []
+  }
+}
 </script>
 
 <style lang="scss" scoped>

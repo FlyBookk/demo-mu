@@ -396,16 +396,13 @@ public class TaxReportServiceImpl implements TaxReportService {
         List<SalesData> allOtherData = salesDataMapper.selectList(otherWrapper);
 
         // 7. 批量查询广告数据（主表+明细）
+        // 按「账单周期与查询范围有交集」过滤：billingEndDate >= minStartDate 且 billingStartDate <= maxEndDate
         // 兼容：site_code 可能为空（从 store_name 推断），故用 OR site_code IS NULL 纳入
         LambdaQueryWrapper<AdvertisingBill> billWrapper = new LambdaQueryWrapper<>();
         billWrapper.eq(AdvertisingBill::getShopId, shopId)
                 .and(w -> w.in(AdvertisingBill::getSiteCode, sites).or().isNull(AdvertisingBill::getSiteCode))
-                .and(w -> w.between(AdvertisingBill::getBillingStartDate, minStartDate, maxEndDate)
-                        .or()
-                        .between(AdvertisingBill::getBillingEndDate, minStartDate, maxEndDate)
-                        .or()
-                        .and(w2 -> w2.le(AdvertisingBill::getBillingStartDate, minStartDate)
-                                .ge(AdvertisingBill::getBillingEndDate, maxEndDate)));
+                .ge(AdvertisingBill::getBillingEndDate, minStartDate)
+                .le(AdvertisingBill::getBillingStartDate, maxEndDate);
         List<AdvertisingBill> allBills = advertisingBillMapper.selectList(billWrapper);
         List<Long> billIds = allBills.stream().map(AdvertisingBill::getId).collect(Collectors.toList());
         Map<Long, AdvertisingBill> billMap = allBills.stream().collect(Collectors.toMap(AdvertisingBill::getId, b -> b));

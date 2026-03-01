@@ -139,8 +139,9 @@ public class AdvertisingBillServiceImpl implements AdvertisingBillService {
         wrapper.eq(AdvertisingBill::getShopId, shopId);
 
         if (StringUtils.hasText(siteCode)) wrapper.eq(AdvertisingBill::getSiteCode, siteCode);
-        if (billingStartDate != null) wrapper.ge(AdvertisingBill::getBillingStartDate, billingStartDate);
-        if (billingEndDate != null) wrapper.le(AdvertisingBill::getBillingEndDate, billingEndDate);
+        // 按「账单周期与查询范围有交集」过滤：record.billingEndDate >= queryStart 且 record.billingStartDate <= queryEnd
+        if (billingStartDate != null) wrapper.ge(AdvertisingBill::getBillingEndDate, billingStartDate);
+        if (billingEndDate != null) wrapper.le(AdvertisingBill::getBillingStartDate, billingEndDate);
         if (StringUtils.hasText(invoiceNumber)) wrapper.like(AdvertisingBill::getInvoiceNumber, invoiceNumber);
 
         wrapper.orderByDesc(AdvertisingBill::getCreateTime);
@@ -180,8 +181,9 @@ public class AdvertisingBillServiceImpl implements AdvertisingBillService {
         Long shopId = ShopContext.requireShopId();
         wrapper.eq(AdvertisingBill::getShopId, shopId);
         if (StringUtils.hasText(siteCode)) wrapper.eq(AdvertisingBill::getSiteCode, siteCode);
-        if (billingStartDate != null) wrapper.ge(AdvertisingBill::getBillingStartDate, billingStartDate);
-        if (billingEndDate != null) wrapper.le(AdvertisingBill::getBillingEndDate, billingEndDate);
+        // 按「账单周期与查询范围有交集」过滤：record.billingEndDate >= queryStart 且 record.billingStartDate <= queryEnd
+        if (billingStartDate != null) wrapper.ge(AdvertisingBill::getBillingEndDate, billingStartDate);
+        if (billingEndDate != null) wrapper.le(AdvertisingBill::getBillingStartDate, billingEndDate);
         if (StringUtils.hasText(invoiceNumber)) wrapper.like(AdvertisingBill::getInvoiceNumber, invoiceNumber);
 
         List<AdvertisingBill> bills = advertisingBillMapper.selectList(wrapper);

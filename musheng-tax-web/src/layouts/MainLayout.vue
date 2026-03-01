@@ -205,7 +205,7 @@ const menuItems = computed<ItemType[]>(() => {
       icon: () => h(NotificationOutlined),
       label: '广告数据',
       children: [
-        { key: 'AdvertisingAdd', label: '广告费录入' },
+        { key: 'AdvertisingImport', label: '广告费录入' },
         { key: 'AdvertisingList', label: '数据列表' }
       ]
     },

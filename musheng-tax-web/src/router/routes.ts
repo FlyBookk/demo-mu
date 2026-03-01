@@ -243,17 +243,8 @@ export const routes: RouteRecordRaw[] = [
             name: 'AdvertisingImport',
             component: () => import('@/views/advertising/import/index.vue'),
             meta: {
-              title: '批量导入',
-              permission: 'advertising:import'
-            }
-          },
-          {
-            path: 'add',
-            name: 'AdvertisingAdd',
-            component: () => import('@/views/advertising/add/index.vue'),
-            meta: {
               title: '广告费录入',
-              permission: 'advertising:add'
+              permission: 'advertising:import'
             }
           },
           {
@@ -271,7 +262,8 @@ export const routes: RouteRecordRaw[] = [
             component: () => import('@/views/advertising/detail/index.vue'),
             meta: {
               title: '活动明细',
-              permission: 'advertising:list'
+              permission: 'advertising:list',
+              hideInMenu: true
             }
           }
         ]

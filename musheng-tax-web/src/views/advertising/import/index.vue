@@ -1,131 +1,61 @@
 <template>
   <div class="advertising-import-page">
     <a-page-header
-      title="广告数据批量导入"
-      sub-title="支持发票编号去重、时间字段校验"
+      title="广告费录入"
+      sub-title="支持 Excel/CSV 批量导入，发票编号去重、时间字段校验"
       @back="() => $router.back()"
     >
       <template #extra>
-        <a-space>
-          <a-button @click="downloadTemplate">
-            <template #icon><DownloadOutlined /></template>
-            下载模板
-          </a-button>
-          <a-button type="primary" @click="handleShowManualInput">
-            <template #icon><PlusOutlined /></template>
-            手动录入
-          </a-button>
-        </a-space>
+        <a-button @click="downloadTemplate">
+          <template #icon><DownloadOutlined /></template>
+          下载模板
+        </a-button>
       </template>
     </a-page-header>
 
     <div class="import-content">
       <!-- 步骤指示器 -->
       <a-steps :current="currentStep" class="import-steps">
-        <a-step title="选择文件" description="上传Excel文件或手动录入" />
+        <a-step title="选择文件" description="上传 Excel 或 CSV 文件" />
         <a-step title="数据预览" description="确认导入数据" />
         <a-step title="导入结果" description="查看导入统计" />
       </a-steps>
 
-      <!-- 步骤1: 文件上传或手动录入 -->
+      <!-- 步骤1: 文件上传 -->
       <div v-if="currentStep === 0" class="step-content">
-        <a-tabs v-model:activeKey="uploadTab" class="upload-tabs">
-          <!-- 文件上传标签页 -->
-          <a-tab-pane key="file" tab="文件上传">
-            <a-upload-dragger
-              v-model:file-list="fileList"
-              name="file"
-              accept=".xlsx,.xls,.csv"
-              :before-upload="beforeUpload"
-              :custom-request="handleFileUpload"
-              :max-count="1"
-              @change="handleFileChange"
-            >
-              <p class="ant-upload-drag-icon">
-                <inbox-outlined style="font-size: 48px; color: #1890ff" />
-              </p>
-              <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
-              <p class="ant-upload-hint">
-                支持 Excel (.xlsx, .xls) 或 CSV 格式，单个文件最大 10MB
-              </p>
-            </a-upload-dragger>
+        <a-upload-dragger
+          v-model:file-list="fileList"
+          name="file"
+          accept=".xlsx,.xls,.csv"
+          :before-upload="beforeUpload"
+          :custom-request="handleFileUpload"
+          :max-count="1"
+          @change="handleFileChange"
+        >
+          <p class="ant-upload-drag-icon">
+            <inbox-outlined style="font-size: 48px; color: #1890ff" />
+          </p>
+          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p class="ant-upload-hint">
+            支持 Excel (.xlsx, .xls) 或 CSV 格式，单个文件最大 10MB
+          </p>
+        </a-upload-dragger>
 
-            <a-alert
-              v-if="fileList.length > 0"
-              :message="`已选择文件: ${fileList[0].name}`"
-              type="success"
-              show-icon
-              closable
-              class="file-alert"
-            />
-            <!-- 解析后即时预览 -->
-            <a-alert
-              v-if="parsedData.length > 0 && uploadTab === 'file'"
-              :message="`解析成功：共 ${parsedData.length} 条，点击「下一步」查看完整预览`"
-              type="info"
-              show-icon
-              class="file-alert"
-            />
-          </a-tab-pane>
-
-          <!-- 手动录入标签页 -->
-          <a-tab-pane key="manual" tab="手动录入">
-            <a-button type="dashed" block @click="handleAddRow" class="add-row-btn">
-              <template #icon><PlusOutlined /></template>
-              添加一行数据
-            </a-button>
-
-            <a-table
-              :columns="manualColumns"
-              :data-source="manualDataSource"
-              :pagination="false"
-              :scroll="{ x: 2000 }"
-              class="manual-table"
-            >
-              <template #bodyCell="{ column, record, index }">
-                <template v-if="column.dataIndex === 'storeName'">
-                  <a-input v-model:value="record.storeName" placeholder="店铺名称" />
-                </template>
-                <template v-else-if="column.dataIndex === 'invoiceNumber'">
-                  <a-input v-model:value="record.invoiceNumber" placeholder="发票编号" />
-                </template>
-                <template v-else-if="column.dataIndex === 'billingPeriod'">
-                  <a-range-picker
-                    v-model:value="record.billingPeriod"
-                    format="YYYY-MM-DD"
-                    style="width: 100%"
-                  />
-                </template>
-                <template v-else-if="column.dataIndex === 'cost'">
-                  <a-input-number
-                    v-model:value="record.cost"
-                    :min="0"
-                    :precision="2"
-                    style="width: 100%"
-                  />
-                </template>
-                <template v-else-if="column.dataIndex === 'currency'">
-                  <a-select v-model:value="record.currency" style="width: 100%">
-                    <a-select-option value="USD">USD</a-select-option>
-                    <a-select-option value="CAD">CAD</a-select-option>
-                    <a-select-option value="GBP">GBP</a-select-option>
-                    <a-select-option value="EUR">EUR</a-select-option>
-                  </a-select>
-                </template>
-                <template v-else-if="column.dataIndex === 'action'">
-                  <a-button
-                    type="link"
-                    danger
-                    size="small"
-                    @click="handleDeleteRow(index)"
-                  >
-                    删除
-                  </a-button>
-                </template>
-              </template>
-            </a-table>
-          </a-tab-pane>
-        </a-tabs>
+        <a-alert
+          v-if="fileList.length > 0"
+          :message="`已选择文件: ${fileList[0].name}`"
+          type="success"
+          show-icon
+          closable
+          class="file-alert"
+        />
+        <a-alert
+          v-if="parsedData.length > 0"
+          :message="`解析成功：共 ${parsedData.length} 条，点击「下一步」查看完整预览`"
+          type="info"
+          show-icon
+          class="file-alert"
+        />
 
         <div class="step-actions step-actions-step1">
           <a-button type="primary" size="large" @click="handleNextStep" :disabled="!canProceed">
@@ -285,7 +215,7 @@
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { DownloadOutlined, PlusOutlined, InboxOutlined } from '@ant-design/icons-vue'
+import { DownloadOutlined, InboxOutlined } from '@ant-design/icons-vue'
 import { importAdvertisingData, downloadAdvertisingTemplate } from '@/api/advertising'
 import type {
   AdvertisingImportRequest,
@@ -293,31 +223,16 @@ import type {
 } from '@/types/advertising'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import * as XLSX from 'xlsx'
-import dayjs, { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 
 const router = useRouter()
 
 // 当前步骤
 const currentStep = ref(0)
-const uploadTab = ref<string>('file')
 
 // 文件上传
 const fileList = ref<UploadFile[]>([])
 const parsedData = ref<any[]>([])
-
-// 手动录入
-interface ManualRow {
-  key: number
-  storeName: string
-  invoiceNumber: string
-  billingPeriod: [Dayjs, Dayjs] | null
-  cost: number | null
-  currency: string
-  [key: string]: any
-}
-
-const manualDataSource = ref<ManualRow[]>([])
-let rowKeyCounter = 0
 
 // 预览数据与校验错误
 const previewData = ref<AdvertisingImportRequest[]>([])
@@ -337,16 +252,6 @@ const importResult = ref<AdvertisingImportResponse>({
   failedRecords: []
 })
 
-// 手动录入表格列
-const manualColumns = [
-  { title: '店铺名称', dataIndex: 'storeName', width: 150, fixed: 'left' },
-  { title: '发票编号', dataIndex: 'invoiceNumber', width: 150 },
-  { title: '账单周期', dataIndex: 'billingPeriod', width: 250 },
-  { title: '费用', dataIndex: 'cost', width: 120 },
-  { title: '币种', dataIndex: 'currency', width: 100 },
-  { title: '操作', dataIndex: 'action', width: 80, fixed: 'right' }
-]
-
 // 预览表格列
 const previewColumns = [
   { title: '店铺名称', dataIndex: 'storeName', width: 150 },
@@ -361,13 +266,7 @@ const previewColumns = [
 ]
 
 // 能否进入下一步
-const canProceed = computed(() => {
-  if (uploadTab.value === 'file') {
-    return parsedData.value.length > 0
-  } else {
-    return manualDataSource.value.length > 0
-  }
-})
+const canProceed = computed(() => parsedData.value.length > 0)
 
 // 文件上传前校验
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
@@ -451,31 +350,6 @@ const handleFileChange = (info: any) => {
   }
 }
 
-// 显示手动录入
-const handleShowManualInput = () => {
-  uploadTab.value = 'manual'
-  if (manualDataSource.value.length === 0) {
-    handleAddRow()
-  }
-}
-
-// 添加一行
-const handleAddRow = () => {
-  manualDataSource.value.push({
-    key: rowKeyCounter++,
-    storeName: '',
-    invoiceNumber: '',
-    billingPeriod: null,
-    cost: null,
-    currency: 'USD'
-  })
-}
-
-// 删除一行
-const handleDeleteRow = (index: number) => {
-  manualDataSource.value.splice(index, 1)
-}
-
 // 前端预校验单条数据，返回错误信息
 interface ValidationError { rowIndex: number; invoiceNumber: string; message: string }
 function validateImportRow(row: AdvertisingImportRequest, index: number): string | null {
@@ -496,14 +370,7 @@ function validateImportRow(row: AdvertisingImportRequest, index: number): string
 // 下一步
 const handleNextStep = () => {
   try {
-    let data: AdvertisingImportRequest[] = []
-    if (uploadTab.value === 'file') {
-      data = parsedData.value.map(row => convertRowToImportRequest(row))
-    } else {
-      data = manualDataSource.value
-        .filter(row => row.storeName && row.invoiceNumber)
-        .map(row => convertManualRowToImportRequest(row))
-    }
+    const data: AdvertisingImportRequest[] = parsedData.value.map(row => convertRowToImportRequest(row))
 
     if (data.length === 0) {
       message.warning('没有有效的数据可以导入')
@@ -594,27 +461,6 @@ const convertRowToImportRequest = (row: any): AdvertisingImportRequest => {
   }
 }
 
-// 转换手动录入行为导入请求（补全必填字段）
-const convertManualRowToImportRequest = (row: ManualRow): AdvertisingImportRequest => {
-  const [startDate, endDate] = row.billingPeriod || []
-  const today = dayjs().format('YYYY-MM-DD')
-  const costVal = row.cost ?? 0
-  const billingStart = startDate ? dayjs(startDate).format('YYYY-MM-DD') : today
-  const billingEnd = endDate ? dayjs(endDate).format('YYYY-MM-DD') : today
-
-  return {
-    storeName: row.storeName?.trim() || '未填写',
-    invoiceNumber: row.invoiceNumber?.trim() || '',
-    invoiceStatus: 'PAID_IN_FULL',
-    billingStartDate: billingStart,
-    billingEndDate: billingEnd,
-    issueDate: today,
-    currency: row.currency || 'USD',
-    invoiceAmount: costVal >= 0.01 ? costVal : 0.01,
-    cost: costVal
-  }
-}
-
 // 执行导入（由 Popconfirm 确认后直接调用）
 const doExecuteImport = async () => {
   importing.value = true
@@ -675,7 +521,6 @@ const handleReimport = () => {
   currentStep.value = 0
   fileList.value = []
   parsedData.value = []
-  manualDataSource.value = []
   previewData.value = []
   previewValidationErrors.value = []
 }
@@ -703,19 +548,7 @@ const handleReimport = () => {
   min-height: 400px;
 }
 
-.upload-tabs {
-  margin-top: 24px;
-}
-
 .file-alert {
-  margin-top: 16px;
-}
-
-.add-row-btn {
-  margin-bottom: 16px;
-}
-
-.manual-table {
   margin-top: 16px;
 }
 
