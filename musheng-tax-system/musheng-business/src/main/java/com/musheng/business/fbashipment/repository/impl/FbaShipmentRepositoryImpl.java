@@ -37,9 +37,8 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
     private final FbaShipmentMapper fbaShipmentMapper;
 
     @Override
-    public Page<FbaShipment> findByQuery(String shipmentId, String shopName, String country,
+    public Page<FbaShipment> findByQuery(String shipmentId, String status, String shopName, String country,
                                           String startDate, String endDate, int page, int size) {
-        // ⚠️ 逻辑与原 FbaShipmentServiceImpl.list() 方法完全一致
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -49,6 +48,10 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         // 条件筛选 - 货件编号模糊查询
         if (StringUtils.hasText(shipmentId)) {
             wrapper.like(FbaShipment::getShipmentId, shipmentId);
+        }
+        // 货件状态
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(FbaShipment::getStatus, status);
         }
         // 店铺名称模糊查询
         if (StringUtils.hasText(shopName)) {
@@ -167,9 +170,8 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
     }
 
     @Override
-    public List<FbaShipment> findListByQuery(String shopName, String country,
+    public List<FbaShipment> findListByQuery(String status, String shopName, String country,
                                               String startDate, String endDate) {
-        // ⚠️ 逻辑与原 FbaShipmentServiceImpl.getSummary() 和 exportData() 方法中的查询完全一致
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -177,6 +179,9 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         wrapper.eq(FbaShipment::getShopId, shopId);
 
         // 条件筛选
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(FbaShipment::getStatus, status);
+        }
         if (StringUtils.hasText(shopName)) {
             wrapper.like(FbaShipment::getShopName, shopName);
         }
@@ -236,7 +241,7 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
     }
 
     @Override
-    public long countByQuery(String shopName, String country, String startDate, String endDate) {
+    public long countByQuery(String status, String shopName, String country, String startDate, String endDate) {
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -244,6 +249,9 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         wrapper.eq(FbaShipment::getShopId, shopId);
 
         // 条件筛选
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(FbaShipment::getStatus, status);
+        }
         if (StringUtils.hasText(shopName)) {
             wrapper.like(FbaShipment::getShopName, shopName);
         }

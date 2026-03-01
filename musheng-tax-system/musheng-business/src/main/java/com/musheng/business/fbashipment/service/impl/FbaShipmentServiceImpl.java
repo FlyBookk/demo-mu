@@ -179,10 +179,9 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     }
 
     @Override
-    public Page<FbaShipment> list(String shipmentId, String shopName, String country,
+    public Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
                                   String startDate, String endDate, int page, int size) {
-        // 使用 Repository 进行查询
-        return fbaShipmentRepository.findByQuery(shipmentId, shopName, country, startDate, endDate, page, size);
+        return fbaShipmentRepository.findByQuery(shipmentId, status, shopName, country, startDate, endDate, page, size);
     }
 
     @Override
@@ -194,7 +193,7 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         // 查询关联的SKU明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
         itemWrapper.eq(FbaShipmentItem::getShipmentId, id);
-        itemWrapper.orderByAsc(FbaShipmentItem::getSku);
+        itemWrapper.orderByAsc(FbaShipmentItem::getMsku);
         List<FbaShipmentItem> items = fbaShipmentItemMapper.selectList(itemWrapper);
         shipment.setItems(items);
 
@@ -234,10 +233,9 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String shopName, String country,
+    public Map<String, Object> getSummary(String status, String shopName, String country,
                                          String startDate, String endDate) {
-        // 使用 Repository 查询列表
-        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(shopName, country, startDate, endDate);
+        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(status, shopName, country, startDate, endDate);
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalShipments", shipments.size());
@@ -250,52 +248,89 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     }
 
     @Override
-    public void exportData(String shopName, String country, String startDate, String endDate,
+    public void exportData(String status, String shopName, String country, String startDate, String endDate,
                           jakarta.servlet.http.HttpServletResponse response) {
-        // 使用 Repository 查询列表
-        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(shopName, country, startDate, endDate);
+        List<FbaShipment> shipments = fbaShipmentRepository.findListByQuery(status, shopName, country, startDate, endDate);
 
         try {
-            String fileName = "fba_shipment_" + System.currentTimeMillis() + ".xlsx";
-            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            String fileName = "慕声FBA发货明细数据_" + System.currentTimeMillis() + ".csv";
+            response.setContentType("text/csv; charset=UTF-8");
+            response.setCharacterEncoding("UTF-8");
             response.setHeader("Content-Disposition", "attachment; filename=" +
                     java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8));
 
-            try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
-                 java.io.OutputStream outputStream = response.getOutputStream()) {
+            java.io.OutputStream outputStream = response.getOutputStream();
+            java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(outputStream, java.nio.charset.StandardCharsets.UTF_8);
+            java.io.BufferedWriter bw = new java.io.BufferedWriter(writer);
 
-                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("FBA货件");
+            // BOM for Excel UTF-8
+            bw.write('\ufeff');
 
-                // 创建表头
-                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
-                String[] headers = {"货件单号", "物流中心编码", "店铺名称", "国家",
-                        "创建时间", "SKU种类数", "总发货量"};
-                for (int i = 0; i < headers.length; i++) {
-                    headerRow.createCell(i).setCellValue(headers[i]);
+            // 表头（与导入文档格式一致）
+            bw.write("货件单号,货件名称,货件状态,创建时间,更新时间,MSKU,申报量,签收量,收件人,物流中心编码,收件邮编,收件国家,收件州/省,收件城市,收件街道地址,收件门牌号");
+            bw.newLine();
+
+            java.time.format.DateTimeFormatter dateFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+            for (FbaShipment shipment : shipments) {
+                // 加载明细
+                LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
+                itemWrapper.eq(FbaShipmentItem::getShipmentId, shipment.getId());
+                itemWrapper.orderByAsc(FbaShipmentItem::getMsku);
+                List<FbaShipmentItem> items = fbaShipmentItemMapper.selectList(itemWrapper);
+
+                String shipmentNo = shipment.getShipmentId() != null ? shipment.getShipmentId() : "";
+                String shipmentName = shipment.getShipmentName() != null ? shipment.getShipmentName() : "";
+                String shipmentStatus = shipment.getStatus() != null ? shipment.getStatus() : "";
+                String createdStr = shipment.getCreatedDate() != null ? shipment.getCreatedDate().format(dateFmt) : "";
+                String updatedStr = shipment.getUpdatedDate() != null ? shipment.getUpdatedDate().format(dateFmt) : "";
+                String recipient = shipment.getRecipient() != null ? escapeCsv(shipment.getRecipient()) : "";
+                String warehouseCode = shipment.getWarehouseCode() != null ? shipment.getWarehouseCode() : "";
+                String postalCode = shipment.getPostalCode() != null ? shipment.getPostalCode() : "";
+                String countryStr = shipment.getCountry() != null ? shipment.getCountry() : "";
+                String state = shipment.getState() != null ? shipment.getState() : "";
+                String city = shipment.getCity() != null ? shipment.getCity() : "";
+                String street = shipment.getStreetAddress() != null ? escapeCsv(shipment.getStreetAddress()) : "";
+                String houseNumber = shipment.getHouseNumber() != null ? shipment.getHouseNumber() : "";
+
+                for (int i = 0; i < items.size(); i++) {
+                    FbaShipmentItem item = items.get(i);
+                    StringBuilder row = new StringBuilder();
+                    if (i == 0) {
+                        row.append(shipmentNo).append(",").append(shipmentName).append(",").append(shipmentStatus)
+                                .append(",").append(createdStr).append(",").append(updatedStr);
+                    } else {
+                        row.append(",,,,,");
+                    }
+                    row.append(",").append(item.getMsku() != null ? item.getMsku() : "")
+                            .append(",").append(item.getQuantity() != null ? item.getQuantity() : 0)
+                            .append(",").append(item.getReceivedQuantity() != null ? item.getReceivedQuantity() : 0);
+                    if (i == 0) {
+                        row.append(",").append(recipient).append(",").append(warehouseCode).append(",").append(postalCode)
+                                .append(",").append(countryStr).append(",").append(state).append(",").append(city)
+                                .append(",").append(street).append(",").append(houseNumber);
+                    } else {
+                        row.append(",,,,,,,,,");
+                    }
+                    bw.write(row.toString());
+                    bw.newLine();
                 }
-
-                // 填充数据
-                int rowNum = 1;
-                for (FbaShipment shipment : shipments) {
-                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
-                    row.createCell(0).setCellValue(shipment.getShipmentId());
-                    row.createCell(1).setCellValue(shipment.getWarehouseCode());
-                    row.createCell(2).setCellValue(shipment.getShopName());
-                    row.createCell(3).setCellValue(shipment.getCountry());
-                    row.createCell(4).setCellValue(shipment.getCreatedDate() != null ?
-                            shipment.getCreatedDate().toString() : "");
-                    row.createCell(5).setCellValue(shipment.getSkuCount() != null ? shipment.getSkuCount() : 0);
-                    row.createCell(6).setCellValue(shipment.getTotalQuantity() != null ?
-                            shipment.getTotalQuantity() : 0);
-                }
-
-                workbook.write(outputStream);
-                outputStream.flush();
             }
+
+            bw.flush();
+            outputStream.flush();
         } catch (java.io.IOException e) {
             log.error("导出FBA货件失败", e);
             throw new BusinessException(ErrorCode.EXPORT_FAILED, "导出失败: " + e.getMessage());
         }
+    }
+
+    private String escapeCsv(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
     }
 
     /**

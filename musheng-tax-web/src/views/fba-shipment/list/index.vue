@@ -25,16 +25,14 @@
           <a-col :span="4">
             <a-form-item>
               <a-select
-                v-model:value="searchForm.shopName"
-                placeholder="店铺名称"
+                v-model:value="searchForm.status"
+                placeholder="货件状态"
                 allow-clear
-                show-search
-                :filter-option="filterOption"
                 style="width: 100%"
                 @change="handleSearch"
               >
                 <a-select-option
-                  v-for="option in shopNameOptions"
+                  v-for="option in FbaShipmentStatusOptions"
                   :key="option.value"
                   :value="option.value"
                 >
@@ -185,23 +183,29 @@
       <div v-if="detailData">
         <!-- 货件信息 -->
         <a-descriptions :column="2" bordered size="small" style="margin-bottom: 16px">
-          <a-descriptions-item label="货件单号" :span="2">
+          <a-descriptions-item label="货件单号">
             <a-typography-text copyable>{{ detailData.shipmentId }}</a-typography-text>
           </a-descriptions-item>
-          <a-descriptions-item label="物流中心编码" :span="2">
-            {{ detailData.warehouseCode || '-' }}
-          </a-descriptions-item>
-          <a-descriptions-item label="店铺名称">{{ detailData.shopName || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="国家">{{ detailData.country || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="货件创建时间">{{ detailData.createdDate || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="导入时间">{{ detailData.createTime }}</a-descriptions-item>
-          <a-descriptions-item label="SKU种类数">{{ detailData.skuCount || 0 }}</a-descriptions-item>
-          <a-descriptions-item label="总发货量">{{ detailData.totalQuantity || 0 }}</a-descriptions-item>
+          <a-descriptions-item label="货件名称">{{ detailData.shipmentName || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="货件状态">{{ detailData.status || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="物流中心编码">{{ detailData.warehouseCode || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件人">{{ detailData.recipient || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件邮编">{{ detailData.postalCode || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件国家">{{ detailData.country || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件州/省">{{ detailData.state || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件城市">{{ detailData.city || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件街道地址" :span="2">{{ detailData.streetAddress || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="收件门牌号">{{ detailData.houseNumber || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="创建时间">{{ detailData.createdDate || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="更新时间">{{ detailData.updatedDate || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="MSKU种类数">{{ detailData.skuCount || 0 }}</a-descriptions-item>
+          <a-descriptions-item label="总申报量">{{ detailData.totalQuantity || 0 }}</a-descriptions-item>
+          <a-descriptions-item label="总签收量">{{ detailData.totalReceivedQuantity || 0 }}</a-descriptions-item>
         </a-descriptions>
 
-        <!-- SKU明细表格 -->
+        <!-- MSKU明细表格 -->
         <div style="margin-top: 16px">
-          <h4 style="margin-bottom: 12px">SKU明细列表</h4>
+          <h4 style="margin-bottom: 12px">MSKU明细列表</h4>
           <a-table
             :columns="itemColumns"
             :data-source="detailData.items || []"
@@ -210,9 +214,12 @@
             size="small"
             row-key="id"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
-                {{ record.index }}
+                {{ index + 1 }}
+              </template>
+              <template v-else-if="column.key === 'msku'">
+                <a-typography-text copyable :content="record.msku">{{ record.msku }}</a-typography-text>
               </template>
             </template>
           </a-table>
@@ -248,10 +255,10 @@ import {
   batchDeleteFbaShipment,
   batchPhysicalDeleteFbaShipment,
   exportFbaShipmentData,
-  getFbaShipmentCountries,
-  getFbaShipmentShopNames
+  getFbaShipmentCountries
 } from '@/api/fbaShipment'
 import type { FbaShipment, FbaShipmentSummary } from '@/types/fbaShipment'
+import { FbaShipmentStatusOptions } from '@/types/fbaShipment'
 import { useAuthStore } from '@/stores/modules/auth'
 
 const router = useRouter()
@@ -260,12 +267,11 @@ const authStore = useAuthStore()
 // ============= 搜索相关 =============
 const searchForm = reactive({
   shipmentId: '',
-  shopName: '',
+  status: undefined as string | undefined,
   country: undefined as string | undefined
 })
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const countryOptions = ref<Array<{ label: string; value: string }>>([])
-const shopNameOptions = ref<Array<{ label: string; value: string }>>([])
 
 // ============= 表格相关 =============
 const loading = ref(false)
@@ -284,47 +290,62 @@ const columns = [
     title: '货件单号',
     dataIndex: 'shipmentId',
     key: 'shipmentId',
-    width: 150,
+    width: 160,
     fixed: 'left' as const,
     ellipsis: true
   },
   {
-    title: '物流中心编码',
-    dataIndex: 'warehouseCode',
-    key: 'warehouseCode',
-    width: 200,
+    title: '货件名称',
+    dataIndex: 'shipmentName',
+    key: 'shipmentName',
+    width: 140,
     ellipsis: true
   },
   {
-    title: '店铺名称',
-    dataIndex: 'shopName',
-    key: 'shopName',
-    width: 120
+    title: '状态',
+    dataIndex: 'status',
+    key: 'status',
+    width: 90
   },
   {
-    title: '国家',
+    title: '物流中心',
+    dataIndex: 'warehouseCode',
+    key: 'warehouseCode',
+    width: 100,
+    ellipsis: true
+  },
+  {
+    title: '收件国家',
     dataIndex: 'country',
     key: 'country',
-    width: 80
+    width: 180,
+    ellipsis: true
   },
   {
     title: '创建时间',
     dataIndex: 'createdDate',
     key: 'createdDate',
-    width: 160
+    width: 140
   },
   {
-    title: 'SKU种类数',
+    title: 'MSKU种类',
     dataIndex: 'skuCount',
     key: 'skuCount',
-    width: 100,
+    width: 90,
     align: 'right' as const
   },
   {
-    title: '总发货量',
+    title: '总申报量',
     dataIndex: 'totalQuantity',
     key: 'totalQuantity',
-    width: 100,
+    width: 90,
+    align: 'right' as const
+  },
+  {
+    title: '总签收量',
+    dataIndex: 'totalReceivedQuantity',
+    key: 'totalReceivedQuantity',
+    width: 90,
     align: 'right' as const
   },
   {
@@ -335,30 +356,32 @@ const columns = [
   }
 ]
 
-// SKU明细表格列定义
+// MSKU明细表格列定义
 const itemColumns = [
   {
     title: '序号',
     key: 'index',
     width: 60,
-    customRender: ({ index }: { index: number }) => index + 1
-  },
-  {
-    title: 'SKU',
-    dataIndex: 'sku',
-    key: 'sku',
-    width: 150
+    align: 'right' as const
   },
   {
     title: 'MSKU',
     dataIndex: 'msku',
     key: 'msku',
-    width: 150
+    width: 200,
+    ellipsis: true
   },
   {
-    title: '发货量',
+    title: '申报量',
     dataIndex: 'quantity',
     key: 'quantity',
+    width: 100,
+    align: 'right' as const
+  },
+  {
+    title: '签收量',
+    dataIndex: 'receivedQuantity',
+    key: 'receivedQuantity',
     width: 100,
     align: 'right' as const
   }
@@ -390,9 +413,9 @@ const detailData = ref<FbaShipment | null>(null)
 async function fetchData() {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, unknown> = {
       shipmentId: searchForm.shipmentId || undefined,
-      shopName: searchForm.shopName || undefined,
+      status: searchForm.status,
       country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
@@ -413,7 +436,7 @@ async function fetchData() {
 async function fetchSummary() {
   try {
     const params = {
-      shopName: searchForm.shopName || undefined,
+      status: searchForm.status,
       country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
@@ -433,7 +456,7 @@ function handleSearch() {
 
 function handleReset() {
   searchForm.shipmentId = ''
-  searchForm.shopName = ''
+  searchForm.status = undefined
   searchForm.country = undefined
   searchDateRange.value = null
   pagination.current = 1
@@ -463,7 +486,7 @@ function filterOption(input: string, option: any) {
 async function handleExport() {
   try {
     const params = {
-      shopName: searchForm.shopName || undefined,
+      status: searchForm.status,
       country: searchForm.country,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
@@ -533,7 +556,6 @@ onMounted(() => {
   fetchData()
   fetchSummary()
   fetchCountries()
-  fetchShopNames()
 })
 
 // 获取国家列表
@@ -549,18 +571,6 @@ async function fetchCountries() {
   }
 }
 
-// 获取店铺名称列表
-async function fetchShopNames() {
-  try {
-    const res = await getFbaShipmentShopNames()
-    shopNameOptions.value = (res.data || []).map(shopName => ({
-      label: shopName,
-      value: shopName
-    }))
-  } catch (error) {
-    console.error('获取店铺列表失败:', error)
-  }
-}
 </script>
 
 <style lang="scss" scoped>

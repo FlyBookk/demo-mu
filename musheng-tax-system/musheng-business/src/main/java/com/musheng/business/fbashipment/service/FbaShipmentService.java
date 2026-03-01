@@ -33,6 +33,7 @@ public interface FbaShipmentService {
      * 分页查询货件列表
      *
      * @param shipmentId 货件单号（模糊查询）
+     * @param status 货件状态
      * @param shopName 店铺名称
      * @param country 国家
      * @param startDate 开始日期
@@ -41,7 +42,7 @@ public interface FbaShipmentService {
      * @param size 每页条数
      * @return 分页结果
      */
-    Page<FbaShipment> list(String shipmentId, String shopName, String country,
+    Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
                           String startDate, String endDate, int page, int size);
 
     /**
@@ -69,24 +70,26 @@ public interface FbaShipmentService {
     /**
      * 获取统计汇总
      *
+     * @param status 货件状态
      * @param shopName 店铺名称
      * @param country 国家
      * @param startDate 开始日期
      * @param endDate 结束日期
      * @return 统计数据
      */
-    Map<String, Object> getSummary(String shopName, String country, String startDate, String endDate);
+    Map<String, Object> getSummary(String status, String shopName, String country, String startDate, String endDate);
 
     /**
-     * 导出数据
+     * 导出数据（CSV格式，与导入文档格式一致：货件+MSKU明细分组）
      *
+     * @param status 货件状态
      * @param shopName 店铺名称
      * @param country 国家
      * @param startDate 开始日期
      * @param endDate 结束日期
      * @param response HTTP响应
      */
-    void exportData(String shopName, String country, String startDate, String endDate,
+    void exportData(String status, String shopName, String country, String startDate, String endDate,
                    jakarta.servlet.http.HttpServletResponse response);
 
     /**

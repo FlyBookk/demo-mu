@@ -83,10 +83,10 @@ export function getFbaShipmentSummary(params?: FbaShipmentQuery) {
 }
 
 /**
- * 导出FBA货件
+ * 导出FBA货件（CSV格式，与导入文档格式一致）
  */
 export function exportFbaShipmentData(params?: FbaShipmentQuery) {
-  const filename = `FBA货件_${new Date().toISOString().slice(0, 10)}.xlsx`
+  const filename = `慕声FBA发货明细数据_${new Date().toISOString().slice(0, 10)}.csv`
   return request.downloadAndSave(`${BASE_URL}/export`, filename, params)
 }
 

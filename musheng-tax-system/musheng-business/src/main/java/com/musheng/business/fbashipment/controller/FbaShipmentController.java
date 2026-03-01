@@ -52,6 +52,7 @@ public class FbaShipmentController {
     @GetMapping("/list")
     public Result<PageResult<FbaShipment>> list(
             @Parameter(description = "货件单号") @RequestParam(required = false) String shipmentId,
+            @Parameter(description = "货件状态") @RequestParam(required = false) String status,
             @Parameter(description = "店铺名称") @RequestParam(required = false) String shopName,
             @Parameter(description = "国家") @RequestParam(required = false) String country,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
@@ -59,7 +60,7 @@ public class FbaShipmentController {
             @Parameter(description = "页码(从1开始)") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
         Page<FbaShipment> pageResult = fbaShipmentService.list(
-                shipmentId, shopName, country, startDate, endDate, page, size);
+                shipmentId, status, shopName, country, startDate, endDate, page, size);
         PageResult<FbaShipment> result = PageResult.of(
                 pageResult.getRecords(),
                 pageResult.getTotal(),
@@ -98,23 +99,25 @@ public class FbaShipmentController {
     @Operation(summary = "统计汇总", description = "获取FBA货件统计汇总")
     @GetMapping("/summary")
     public Result<Map<String, Object>> getSummary(
+            @Parameter(description = "货件状态") @RequestParam(required = false) String status,
             @Parameter(description = "店铺名称") @RequestParam(required = false) String shopName,
             @Parameter(description = "国家") @RequestParam(required = false) String country,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
             @Parameter(description = "结束日期") @RequestParam(required = false) String endDate) {
-        Map<String, Object> summary = fbaShipmentService.getSummary(shopName, country, startDate, endDate);
+        Map<String, Object> summary = fbaShipmentService.getSummary(status, shopName, country, startDate, endDate);
         return Result.success(summary);
     }
 
-    @Operation(summary = "导出货件", description = "导出FBA货件到Excel")
+    @Operation(summary = "导出货件", description = "导出FBA货件明细为CSV（与导入格式一致）")
     @GetMapping("/export")
     public void exportData(
+            @Parameter(description = "货件状态") @RequestParam(required = false) String status,
             @Parameter(description = "店铺名称") @RequestParam(required = false) String shopName,
             @Parameter(description = "国家") @RequestParam(required = false) String country,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
             @Parameter(description = "结束日期") @RequestParam(required = false) String endDate,
             jakarta.servlet.http.HttpServletResponse response) {
-        fbaShipmentService.exportData(shopName, country, startDate, endDate, response);
+        fbaShipmentService.exportData(status, shopName, country, startDate, endDate, response);
     }
 
     @Operation(summary = "获取国家列表", description = "获取所有已导入货件的国家列表（去重）")

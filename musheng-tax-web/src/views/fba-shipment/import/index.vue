@@ -19,16 +19,16 @@
           name="file"
           :multiple="true"
           :before-upload="beforeUpload"
-          accept=".xlsx,.xls"
+          accept=".xlsx,.xls,.csv"
         >
           <p class="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">
-            支持 Excel (.xlsx, .xls) 格式，单个文件最大 50MB<br />
+            支持 Excel (.xlsx, .xls) 和 CSV (.csv) 格式，单个文件最大 50MB<br />
             支持批量上传多个文件，系统会自动去重（已导入的文件会被跳过）<br />
-            请确保Excel文件包含"发货单详情"工作表
+            请确保文件包含货件单号、MSKU、申报量等必要列
           </p>
         </a-upload-dragger>
 
@@ -166,7 +166,7 @@ const router = useRouter()
 // ============= 步骤相关 =============
 const currentStep = ref(0)
 const stepItems = [
-  { title: '上传文件', description: 'Excel文件' },
+  { title: '上传文件', description: 'Excel/CSV文件' },
   { title: '导入结果', description: '查看状态' }
 ]
 
@@ -210,11 +210,12 @@ function formatFileSize(bytes: number): string {
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   const isValidType = [
     'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ].includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv'
+  ].includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')
 
   if (!isValidType) {
-    message.error('只能上传 Excel 文件!')
+    message.error('只能上传 Excel 或 CSV 文件!')
     return false
   }
 

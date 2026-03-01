@@ -12,368 +12,288 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * FBA货件Excel解析服务实现
- * 解析Excel文件（Sheet: 发货单详情）并转换为货件和明细对象
+ * FBA货件文件解析服务（V2）
+ * 支持CSV和Excel格式，适配新列名和分组数据格式
  */
 @Slf4j
 @Service
 public class FbaShipmentExcelParserImpl implements FbaShipmentExcelParser {
 
-    private static final String SHEET_NAME = "发货单详情";
-
-    // Excel列名映射
-    private static final String COL_WAREHOUSE_CODE = "物流中心编码";
-    private static final String COL_CREATED_DATE = "创建时间";
-    private static final String COL_SKU = "SKU";
-    private static final String COL_SHOP_NAME = "店铺";
-    private static final String COL_COUNTRY = "国家";
-    private static final String COL_MSKU = "MSKU";
     private static final String COL_SHIPMENT_NO = "货件单号";
-    private static final String COL_QUANTITY = "发货量";
+    private static final String COL_SHIPMENT_NAME = "货件名称";
+    private static final String COL_STATUS = "货件状态";
+    private static final String COL_CREATED_DATE = "创建时间";
+    private static final String COL_UPDATED_DATE = "更新时间";
+    private static final String COL_MSKU = "MSKU";
+    private static final String COL_DECLARED_QTY = "申报量";
+    private static final String COL_RECEIVED_QTY = "签收量";
+    private static final String COL_RECIPIENT = "收件人";
+    private static final String COL_WAREHOUSE_CODE = "物流中心编码";
+    private static final String COL_POSTAL_CODE = "收件邮编";
+    private static final String COL_COUNTRY = "收件国家";
+    private static final String COL_STATE = "收件州/省";
+    private static final String COL_CITY = "收件城市";
+    private static final String COL_STREET = "收件街道地址";
+    private static final String COL_HOUSE_NUMBER = "收件门牌号";
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     @Override
     public List<FbaShipment> parseExcel(MultipartFile file, Long shopId, Long importBatchId) throws Exception {
-        log.info("开始解析Excel文件: fileName={}, size={}", file.getOriginalFilename(), file.getSize());
+        String fileName = file.getOriginalFilename();
+        log.info("开始解析文件: fileName={}, size={}", fileName, file.getSize());
 
-        try (InputStream inputStream = file.getInputStream();
-             Workbook workbook = new XSSFWorkbook(inputStream)) {
+        List<String[]> rows;
+        if (fileName != null && fileName.toLowerCase().endsWith(".csv")) {
+            rows = parseCsvRows(file);
+        } else {
+            rows = parseExcelRows(file);
+        }
 
-            // 获取指定Sheet
-            Sheet sheet = workbook.getSheet(SHEET_NAME);
-            if (sheet == null) {
-                throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
-                    "未找到Sheet: " + SHEET_NAME);
+        if (rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "文件内容为空");
+        }
+
+        Map<String, Integer> colMap = buildColumnIndex(rows.get(0));
+        log.info("表头列名: {}", colMap.keySet());
+        validateRequired(colMap);
+
+        Map<String, ShipmentBuilder> shipmentMap = new LinkedHashMap<>();
+        ShipmentBuilder current = null;
+
+        for (int i = 1; i < rows.size(); i++) {
+            String[] row = rows.get(i);
+            String shipmentNo = val(row, colMap, COL_SHIPMENT_NO);
+
+            if (StringUtils.hasText(shipmentNo)) {
+                current = new ShipmentBuilder();
+                current.shopId = shopId;
+                current.importBatchId = importBatchId;
+                current.shipmentNo = shipmentNo;
+                current.shipmentName = val(row, colMap, COL_SHIPMENT_NAME);
+                current.status = val(row, colMap, COL_STATUS);
+                current.createdDate = parseDate(val(row, colMap, COL_CREATED_DATE));
+                current.updatedDate = parseDate(val(row, colMap, COL_UPDATED_DATE));
+                current.recipient = val(row, colMap, COL_RECIPIENT);
+                current.warehouseCode = val(row, colMap, COL_WAREHOUSE_CODE);
+                current.postalCode = val(row, colMap, COL_POSTAL_CODE);
+                current.country = val(row, colMap, COL_COUNTRY);
+                current.state = val(row, colMap, COL_STATE);
+                current.city = val(row, colMap, COL_CITY);
+                current.street = val(row, colMap, COL_STREET);
+                current.houseNumber = val(row, colMap, COL_HOUSE_NUMBER);
+                shipmentMap.put(shipmentNo, current);
             }
 
-            // 解析表头
-            Row headerRow = sheet.getRow(0);
-            if (headerRow == null) {
-                throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Excel文件表头为空");
+            if (current == null) continue;
+
+            String msku = val(row, colMap, COL_MSKU);
+            if (!StringUtils.hasText(msku)) continue;
+
+            current.addItem(msku,
+                intVal(val(row, colMap, COL_DECLARED_QTY)),
+                intVal(val(row, colMap, COL_RECEIVED_QTY)));
+        }
+
+        List<FbaShipment> result = new ArrayList<>();
+        for (ShipmentBuilder b : shipmentMap.values()) {
+            result.add(b.build());
+        }
+
+        log.info("解析完成: {}个货件, {}个MSKU",
+            result.size(), result.stream().mapToInt(s -> s.getItems().size()).sum());
+        return result;
+    }
+
+    // ========== CSV解析 ==========
+
+    private List<String[]> parseCsvRows(MultipartFile file) throws Exception {
+        List<String[]> rows = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                rows.add(splitCsvLine(line));
             }
+        }
+        return rows;
+    }
 
-            Map<String, Integer> columnIndexMap = parseHeader(headerRow);
-            log.info("表头解析完成: {}", columnIndexMap);
+    private String[] splitCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        boolean inQuotes = false;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                fields.add(sb.toString().trim());
+                sb.setLength(0);
+            } else {
+                sb.append(c);
+            }
+        }
+        fields.add(sb.toString().trim());
+        return fields.toArray(new String[0]);
+    }
 
-            // 解析数据行
-            Map<String, ShipmentData> shipmentDataMap = new LinkedHashMap<>();
-            int totalRows = sheet.getPhysicalNumberOfRows();
+    // ========== Excel解析 ==========
 
-            for (int rowIndex = 1; rowIndex < totalRows; rowIndex++) {
-                Row row = sheet.getRow(rowIndex);
-                if (row == null) {
-                    continue;
+    private List<String[]> parseExcelRows(MultipartFile file) throws Exception {
+        List<String[]> rows = new ArrayList<>();
+        try (InputStream is = file.getInputStream(); Workbook wb = new XSSFWorkbook(is)) {
+            if (wb.getNumberOfSheets() == 0) {
+                throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Excel文件中没有Sheet");
+            }
+            Sheet sheet = wb.getSheetAt(0);
+            log.info("使用Sheet: {}", sheet.getSheetName());
+
+            int maxCol = 0;
+            Row header = sheet.getRow(0);
+            if (header != null) maxCol = header.getPhysicalNumberOfCells();
+
+            for (int i = 0; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+                int len = Math.max(maxCol, row.getLastCellNum());
+                String[] cells = new String[len];
+                for (int j = 0; j < len; j++) {
+                    cells[j] = cellStr(row.getCell(j));
                 }
-
-                try {
-                    parseRow(row, columnIndexMap, shipmentDataMap, shopId, importBatchId);
-                } catch (Exception e) {
-                    log.warn("解析第{}行失败: {}", rowIndex + 1, e.getMessage());
-                    throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
-                        String.format("第%d行解析失败: %s", rowIndex + 1, e.getMessage()));
-                }
+                rows.add(cells);
             }
-
-            // 转换为FbaShipment对象列表
-            List<FbaShipment> shipments = convertToShipments(shipmentDataMap);
-            log.info("Excel解析完成: 共{}个货件, {}个SKU",
-                shipments.size(),
-                shipments.stream().mapToInt(s -> s.getItems().size()).sum());
-
-            return shipments;
-
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("解析Excel文件失败", e);
-            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
-                "解析Excel文件失败: " + e.getMessage());
         }
+        return rows;
     }
 
-    /**
-     * 解析表头，建立列名到索引的映射
-     */
-    private Map<String, Integer> parseHeader(Row headerRow) {
-        Map<String, Integer> columnIndexMap = new HashMap<>();
-
-        for (int i = 0; i < headerRow.getPhysicalNumberOfCells(); i++) {
-            Cell cell = headerRow.getCell(i);
-            if (cell != null) {
-                String columnName = getCellValueAsString(cell).trim();
-                if (StringUtils.hasText(columnName)) {
-                    columnIndexMap.put(columnName, i);
-                }
-            }
-        }
-
-        // 验证必需列是否存在
-        List<String> requiredColumns = Arrays.asList(
-            COL_SKU, COL_SHOP_NAME, COL_COUNTRY, COL_MSKU, COL_SHIPMENT_NO, COL_QUANTITY
-        );
-
-        for (String col : requiredColumns) {
-            if (!columnIndexMap.containsKey(col)) {
-                throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
-                    "缺少必需列: " + col);
-            }
-        }
-
-        return columnIndexMap;
-    }
-
-    /**
-     * 解析单行数据
-     */
-    private void parseRow(Row row, Map<String, Integer> columnIndexMap,
-                         Map<String, ShipmentData> shipmentDataMap,
-                         Long shopId, Long importBatchId) {
-
-        // 读取货件单号（必填）
-        String shipmentNo = getCellValue(row, columnIndexMap, COL_SHIPMENT_NO);
-        if (!StringUtils.hasText(shipmentNo)) {
-            return; // 跳过空行
-        }
-
-        // 获取或创建货件数据
-        ShipmentData shipmentData = shipmentDataMap.computeIfAbsent(shipmentNo, k -> {
-            ShipmentData data = new ShipmentData();
-            data.setShipmentNo(shipmentNo);
-            data.setShopId(shopId);
-            data.setImportBatchId(importBatchId);
-            return data;
-        });
-
-        // 读取货件级别信息（只在第一次遇到时设置）
-        if (shipmentData.getWarehouseCode() == null) {
-            String warehouseCode = getCellValue(row, columnIndexMap, COL_WAREHOUSE_CODE);
-            if (StringUtils.hasText(warehouseCode)) {
-                shipmentData.setWarehouseCode(warehouseCode);
-            }
-        }
-
-        if (shipmentData.getCreatedDate() == null) {
-            LocalDateTime createdDate = getCellValueAsDate(row, columnIndexMap, COL_CREATED_DATE);
-            if (createdDate != null) {
-                shipmentData.setCreatedDate(createdDate);
-            }
-        }
-
-        // 店铺名称和国家（每行都有）
-        String shopName = getCellValue(row, columnIndexMap, COL_SHOP_NAME);
-        if (StringUtils.hasText(shopName)) {
-            shipmentData.setShopName(shopName);
-        }
-
-        String country = getCellValue(row, columnIndexMap, COL_COUNTRY);
-        if (StringUtils.hasText(country)) {
-            shipmentData.setCountry(country);
-        }
-
-        // 读取SKU明细信息
-        String sku = getCellValue(row, columnIndexMap, COL_SKU);
-        String msku = getCellValue(row, columnIndexMap, COL_MSKU);
-        String quantityStr = getCellValue(row, columnIndexMap, COL_QUANTITY);
-
-        if (!StringUtils.hasText(sku)) {
-            log.warn("SKU为空，跳过该行");
-            return;
-        }
-
-        Integer quantity = 0;
-        if (StringUtils.hasText(quantityStr)) {
-            try {
-                quantity = Integer.parseInt(quantityStr.trim());
-            } catch (NumberFormatException e) {
-                log.warn("发货量解析失败: {}", quantityStr);
-            }
-        }
-
-        // 创建明细对象
-        ItemData itemData = new ItemData();
-        itemData.setSku(sku);
-        itemData.setMsku(msku);
-        itemData.setQuantity(quantity);
-
-        shipmentData.addItem(itemData);
-    }
-
-    /**
-     * 转换为FbaShipment对象列表
-     */
-    private List<FbaShipment> convertToShipments(Map<String, ShipmentData> shipmentDataMap) {
-        List<FbaShipment> shipments = new ArrayList<>();
-
-        for (ShipmentData data : shipmentDataMap.values()) {
-            FbaShipment shipment = new FbaShipment();
-            shipment.setShopId(data.getShopId());
-            shipment.setShipmentId(data.getShipmentNo());
-            shipment.setWarehouseCode(data.getWarehouseCode());
-            shipment.setShopName(data.getShopName());
-            shipment.setCountry(data.getCountry());
-            shipment.setCreatedDate(data.getCreatedDate());
-            shipment.setImportBatchId(data.getImportBatchId());
-
-            // 转换明细
-            List<FbaShipmentItem> items = new ArrayList<>();
-            for (ItemData itemData : data.getItems()) {
-                FbaShipmentItem item = new FbaShipmentItem();
-                item.setShopId(data.getShopId());
-                item.setShipmentNo(data.getShipmentNo());
-                item.setSku(itemData.getSku());
-                item.setMsku(itemData.getMsku());
-                item.setQuantity(itemData.getQuantity());
-                item.setImportBatchId(data.getImportBatchId());
-                items.add(item);
-            }
-
-            shipment.setItems(items);
-            shipment.setSkuCount(items.size());
-            shipment.setTotalQuantity(items.stream().mapToInt(FbaShipmentItem::getQuantity).sum());
-
-            shipments.add(shipment);
-        }
-
-        return shipments;
-    }
-
-    /**
-     * 获取单元格值（字符串）
-     */
-    private String getCellValue(Row row, Map<String, Integer> columnIndexMap, String columnName) {
-        Integer colIndex = columnIndexMap.get(columnName);
-        if (colIndex == null) {
-            return "";
-        }
-
-        Cell cell = row.getCell(colIndex);
-        if (cell == null) {
-            return "";
-        }
-
-        return getCellValueAsString(cell);
-    }
-
-    /**
-     * 获取单元格值（日期）
-     */
-    private LocalDateTime getCellValueAsDate(Row row, Map<String, Integer> columnIndexMap, String columnName) {
-        Integer colIndex = columnIndexMap.get(columnName);
-        if (colIndex == null) {
-            return null;
-        }
-
-        Cell cell = row.getCell(colIndex);
-        if (cell == null) {
-            return null;
-        }
-
-        try {
-            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
-                Date date = cell.getDateCellValue();
-                return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-            } else if (cell.getCellType() == CellType.STRING) {
-                // 尝试解析字符串日期
-                String dateStr = cell.getStringCellValue().trim();
-                if (StringUtils.hasText(dateStr)) {
-                    // 可以添加多种日期格式解析
-                    return LocalDateTime.parse(dateStr.replace(" ", "T"));
-                }
-            }
-        } catch (Exception e) {
-            log.warn("日期解析失败: {}", e.getMessage());
-        }
-
-        return null;
-    }
-
-    /**
-     * 将单元格值转换为字符串
-     */
-    private String getCellValueAsString(Cell cell) {
-        if (cell == null) {
-            return "";
-        }
-
+    private String cellStr(Cell cell) {
+        if (cell == null) return "";
         switch (cell.getCellType()) {
-            case STRING:
-                return cell.getStringCellValue().trim();
+            case STRING: return cell.getStringCellValue().trim();
             case NUMERIC:
                 if (DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getDateCellValue().toString();
-                } else {
-                    // 避免科学计数法
-                    double value = cell.getNumericCellValue();
-                    if (value == (long) value) {
-                        return String.valueOf((long) value);
-                    } else {
-                        return String.valueOf(value);
-                    }
+                    return cell.getDateCellValue().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalDateTime().format(DATE_FMT);
                 }
-            case BOOLEAN:
-                return String.valueOf(cell.getBooleanCellValue());
+                double v = cell.getNumericCellValue();
+                return v == (long) v ? String.valueOf((long) v) : String.valueOf(v);
+            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
-                try {
-                    return cell.getStringCellValue().trim();
-                } catch (Exception e) {
-                    return String.valueOf(cell.getNumericCellValue());
-                }
-            case BLANK:
-            case ERROR:
-            default:
-                return "";
+                try { return cell.getStringCellValue().trim(); }
+                catch (Exception e) { return String.valueOf(cell.getNumericCellValue()); }
+            default: return "";
         }
     }
 
-    /**
-     * 货件数据临时对象
-     */
-    private static class ShipmentData {
-        private Long shopId;
-        private String shipmentNo;
-        private String warehouseCode;
-        private String shopName;
-        private String country;
-        private LocalDateTime createdDate;
-        private Long importBatchId;
-        private List<ItemData> items = new ArrayList<>();
+    // ========== 工具方法 ==========
 
-        public Long getShopId() { return shopId; }
-        public void setShopId(Long shopId) { this.shopId = shopId; }
-        public String getShipmentNo() { return shipmentNo; }
-        public void setShipmentNo(String shipmentNo) { this.shipmentNo = shipmentNo; }
-        public String getWarehouseCode() { return warehouseCode; }
-        public void setWarehouseCode(String warehouseCode) { this.warehouseCode = warehouseCode; }
-        public String getShopName() { return shopName; }
-        public void setShopName(String shopName) { this.shopName = shopName; }
-        public String getCountry() { return country; }
-        public void setCountry(String country) { this.country = country; }
-        public LocalDateTime getCreatedDate() { return createdDate; }
-        public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }
-        public Long getImportBatchId() { return importBatchId; }
-        public void setImportBatchId(Long importBatchId) { this.importBatchId = importBatchId; }
-        public List<ItemData> getItems() { return items; }
-        public void addItem(ItemData item) { this.items.add(item); }
+    private Map<String, Integer> buildColumnIndex(String[] header) {
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < header.length; i++) {
+            String name = header[i] == null ? "" : header[i].trim();
+            if (!name.isEmpty()) map.put(name, i);
+        }
+        return map;
     }
 
-    /**
-     * SKU明细数据临时对象
-     */
-    private static class ItemData {
-        private String sku;
-        private String msku;
-        private Integer quantity;
+    private void validateRequired(Map<String, Integer> colMap) {
+        List<String> missing = new ArrayList<>();
+        for (String col : Arrays.asList(COL_SHIPMENT_NO, COL_MSKU)) {
+            if (!colMap.containsKey(col)) missing.add(col);
+        }
+        if (!missing.isEmpty()) {
+            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
+                "缺少必需列: " + String.join(", ", missing) + "。实际列名: " + colMap.keySet());
+        }
+    }
 
-        public String getSku() { return sku; }
-        public void setSku(String sku) { this.sku = sku; }
-        public String getMsku() { return msku; }
-        public void setMsku(String msku) { this.msku = msku; }
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
+    private String val(String[] row, Map<String, Integer> colMap, String colName) {
+        Integer idx = colMap.get(colName);
+        if (idx == null || idx >= row.length) return "";
+        return row[idx] == null ? "" : row[idx].trim();
+    }
+
+    private LocalDateTime parseDate(String s) {
+        if (!StringUtils.hasText(s)) return null;
+        try { return LocalDateTime.parse(s, DATE_FMT); }
+        catch (Exception e) {
+            try { return LocalDateTime.parse(s.replace(" ", "T")); }
+            catch (Exception e2) { log.warn("日期解析失败: {}", s); return null; }
+        }
+    }
+
+    private int intVal(String s) {
+        if (!StringUtils.hasText(s)) return 0;
+        try { return Integer.parseInt(s.trim()); }
+        catch (NumberFormatException e) { return 0; }
+    }
+
+    // ========== 内部构建器 ==========
+
+    private static class ShipmentBuilder {
+        Long shopId, importBatchId;
+        String shipmentNo, shipmentName, status, recipient, warehouseCode;
+        String postalCode, country, state, city, street, houseNumber;
+        LocalDateTime createdDate, updatedDate;
+        List<ItemData> items = new ArrayList<>();
+
+        void addItem(String msku, int declared, int received) {
+            ItemData d = new ItemData();
+            d.msku = msku; d.declared = declared; d.received = received;
+            items.add(d);
+        }
+
+        FbaShipment build() {
+            FbaShipment s = new FbaShipment();
+            s.setShopId(shopId);
+            s.setImportBatchId(importBatchId);
+            s.setShipmentId(shipmentNo);
+            s.setShipmentName(shipmentName);
+            s.setStatus(status);
+            s.setCreatedDate(createdDate);
+            s.setUpdatedDate(updatedDate);
+            s.setRecipient(recipient);
+            s.setWarehouseCode(warehouseCode);
+            s.setPostalCode(postalCode);
+            s.setCountry(country);
+            s.setState(state);
+            s.setCity(city);
+            s.setStreetAddress(street);
+            s.setHouseNumber(houseNumber);
+            s.setSkuCount(items.size());
+            s.setTotalQuantity(items.stream().mapToInt(i -> i.declared).sum());
+            s.setTotalReceivedQuantity(items.stream().mapToInt(i -> i.received).sum());
+
+            List<FbaShipmentItem> itemList = new ArrayList<>();
+            for (ItemData d : items) {
+                FbaShipmentItem item = new FbaShipmentItem();
+                item.setShopId(shopId);
+                item.setShipmentNo(shipmentNo);
+                item.setMsku(d.msku);
+                item.setQuantity(d.declared);
+                item.setReceivedQuantity(d.received);
+                item.setImportBatchId(importBatchId);
+                // sku 可选，新格式以 MSKU 为主
+                item.setSku(null);
+                itemList.add(item);
+            }
+            s.setItems(itemList);
+            return s;
+        }
+    }
+
+    private static class ItemData {
+        String msku;
+        int declared, received;
     }
 }
