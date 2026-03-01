@@ -3,6 +3,7 @@ package com.musheng.business.rate.service.impl;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.common.strategy.FileImportStrategy;
 import com.musheng.business.common.strategy.ImportContext;
+import com.musheng.business.rate.dto.ExchangeRateExportRow;
 import com.musheng.business.rate.dto.RateConvertRequest;
 import com.musheng.business.rate.dto.RateConvertResultDTO;
 import com.musheng.business.rate.dto.RateRequest;
@@ -12,6 +13,7 @@ import com.musheng.business.rate.mapper.ExchangeRateMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.musheng.business.rate.repository.ExchangeRateRepository;
 import com.musheng.business.rate.service.RateService;
+import com.alibaba.excel.EasyExcel;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -289,6 +296,40 @@ public class RateServiceImpl implements RateService {
                 .rate(rate)
                 .rateDate(actualRateDate)
                 .build();
+    }
+
+    @Override
+    public void exportData(String currencyCode, LocalDate startDate, LocalDate endDate, String source, HttpServletResponse response) {
+        log.info("Exporting exchange rates: currencyCode={}, startDate={}, endDate={}, source={}",
+                currencyCode, startDate, endDate, source);
+
+        Page<ExchangeRate> pageResult = exchangeRateRepository.findByQuery(currencyCode, startDate, endDate, source, 1, 50000);
+        List<ExchangeRate> dataList = pageResult.getRecords();
+
+        try {
+            String fileName = "汇率数据_" + System.currentTimeMillis() + ".xlsx";
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment; filename=" +
+                    URLEncoder.encode(fileName, StandardCharsets.UTF_8));
+
+            List<ExchangeRateExportRow> rows = dataList.stream().map(this::toExportRow).collect(Collectors.toList());
+            EasyExcel.write(response.getOutputStream(), ExchangeRateExportRow.class)
+                    .sheet("汇率数据")
+                    .doWrite(rows);
+        } catch (Exception e) {
+            log.error("Failed to export exchange rates", e);
+            throw new BusinessException(ErrorCode.EXPORT_FAILED, "导出失败: " + e.getMessage());
+        }
+    }
+
+    private ExchangeRateExportRow toExportRow(ExchangeRate r) {
+        ExchangeRateExportRow row = new ExchangeRateExportRow();
+        row.setRateDate(r.getRateDate());
+        row.setCurrencyCode(r.getCurrencyCode());
+        row.setRate(r.getRate());
+        row.setSource(r.getSource());
+        row.setCreateTime(r.getCreateTime());
+        return row;
     }
 
 }

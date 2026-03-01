@@ -1,6 +1,7 @@
 package com.musheng.business.common.service.csv;
 
 import cn.hutool.core.date.DateUtil;
+import com.musheng.business.sales.parser.DateConverter;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
@@ -345,13 +346,18 @@ public class CsvParseServiceImpl implements CsvParseService {
         }
 
         try {
-            // Use Hutool's DateUtil for flexible parsing
+            // 优先使用 DateConverter：按字面日期解析，不做时区转换（避免 UTC 等被转为系统时区）
+            LocalDateTime result = DateConverter.parse(processed, siteCode);
+            if (result != null) {
+                return result;
+            }
+            // 回退到 Hutool 解析
             Date date = DateUtil.parse(processed);
             return date.toInstant()
                     .atZone(ZoneId.systemDefault())
                     .toLocalDateTime();
         } catch (Exception e) {
-            log.warn("Failed to parse date with Hutool: dateStr={}, siteCode={}, error={}",
+            log.warn("Failed to parse date: dateStr={}, siteCode={}, error={}",
                     dateStr, siteCode, e.getMessage());
             return null;
         }

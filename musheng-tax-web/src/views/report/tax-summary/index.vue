@@ -3,7 +3,7 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1 class="page-title">报税汇总</h1>
-      <p class="page-desc">按发货单计算收入，退款双维度（结算/发货归属），费用分类统计</p>
+      <p class="page-desc">对齐Amazon报税汇总口径，统计收入、退款、佣金服务费等核心字段</p>
     </div>
 
     <!-- 筛选条件 -->
@@ -63,15 +63,14 @@
       </a-form>
     </a-card>
 
-    <!-- 汇总统计卡片 -->
-    <!-- 收入/退款维度 -->
+    <!-- 汇总统计卡片 - Amazon报税口径 -->
     <div class="stat-section">
-      <div class="stat-section-label">收入/退款维度</div>
+      <div class="stat-section-label">Amazon报税汇总</div>
       <a-row :gutter="16" class="stat-row">
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="收入总额(人民币)"
+              title="收入总额(a)"
               :value="Math.abs(totalStats.totalRevenueCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.totalRevenueCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -82,68 +81,52 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="退款总额"
-              :value="Math.abs(totalStats.refundByShipmentCny ?? 0)"
+              title="退款金额(b)"
+              :value="Math.abs(totalStats.refundBySettlementAmazonCny ?? 0)"
               :precision="2"
-              :prefix="(totalStats.refundByShipmentCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.refundByShipmentCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+              :prefix="(totalStats.refundBySettlementAmazonCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.refundBySettlementAmazonCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="平台代扣税"
+              title="收入净额(c=a-b)"
+              :value="Math.abs(totalStats.netRevenueCny ?? 0)"
+              :precision="2"
+              :prefix="(totalStats.netRevenueCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.netRevenueCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="佣金服务费"
+              :value="Math.abs(totalStats.totalCommissionFeeCny ?? 0)"
+              :precision="2"
+              :prefix="(totalStats.totalCommissionFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.totalCommissionFeeCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+    <!-- 辅助字段 -->
+    <div class="stat-section">
+      <a-row :gutter="16" class="stat-row">
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="平台代扣税④"
               :value="Math.abs(totalStats.consumptionTaxCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.consumptionTaxCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.consumptionTaxCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+              :value-style="{ color: (totalStats.consumptionTaxCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
             />
           </a-card>
         </a-col>
-        <a-col :span="6">
-          <a-card class="stat-card">
-            <a-statistic
-              title="销售费用+FBA费用+交易费+其他"
-              :value="Math.abs(totalStats.totalServiceFeeCny ?? 0)"
-              :precision="2"
-              :prefix="(totalStats.totalServiceFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.totalServiceFeeCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
-            />
-          </a-card>
-        </a-col>
-      </a-row>
-    </div>
-    <!-- 其他费用（ServiceFee + 其他） -->
-    <div class="stat-section">
-      <a-row :gutter="16" class="stat-row">
-        <a-col :span="6">
-          <a-card class="stat-card">
-            <a-statistic
-              title="ServiceFee"
-              :value="Math.abs(totalStats.miscServiceFeeCny ?? 0)"
-              :precision="2"
-              :prefix="(totalStats.miscServiceFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.miscServiceFeeCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
-            />
-          </a-card>
-        </a-col>
-        <a-col :span="6">
-          <a-card class="stat-card">
-            <a-statistic
-              title="其他"
-              :value="Math.abs(totalStats.otherFeesCny ?? 0)"
-              :precision="2"
-              :prefix="(totalStats.otherFeesCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.otherFeesCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
-            />
-          </a-card>
-        </a-col>
-      </a-row>
-    </div>
-    <!-- 广告费 -->
-    <div class="stat-section">
-      <a-row :gutter="16" class="stat-row">
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
@@ -158,6 +141,49 @@
       </a-row>
     </div>
 
+    <!-- 平台支出与采购成本（按图片公式） -->
+    <div class="stat-section">
+      <div class="stat-section-label">平台支出与采购成本</div>
+      <a-row :gutter="16" class="stat-row">
+        <a-col :span="6">
+          <a-card class="stat-card highlight-card">
+            <a-statistic
+              title="平台支出合计⑨=④+⑤+⑥"
+              :value="Math.abs(totalStats.platformExpensesCny ?? 0)"
+              :precision="2"
+              :prefix="'¥'"
+              :value-style="{ color: '#fa8c16', fontWeight: 'bold' }"
+            />
+            <div class="stat-desc">消费税+佣金服务费+广告费</div>
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card highlight-card">
+            <a-statistic
+              title="4%利润⑩=③×4%"
+              :value="Math.abs(totalStats.profit4PercentCny ?? 0)"
+              :precision="2"
+              :prefix="'¥'"
+              :value-style="{ color: '#52c41a', fontWeight: 'bold' }"
+            />
+            <div class="stat-desc">收入净额的4%</div>
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card highlight-card">
+            <a-statistic
+              title="采购成本⑪=③−⑨−⑩"
+              :value="Math.abs(totalStats.procurementCostCny ?? 0)"
+              :precision="2"
+              :prefix="(totalStats.procurementCostCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: '#1890ff', fontWeight: 'bold' }"
+            />
+            <div class="stat-desc">收入净额−平台支出−4%利润</div>
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+
     <!-- 汇总表格 -->
     <a-card title="报税汇总数据" class="data-card">
       <a-table
@@ -165,7 +191,7 @@
         :data-source="summaryData"
         :loading="loading"
         :pagination="false"
-        :scroll="{ x: 1800 }"
+        :scroll="{ x: 1300 }"
         row-key="key"
         bordered
         size="middle"
@@ -178,35 +204,38 @@
           <template v-else-if="column.key === 'totalRevenueCny'">
             <span :class="['amount', (record.totalRevenueCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalRevenueCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'refundBySettlementCny'">
-            <span :class="['amount', (record.refundBySettlementCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundBySettlementCny) }}</span>
-            <a-tag size="small" style="margin-left: 4px">{{ record.refundCountBySettlement }}笔</a-tag>
+          <template v-else-if="column.key === 'refundBySettlementAmazonCny'">
+            <span :class="['amount', (record.refundBySettlementAmazonCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundBySettlementAmazonCny) }}</span>
+            <a-tag size="small" style="margin-left: 4px">{{ record.refundCountBySettlementAmazon }}笔</a-tag>
           </template>
-          <template v-else-if="column.key === 'refundByShipmentCny'">
-            <span :class="['amount', (record.refundByShipmentCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundByShipmentCny) }}</span>
-            <a-tag size="small" style="margin-left: 4px">{{ record.refundCountByShipment }}笔</a-tag>
+          <template v-else-if="column.key === 'netRevenueCny'">
+            <span :class="['amount', ((record.totalRevenueCny ?? 0) - Math.abs(record.refundBySettlementAmazonCny ?? 0)) >= 0 ? 'positive' : 'negative']">
+              {{ formatAmountWithSign((record.totalRevenueCny ?? 0) - Math.abs(record.refundBySettlementAmazonCny ?? 0)) }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'totalCommissionFeeCny'">
+            <span :class="['amount', (record.totalCommissionFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalCommissionFeeCny) }}</span>
           </template>
           <template v-else-if="column.key === 'consumptionTaxCny'">
             <span :class="['amount', (record.consumptionTaxCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.consumptionTaxCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'sellingFeesCny'">
-            <span :class="['amount', (record.sellingFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.sellingFeesCny) }}</span>
-          </template>
-          <template v-else-if="column.key === 'fbaFeesCny'">
-            <span :class="['amount', (record.fbaFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.fbaFeesCny) }}</span>
-          </template>
-          <template v-else-if="column.key === 'totalServiceFeeCny'">
-            <span :class="['amount', (record.totalServiceFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalServiceFeeCny) }}</span>
-          </template>
-          <template v-else-if="column.key === 'miscServiceFeeCny'">
-            <span :class="['amount', (record.miscServiceFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.miscServiceFeeCny) }}</span>
-          </template>
-          <template v-else-if="column.key === 'otherFeesCny'">
-            <span :class="['amount', (record.otherFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.otherFeesCny) }}</span>
-            <a-tag size="small" style="margin-left: 4px">{{ record.miscFeesCount }}笔</a-tag>
-          </template>
           <template v-else-if="column.key === 'advertisingCostCny'">
             <span :class="['amount', (record.advertisingCostCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.advertisingCostCny) }}</span>
+          </template>
+          <template v-else-if="column.key === 'platformExpensesCny'">
+            <span class="amount highlight-amount">
+              {{ formatAmountWithSign((record.platformExpensesCny ?? 0)) }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'profit4PercentCny'">
+            <span class="amount highlight-amount">
+              {{ formatAmountWithSign((record.profit4PercentCny ?? 0)) }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'procurementCostCny'">
+            <span class="amount highlight-amount">
+              {{ formatAmountWithSign((record.procurementCostCny ?? 0)) }}
+            </span>
           </template>
         </template>
       </a-table>
@@ -294,31 +323,53 @@ let barChart: echarts.ECharts | null = null
 // 汇总统计
 const totalStats = computed(() => {
   const data = summaryData.value
+  const totalRevenueCny = data.reduce((sum, item) => sum + (item.totalRevenueCny || 0), 0)
+  const refundBySettlementAmazonCny = data.reduce((sum, item) => sum + (item.refundBySettlementAmazonCny || 0), 0)
+  const miscServiceFeeCny = data.reduce((sum, item) => sum + (item.miscServiceFeeCny || 0), 0)
+  const otherFeesCny = data.reduce((sum, item) => sum + (item.otherFeesCny || 0), 0)
+  const netRevenueCny = totalRevenueCny - Math.abs(refundBySettlementAmazonCny)
+  const consumptionTaxCny = data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0)
+  const totalCommissionFeeCny = data.reduce((sum, item) => sum + (item.totalCommissionFeeCny || 0), 0)
+  const advertisingCostCny = data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0)
+
+  // 按图片公式计算
+  // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费
+  const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny)
+  // ⑩4%利润 = ③收入净额 × 4%
+  const profit4PercentCny = netRevenueCny * 0.04
+  // ⑪采购成本 = ③ − ⑨ − ⑩
+  const procurementCostCny = netRevenueCny - platformExpensesCny - profit4PercentCny
+
   return {
-    totalRevenueCny: data.reduce((sum, item) => sum + (item.totalRevenueCny || 0), 0),
-    refundByShipmentCny: data.reduce((sum, item) => sum + (item.refundByShipmentCny || 0), 0),
-    consumptionTaxCny: data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0),
-    totalServiceFeeCny: data.reduce((sum, item) => sum + (item.totalServiceFeeCny || 0), 0),
-    miscServiceFeeCny: data.reduce((sum, item) => sum + (item.miscServiceFeeCny || 0), 0),
-    otherFeesCny: data.reduce((sum, item) => sum + (item.otherFeesCny || 0), 0),
-    advertisingCostCny: data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0)
+    totalRevenueCny,
+    refundBySettlementAmazonCny,
+    netRevenueCny,
+    consumptionTaxCny,
+    totalCommissionFeeCny,
+    miscServiceFeeCny,
+    otherFeesCny,
+    otherFeesTotalCny: miscServiceFeeCny + otherFeesCny,
+    advertisingCostCny,
+    // 新增字段
+    platformExpensesCny,
+    profit4PercentCny,
+    procurementCostCny
   }
 })
 
-// 表格列定义 - V2版本
+// 表格列定义 - Amazon口径
 const summaryColumns = [
   { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 150, fixed: 'left' },
   { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
-  { title: '收入(人民币)', dataIndex: 'totalRevenueCny', key: 'totalRevenueCny', width: 140, align: 'right' },
-  { title: '退款总额', dataIndex: 'refundByShipmentCny', key: 'refundByShipmentCny', width: 150, align: 'right' },
-  { title: '退款-结算', dataIndex: 'refundBySettlementCny', key: 'refundBySettlementCny', width: 150, align: 'right' },
-  { title: '平台代扣税', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 120, align: 'right' },
-  { title: '销售费用', dataIndex: 'sellingFeesCny', key: 'sellingFeesCny', width: 120, align: 'right' },
-  { title: 'FBA费用', dataIndex: 'fbaFeesCny', key: 'fbaFeesCny', width: 120, align: 'right' },
-  { title: '销售费用+FBA费用+交易费+其他', dataIndex: 'totalServiceFeeCny', key: 'totalServiceFeeCny', width: 180, align: 'right' },
-  { title: 'ServiceFee', dataIndex: 'miscServiceFeeCny', key: 'miscServiceFeeCny', width: 130, align: 'right' },
-  { title: '其他', dataIndex: 'otherFeesCny', key: 'otherFeesCny', width: 120, align: 'right' },
-  { title: '广告费', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 120, align: 'right' }
+  { title: '收入总额①', dataIndex: 'totalRevenueCny', key: 'totalRevenueCny', width: 140, align: 'right' },
+  { title: '退款金额②', dataIndex: 'refundBySettlementAmazonCny', key: 'refundBySettlementAmazonCny', width: 160, align: 'right' },
+  { title: '收入净额③=①-②', key: 'netRevenueCny', width: 160, align: 'right' },
+  { title: '平台代扣税④', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 130, align: 'right' },
+  { title: '佣金服务费⑤', dataIndex: 'totalCommissionFeeCny', key: 'totalCommissionFeeCny', width: 150, align: 'right' },
+  { title: '广告费⑥', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 130, align: 'right' },
+  { title: '平台支出合计⑨=④+⑤+⑥', dataIndex: 'platformExpensesCny', key: 'platformExpensesCny', width: 180, align: 'right' },
+  { title: '4%利润⑩=③×4%', dataIndex: 'profit4PercentCny', key: 'profit4PercentCny', width: 150, align: 'right' },
+  { title: '采购成本⑪=③-⑨-⑩', dataIndex: 'procurementCostCny', key: 'procurementCostCny', width: 170, align: 'right' }
 ]
 
 const feeColumns = [
@@ -682,6 +733,27 @@ onMounted(async () => {
     &.highlight {
       font-size: 15px;
       font-weight: 600;
+    }
+
+    &.highlight-amount {
+      font-weight: 600;
+      color: #1890ff;
+    }
+  }
+
+  .highlight-card {
+    background: linear-gradient(135deg, #fffbe6 0%, #fff 100%);
+    border: 1px solid #ffe58f;
+
+    :deep(.ant-statistic-title) {
+      color: #d48806;
+      font-weight: 500;
+    }
+
+    .stat-desc {
+      font-size: 12px;
+      color: #8c8c8c;
+      margin-top: 4px;
     }
   }
 }

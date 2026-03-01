@@ -21,6 +21,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -130,5 +132,16 @@ public class RateController {
     public Result<RateSyncResultDTO> syncFromCurl(@Valid @RequestBody CurlSyncRequest request) {
         RateSyncResultDTO result = rateSyncService.syncFromCurl(request.getCurl());
         return Result.success(result);
+    }
+
+    @Operation(summary = "导出汇率", description = "导出汇率数据为Excel文件")
+    @GetMapping("/export")
+    public void exportData(
+            @Parameter(description = "货币编码") @RequestParam(required = false) String currencyCode,
+            @Parameter(description = "开始日期(YYYY-MM-DD)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "结束日期(YYYY-MM-DD)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "数据来源(PBOC/MANUAL/IMPORT)") @RequestParam(required = false) String source,
+            HttpServletResponse response) {
+        rateService.exportData(currencyCode, startDate, endDate, source, response);
     }
 }

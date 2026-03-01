@@ -5,6 +5,7 @@ import com.musheng.business.rate.dto.RateConvertRequest;
 import com.musheng.business.rate.dto.RateConvertResultDTO;
 import com.musheng.business.rate.dto.RateRequest;
 import com.musheng.business.rate.entity.ExchangeRate;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -102,4 +103,15 @@ public interface RateService {
      * @return 转换结果(包含转换后金额、使用的汇率等信息)
      */
     RateConvertResultDTO convertCurrency(RateConvertRequest request);
+
+    /**
+     * 导出汇率数据
+     *
+     * @param currencyCode 货币编码(可选)
+     * @param startDate    开始日期(可选)
+     * @param endDate      结束日期(可选)
+     * @param source       数据来源(可选)
+     * @param response     HTTP响应
+     */
+    void exportData(String currencyCode, LocalDate startDate, LocalDate endDate, String source, HttpServletResponse response);
 }

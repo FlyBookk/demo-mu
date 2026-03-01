@@ -74,6 +74,10 @@ export interface TaxReportSummary {
   refundBySettlement: number
   refundBySettlementCny: number
   refundCountBySettlement: number
+  // 退款-Amazon口径
+  refundBySettlementAmazon: number
+  refundBySettlementAmazonCny: number
+  refundCountBySettlementAmazon: number
   // 消费税
   consumptionTax: number
   consumptionTaxCny: number
@@ -88,6 +92,9 @@ export interface TaxReportSummary {
   otherAmountCny: number
   totalServiceFee: number
   totalServiceFeeCny: number
+  // 佣金-Amazon口径
+  totalCommissionFee: number
+  totalCommissionFeeCny: number
   // 其他费（拆分）
   miscServiceFee: number
   miscServiceFeeCny: number
@@ -99,6 +106,13 @@ export interface TaxReportSummary {
   advertisingCostCny: number
   // 总成本
   totalCost: number
+  // 平台支出与采购成本（按图片公式）
+  platformExpenses: number
+  platformExpensesCny: number
+  profit4Percent: number
+  profit4PercentCny: number
+  procurementCost: number
+  procurementCostCny: number
 }
 
 /**

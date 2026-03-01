@@ -171,9 +171,34 @@ public class DateConverter {
     
     /**
      * 尝试特定格式解析
+     * 原则：按字面日期/时间解析，不做时区转换（用户要求：不要搞时区，正常按照日期所在时区处理）
      */
     private static LocalDateTime parseSpecificFormats(String dateStr, String siteCode) {
         String processed = removeTimezoneAbbr(dateStr);
+        
+        // 英国/欧洲 Amazon 格式: 30 Jun 2025 23:01:46 UTC, 1 Sept 2025 03:28:04 UTC（dd MMM yyyy HH:mm:ss）
+        // 月份支持 3-4 字母缩写：Jun, Jul, Sept, June, July 等
+        // 按字面值解析，不做时区转换
+        if (processed.matches("^\\d{1,2}\\s+[A-Za-z]{3,4}\\s+\\d{4}\\s+\\d{1,2}:\\d{2}:\\d{2}.*")) {
+            try {
+                String[] parts = processed.split("\\s+");
+                if (parts.length >= 4) {
+                    int day = Integer.parseInt(parts[0]);
+                    int month = parseMonth(parts[1]);
+                    int year = Integer.parseInt(parts[2]);
+                    int hour = 0, minute = 0, second = 0;
+                    if (parts[3].contains(":")) {
+                        String[] timeParts = parts[3].split(":");
+                        hour = Integer.parseInt(timeParts[0]);
+                        minute = Integer.parseInt(timeParts[1]);
+                        second = timeParts.length > 2 ? Integer.parseInt(timeParts[2]) : 0;
+                    }
+                    return LocalDateTime.of(year, month, day, hour, minute, second);
+                }
+            } catch (Exception e) {
+                log.debug("dd MMM yyyy HH:mm:ss 格式解析失败: {}, 错误: {}", dateStr, e.getMessage());
+            }
+        }
         
         // 德国格式: 30.06.2025 22:04:35 UTC 或 30.06.2025 22:04:35
         // 匹配 dd.MM.yyyy 开头的格式
@@ -277,26 +302,24 @@ public class DateConverter {
     }
     
     /**
-     * 解析月份英文缩写
+     * 解析月份英文缩写（支持 3-4 字母：Jun, Jul, Sept, June, July 等）
      */
     private static int parseMonth(String monthStr) {
         if (monthStr == null || monthStr.length() < 3) return 1;
-        String abbr = monthStr.substring(0, 3).toLowerCase();
-        switch (abbr) {
-            case "jan": return 1;
-            case "feb": return 2;
-            case "mar": return 3;
-            case "apr": return 4;
-            case "may": return 5;
-            case "jun": return 6;
-            case "jul": return 7;
-            case "aug": return 8;
-            case "sep": return 9;
-            case "oct": return 10;
-            case "nov": return 11;
-            case "dec": return 12;
-            default: return 1;
-        }
+        String lower = monthStr.toLowerCase();
+        if (lower.startsWith("jan")) return 1;
+        if (lower.startsWith("feb")) return 2;
+        if (lower.startsWith("mar")) return 3;
+        if (lower.startsWith("apr")) return 4;
+        if (lower.startsWith("may")) return 5;
+        if (lower.startsWith("jun")) return 6;
+        if (lower.startsWith("jul")) return 7;
+        if (lower.startsWith("aug")) return 8;
+        if (lower.startsWith("sep")) return 9;
+        if (lower.startsWith("oct")) return 10;
+        if (lower.startsWith("nov")) return 11;
+        if (lower.startsWith("dec")) return 12;
+        return 1;
     }
     
     /**

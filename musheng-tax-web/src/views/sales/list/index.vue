@@ -181,11 +181,42 @@
         @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <!-- 订单号 -->
+          <!-- 订单号：悬停显示完整内容，带复制按钮 -->
           <template v-if="column.key === 'orderId'">
-            <a-typography-text copyable :content="record.orderId">
-              {{ record.orderId }}
-            </a-typography-text>
+            <div class="ellipsis-with-copy">
+              <a-tooltip :title="record.orderId">
+                <span class="ellipsis-text">{{ record.orderId || '-' }}</span>
+              </a-tooltip>
+              <a-tooltip title="复制订单号">
+                <a-button
+                  type="text"
+                  size="small"
+                  class="copy-btn"
+                  @click.stop="handleCopyOrderId(record.orderId)"
+                >
+                  <CopyOutlined />
+                </a-button>
+              </a-tooltip>
+            </div>
+          </template>
+
+          <!-- 结算ID：悬停显示完整内容，带复制按钮 -->
+          <template v-else-if="column.key === 'settlementId'">
+            <div class="ellipsis-with-copy">
+              <a-tooltip :title="record.settlementId || '-'">
+                <span class="ellipsis-text">{{ record.settlementId || '-' }}</span>
+              </a-tooltip>
+              <a-tooltip title="复制结算ID">
+                <a-button
+                  type="text"
+                  size="small"
+                  class="copy-btn"
+                  @click.stop="handleCopyOrderId(record.settlementId)"
+                >
+                  <CopyOutlined />
+                </a-button>
+              </a-tooltip>
+            </div>
           </template>
 
           <!-- 数据来源 -->
@@ -324,7 +355,8 @@ import {
   CloudUploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  ShoppingOutlined
+  ShoppingOutlined,
+  CopyOutlined
 } from '@ant-design/icons-vue'
 
 // ============= 常量配置 =============
@@ -388,6 +420,21 @@ function formatDate(dateStr?: string): string {
     return `${match[1]} ${match[2]}`
   }
   return dateStr
+}
+
+// 复制到剪贴板
+async function handleCopyOrderId(text: string | null | undefined) {
+  const value = text || ''
+  if (!value) {
+    message.warning('无内容可复制')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(value)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败，请手动复制')
+  }
 }
 
 // ============= 搜索相关 =============
@@ -785,6 +832,29 @@ onMounted(() => {
     white-space: pre-wrap;
     line-height: 1.5;
     max-width: 100%;
+  }
+
+  .ellipsis-with-copy {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+
+    .ellipsis-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-btn {
+      flex-shrink: 0;
+      padding: 0 4px;
+      color: $text-color-secondary;
+      &:hover {
+        color: $primary-color;
+      }
+    }
   }
 }
 </style>

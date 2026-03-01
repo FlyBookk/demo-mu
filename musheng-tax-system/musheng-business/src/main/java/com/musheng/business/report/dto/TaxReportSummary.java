@@ -60,6 +60,14 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "退款笔数-按结算时间")
     private Integer refundCountBySettlement;
 
+    // ========== Amazon口径退款（按结算时间，不限制配送数据匹配） ==========
+    @Schema(description = "退款金额-Amazon口径（原币）")
+    private BigDecimal refundBySettlementAmazon;
+    @Schema(description = "退款金额-Amazon口径（人民币）")
+    private BigDecimal refundBySettlementAmazonCny;
+    @Schema(description = "退款笔数-Amazon口径")
+    private Integer refundCountBySettlementAmazon;
+
     // ========== 消费税（平台代扣税） ==========
 
     @Schema(description = "消费税/平台代扣税（原币）")
@@ -100,6 +108,12 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "佣金/服务费合计（人民币）")
     private BigDecimal totalServiceFeeCny;
 
+    // ========== 佣金合计-Amazon口径（selling+fba+otherTx 全类型，不含other/marketplaceWithheldTax） ==========
+    @Schema(description = "佣金合计-Amazon口径（原币）")
+    private BigDecimal totalCommissionFee;
+    @Schema(description = "佣金合计-Amazon口径（人民币）")
+    private BigDecimal totalCommissionFeeCny;
+
     // ========== 其他费拆分（非收入/退款类型） ==========
 
     @Schema(description = "其他费-ServiceFee（原币）- transaction_type=ServiceFee，保留原正负")
@@ -129,4 +143,24 @@ public class TaxReportSummary implements Serializable {
 
     @Schema(description = "总成本（人民币）= 佣金/服务费 + 其他费 + 广告费")
     private BigDecimal totalCost;
+
+    // ========== 平台支出与采购成本计算（按图片公式） ==========
+
+    @Schema(description = "平台支出合计（人民币）= 消费税 + 佣金服务费 + 其他")
+    private BigDecimal platformExpenses;
+
+    @Schema(description = "平台支出合计（人民币）")
+    private BigDecimal platformExpensesCny;
+
+    @Schema(description = "4%利润（人民币）= 收入净额 × 4%")
+    private BigDecimal profit4Percent;
+
+    @Schema(description = "4%利润（人民币）")
+    private BigDecimal profit4PercentCny;
+
+    @Schema(description = "采购成本（人民币）= 收入净额 − 平台支出合计 − 4%利润")
+    private BigDecimal procurementCost;
+
+    @Schema(description = "采购成本（人民币）")
+    private BigDecimal procurementCostCny;
 }
