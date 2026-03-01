@@ -1,8 +1,12 @@
 package com.musheng.business.report.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.musheng.business.advertising.entity.AdvertisingData;
-import com.musheng.business.advertising.mapper.AdvertisingDataMapper;
+import com.musheng.business.advertising.entity.AdvertisingBill;
+import com.musheng.business.advertising.entity.AdvertisingBillItem;
+import com.musheng.business.advertising.mapper.AdvertisingBillItemMapper;
+import com.musheng.business.advertising.mapper.AdvertisingBillMapper;
+import com.musheng.business.rate.dto.RateWithDateDTO;
+import com.musheng.business.rate.service.RateService;
 import com.musheng.business.report.dto.DashboardData;
 import com.musheng.business.report.dto.FeeBreakdown;
 import com.musheng.business.report.dto.TaxReportSummary;
@@ -42,8 +46,10 @@ public class TaxReportServiceImpl implements TaxReportService {
 
     private final SalesDataMapper salesDataMapper;
     private final ShippingDataMapper shippingDataMapper;
-    private final AdvertisingDataMapper advertisingDataMapper;
+    private final AdvertisingBillMapper advertisingBillMapper;
+    private final AdvertisingBillItemMapper advertisingBillItemMapper;
     private final MarketplaceMapper marketplaceMapper;
+    private final RateService rateService;
 
     /**
      * 站点到货币的映射
@@ -389,17 +395,38 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .lt(SalesData::getTransactionDate, maxEndDate.plusDays(1).atStartOfDay());
         List<SalesData> allOtherData = salesDataMapper.selectList(otherWrapper);
 
-        // 7. 批量查询广告数据
-        LambdaQueryWrapper<AdvertisingData> adWrapper = new LambdaQueryWrapper<>();
-        adWrapper.eq(AdvertisingData::getShopId, shopId)
-                .in(AdvertisingData::getSiteCode, sites)
-                .and(w -> w.between(AdvertisingData::getBillingStartDate, minStartDate, maxEndDate)
+        // 7. 批量查询广告数据（主表+明细）
+        // 兼容：site_code 可能为空（从 store_name 推断），故用 OR site_code IS NULL 纳入
+        LambdaQueryWrapper<AdvertisingBill> billWrapper = new LambdaQueryWrapper<>();
+        billWrapper.eq(AdvertisingBill::getShopId, shopId)
+                .and(w -> w.in(AdvertisingBill::getSiteCode, sites).or().isNull(AdvertisingBill::getSiteCode))
+                .and(w -> w.between(AdvertisingBill::getBillingStartDate, minStartDate, maxEndDate)
                         .or()
-                        .between(AdvertisingData::getBillingEndDate, minStartDate, maxEndDate)
+                        .between(AdvertisingBill::getBillingEndDate, minStartDate, maxEndDate)
                         .or()
-                        .and(w2 -> w2.le(AdvertisingData::getBillingStartDate, minStartDate)
-                                .ge(AdvertisingData::getBillingEndDate, maxEndDate)));
-        List<AdvertisingData> allAdData = advertisingDataMapper.selectList(adWrapper);
+                        .and(w2 -> w2.le(AdvertisingBill::getBillingStartDate, minStartDate)
+                                .ge(AdvertisingBill::getBillingEndDate, maxEndDate)));
+        List<AdvertisingBill> allBills = advertisingBillMapper.selectList(billWrapper);
+        List<Long> billIds = allBills.stream().map(AdvertisingBill::getId).collect(Collectors.toList());
+        Map<Long, AdvertisingBill> billMap = allBills.stream().collect(Collectors.toMap(AdvertisingBill::getId, b -> b));
+
+        List<AdDataForTax> allAdData = new ArrayList<>();
+        if (!billIds.isEmpty()) {
+            LambdaQueryWrapper<AdvertisingBillItem> itemWrapper = new LambdaQueryWrapper<>();
+            itemWrapper.in(AdvertisingBillItem::getBillId, billIds);
+            List<AdvertisingBillItem> items = advertisingBillItemMapper.selectList(itemWrapper);
+            for (AdvertisingBillItem item : items) {
+                AdvertisingBill bill = billMap.get(item.getBillId());
+                if (bill != null) {
+                    String site = StringUtils.hasText(bill.getSiteCode())
+                            ? bill.getSiteCode()
+                            : inferSiteCodeFromStoreName(bill.getStoreName());
+                    allAdData.add(new AdDataForTax(site, item.getCost(), item.getAmountCny(),
+                            bill.getBillingStartDate(), bill.getBillingEndDate(),
+                            bill.getCurrency(), bill.getIssueDate()));
+                }
+            }
+        }
 
         log.info("Data loaded in {}ms: shipping={}, sales={}, other={}, ads={}",
                 System.currentTimeMillis() - startTime,
@@ -412,8 +439,9 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .collect(Collectors.groupingBy(SalesData::getSiteCode));
         Map<String, List<SalesData>> otherBySite = allOtherData.stream()
                 .collect(Collectors.groupingBy(SalesData::getSiteCode));
-        Map<String, List<AdvertisingData>> adBySite = allAdData.stream()
-                .collect(Collectors.groupingBy(AdvertisingData::getSiteCode));
+        Map<String, List<AdDataForTax>> adBySite = allAdData.stream()
+                .filter(ad -> ad.siteCode != null)
+                .collect(Collectors.groupingBy(ad -> ad.siteCode));
 
         // ========== 在内存中计算每个站点+季度的汇总 ==========
         List<TaxReportSummary> results = new ArrayList<>();
@@ -422,7 +450,7 @@ public class TaxReportServiceImpl implements TaxReportService {
             List<ShippingData> siteShipping = shippingBySite.getOrDefault(site, Collections.emptyList());
             List<SalesData> siteSales = salesBySite.getOrDefault(site, Collections.emptyList());
             List<SalesData> siteOther = otherBySite.getOrDefault(site, Collections.emptyList());
-            List<AdvertisingData> siteAds = adBySite.getOrDefault(site, Collections.emptyList());
+            List<AdDataForTax> siteAds = adBySite.getOrDefault(site, Collections.emptyList());
             Map<String, LocalDate> siteRefundShipDates = refundShipDateMap.getOrDefault(site, Collections.emptyMap());
             Map<String, BigDecimal> siteOrderRates = orderRateMapBySite.getOrDefault(site, Collections.emptyMap());
 
@@ -477,7 +505,7 @@ public class TaxReportServiceImpl implements TaxReportService {
             List<ShippingData> allShipping,
             List<SalesData> allSalesData,
             List<SalesData> allOtherData,
-            List<AdvertisingData> allAds,
+            List<AdDataForTax> allAds,
             Map<String, LocalDate> refundShipDateMap,
             Map<String, BigDecimal> orderRateMap) {
 
@@ -715,22 +743,34 @@ public class TaxReportServiceImpl implements TaxReportService {
         }
 
         // ========== 6. 广告费计算 ==========
-        List<AdvertisingData> adList = allAds.stream()
+        List<AdDataForTax> adList = allAds.stream()
                 .filter(ad -> isAdInQuarter(ad, startDate, endDate))
                 .collect(Collectors.toList());
 
         BigDecimal advertisingCost = BigDecimal.ZERO;
         BigDecimal advertisingCostCny = BigDecimal.ZERO;
 
-        for (AdvertisingData ad : adList) {
-            BigDecimal cost = ad.getCost();
+        for (AdDataForTax ad : adList) {
+            BigDecimal cost = ad.cost;
             if (cost != null) {
                 advertisingCost = advertisingCost.add(cost);
-                BigDecimal amountCny = ad.getAmountCny();
+                BigDecimal amountCny = ad.amountCny;
                 if (amountCny != null) {
                     advertisingCostCny = advertisingCostCny.add(amountCny);
                 } else {
-                    advertisingCostCny = advertisingCostCny.add(cost);
+                    // 兼容：amountCny 未持久化时，按发票开具日期查汇率换算（与配送/销售一致）
+                    try {
+                        if (StringUtils.hasText(ad.currency()) && ad.issueDate() != null) {
+                            if ("CNY".equalsIgnoreCase(ad.currency())) {
+                                advertisingCostCny = advertisingCostCny.add(cost);
+                            } else {
+                                RateWithDateDTO dto = rateService.getRateWithDate(ad.currency(), ad.issueDate());
+                                advertisingCostCny = advertisingCostCny.add(cost.multiply(dto.getRate()));
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("广告费汇率换算失败: currency={}, date={}", ad.currency(), ad.issueDate(), e);
+                    }
                 }
             }
         }
@@ -907,12 +947,28 @@ public class TaxReportServiceImpl implements TaxReportService {
         return value != null ? value : BigDecimal.ZERO;
     }
 
+    /** 广告费数据（用于报税汇总计算） */
+    private record AdDataForTax(String siteCode, BigDecimal cost, BigDecimal amountCny,
+                                LocalDate billingStartDate, LocalDate billingEndDate,
+                                String currency, LocalDate issueDate) {}
+
+    /** 从店铺名称推断站点编码（与 AdvertisingBillServiceImpl 一致） */
+    private static String inferSiteCodeFromStoreName(String storeName) {
+        if (!StringUtils.hasText(storeName)) return null;
+        String s = storeName.toUpperCase();
+        if (s.contains("UK") || s.contains("英国")) return "UK";
+        if (s.contains("US") || s.contains("美国")) return "US";
+        if (s.contains("CA") || s.contains("加拿大")) return "CA";
+        if (s.contains("DE") || s.contains("德国")) return "DE";
+        return null;
+    }
+
     /**
      * 判断广告数据是否在季度范围内
      */
-    private boolean isAdInQuarter(AdvertisingData ad, LocalDate startDate, LocalDate endDate) {
-        LocalDate adStart = ad.getBillingStartDate();
-        LocalDate adEnd = ad.getBillingEndDate();
+    private boolean isAdInQuarter(AdDataForTax ad, LocalDate startDate, LocalDate endDate) {
+        LocalDate adStart = ad.billingStartDate;
+        LocalDate adEnd = ad.billingEndDate;
         if (adStart == null && adEnd == null) return false;
 
         // 广告周期与季度有交集

@@ -1,12 +1,10 @@
 <template>
   <div class="advertising-add-page">
-    <!-- 页面头部 -->
     <div class="page-header">
       <h1 class="page-title">广告费录入</h1>
-      <p class="page-desc">录入各站点的广告费用数据，用于VAT报表计算</p>
+      <p class="page-desc">录入各站点的广告费用数据，用于VAT报表计算。支持批量导入，<a @click="goToImport">前往批量导入</a></p>
     </div>
 
-    <!-- 录入表单 -->
     <a-card class="form-card">
       <a-form
         ref="formRef"
@@ -15,6 +13,14 @@
         :label-col="{ span: 4 }"
         :wrapper-col="{ span: 12 }"
       >
+        <a-form-item label="店铺名称" name="storeName">
+          <a-input
+            v-model:value="formData.storeName"
+            placeholder="如：慕声欧洲-UK"
+            :maxlength="100"
+          />
+        </a-form-item>
+
         <a-form-item label="站点" name="siteCode">
           <a-select
             v-model:value="formData.siteCode"
@@ -24,11 +30,11 @@
             @change="handleSiteChange"
           >
             <a-select-option
-              v-for="marketplace in marketplaceOptions"
-              :key="marketplace.siteCode"
-              :value="marketplace.siteCode"
+              v-for="m in marketplaceOptions"
+              :key="m.siteCode"
+              :value="m.siteCode"
             >
-              {{ marketplace.siteCode }} - {{ marketplace.siteName }}
+              {{ m.siteCode }} - {{ m.siteName }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -60,32 +66,23 @@
         <a-form-item label="货币" name="currencyCode">
           <a-select
             v-model:value="formData.currencyCode"
-            placeholder="请选择货币"
+            placeholder="请选择货币（仅支持 USD/CAD/GBP/EUR）"
             style="width: 100%"
           >
             <a-select-option
-              v-for="currency in currencyOptions"
-              :key="currency.currencyCode"
-              :value="currency.currencyCode"
+              v-for="c in validCurrencyOptions"
+              :key="c.currencyCode"
+              :value="c.currencyCode"
             >
-              {{ currency.currencyCode }} - {{ currency.currencyName }}
+              {{ c.currencyCode }} - {{ c.currencyName }}
             </a-select-option>
           </a-select>
-        </a-form-item>
-
-        <a-form-item label="汇率取值日期" name="exchangeRateDate" help="不填则按发票开具日期查询汇率">
-          <a-date-picker
-            v-model:value="formData.exchangeRateDate"
-            placeholder="可选，不填则使用发票开具日期"
-            format="YYYY-MM-DD"
-            style="width: 100%"
-          />
         </a-form-item>
 
         <a-form-item label="发票号" name="invoiceNo">
           <a-input
             v-model:value="formData.invoiceNo"
-            placeholder="请输入发票号（可选）"
+            placeholder="选填，不填则自动生成"
             :maxlength="100"
           />
         </a-form-item>
@@ -93,8 +90,8 @@
         <a-form-item label="备注" name="remark">
           <a-textarea
             v-model:value="formData.remark"
-            placeholder="请输入备注（可选）"
-            :rows="4"
+            placeholder="选填"
+            :rows="3"
             :maxlength="500"
             show-count
           />
@@ -119,7 +116,6 @@
       </a-form>
     </a-card>
 
-    <!-- 最近录入记录 -->
     <a-card title="最近录入记录" class="recent-card">
       <a-table
         :columns="recentColumns"
@@ -133,8 +129,8 @@
           <template v-if="column.key === 'siteCode'">
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
           </template>
-          <template v-else-if="column.key === 'cost'">
-            <span class="amount">{{ record.currency }} {{ record.cost?.toFixed(2) }}</span>
+          <template v-else-if="column.key === 'totalCost'">
+            <span class="amount">{{ record.currency }} {{ (record.totalCost ?? 0).toFixed(2) }}</span>
           </template>
           <template v-else-if="column.key === 'action'">
             <a-popconfirm
@@ -153,168 +149,131 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import {
-  SaveOutlined,
-  PlusOutlined,
-  ReloadOutlined
-} from '@ant-design/icons-vue'
-import { getAdvertisingList, createAdvertising, deleteAdvertising, searchAdvertisingData } from '@/api/advertising'
+import { SaveOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import dayjs from 'dayjs'
+import { importAdvertisingData, deleteAdvertising, searchAdvertisingData } from '@/api/advertising'
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import { getEnabledCurrencies } from '@/api/currency'
-import type { AdvertisingData, AdvertisingDataForm } from '@/types/advertising'
+import type { AdvertisingBill } from '@/types/advertising'
 import type { Marketplace } from '@/types/marketplace'
 import type { Currency } from '@/types/currency'
 
 const router = useRouter()
 
-// ============= 选项数据 =============
 const marketplaceOptions = ref<Marketplace[]>([])
 const currencyOptions = ref<Currency[]>([])
-
-// ============= 表单相关 =============
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
-const formData = reactive<AdvertisingDataForm & { yearMonthDate: Dayjs | null; exchangeRateDate: Dayjs | null }>({
+const formData = reactive({
+  storeName: '',
   siteCode: '',
   yearMonth: '',
-  yearMonthDate: null,
+  yearMonthDate: null as Dayjs | null,
   amount: undefined as number | undefined,
   currencyCode: '',
-  exchangeRateDate: null,
   invoiceNo: '',
   remark: ''
 })
 
+const VALID_CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR']
+
 const formRules = {
+  storeName: [{ required: true, message: '请输入店铺名称', trigger: 'blur' }],
   siteCode: [{ required: true, message: '请选择站点', trigger: 'change' }],
   yearMonth: [{ required: true, message: '请选择月份', trigger: 'change' }],
-  amount: [{ required: true, message: '请输入广告费用', trigger: 'blur' }],
-  currencyCode: [{ required: true, message: '请选择货币', trigger: 'change' }]
+  amount: [
+    { required: true, message: '请输入广告费用', trigger: 'blur' },
+    { type: 'number' as const, min: 0.01, message: '广告费用必须大于 0', trigger: 'blur' }
+  ],
+  currencyCode: [
+    { required: true, message: '请选择货币', trigger: 'change' },
+    { validator: (_: any, v: string) => (!v || VALID_CURRENCIES.includes(v) ? Promise.resolve() : Promise.reject('仅支持 USD/CAD/GBP/EUR')), trigger: 'change' }
+  ]
 }
 
-// ============= 最近记录 =============
 const recentLoading = ref(false)
-const recentData = ref<AdvertisingData[]>([])
+const recentData = ref<AdvertisingBill[]>([])
+
+// 仅展示后端支持的币种（USD/CAD/GBP/EUR）
+const validCurrencyOptions = computed(() =>
+  currencyOptions.value.filter(c => VALID_CURRENCIES.includes(c.currencyCode))
+)
 
 const recentColumns = [
-  {
-    title: '站点',
-    dataIndex: 'siteCode',
-    key: 'siteCode',
-    width: 80
-  },
-  {
-    title: '店铺名称',
-    dataIndex: 'storeName',
-    key: 'storeName',
-    width: 120
-  },
-  {
-    title: '发票号',
-    dataIndex: 'invoiceNumber',
-    key: 'invoiceNumber',
-    width: 150
-  },
-  {
-    title: '费用',
-    dataIndex: 'cost',
-    key: 'cost',
-    width: 150,
-    align: 'right' as const
-  },
-  {
-    title: '录入时间',
-    dataIndex: 'createTime',
-    key: 'createTime',
-    width: 180
-  },
-  {
-    title: '操作',
-    key: 'action',
-    width: 80
-  }
+  { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 80 },
+  { title: '店铺名称', dataIndex: 'storeName', key: 'storeName', width: 120 },
+  { title: '发票号', dataIndex: 'invoiceNumber', key: 'invoiceNumber', width: 150 },
+  { title: '费用', dataIndex: 'totalCost', key: 'totalCost', width: 120, align: 'right' as const },
+  { title: '录入时间', dataIndex: 'createTime', key: 'createTime', width: 180 },
+  { title: '操作', key: 'action', width: 80 }
 ]
 
-// ============= 方法 =============
-function filterOption(input: string, option: any): boolean {
-  const marketplace = marketplaceOptions.value.find(m => m.siteCode === option.value)
-  if (!marketplace) return false
-  const searchText = input.toLowerCase()
-  return marketplace.siteCode.toLowerCase().includes(searchText) ||
-         marketplace.siteName.toLowerCase().includes(searchText)
-}
-
-async function fetchMarketplaces() {
-  try {
-    const res = await getEnabledMarketplaces()
-    marketplaceOptions.value = res.data || []
-  } catch (error) {
-    console.error('获取站点列表失败:', error)
-  }
-}
-
-async function fetchCurrencies() {
-  try {
-    const res = await getEnabledCurrencies()
-    currencyOptions.value = res.data || []
-  } catch (error) {
-    console.error('获取货币列表失败:', error)
-  }
-}
-
-async function fetchRecentData() {
-  recentLoading.value = true
-  try {
-    const res = await searchAdvertisingData({ page: 1, size: 5 })
-    recentData.value = res.data?.records || []
-  } catch (error) {
-    console.error('获取最近记录失败:', error)
-  } finally {
-    recentLoading.value = false
-  }
+function filterOption(input: string, option: any) {
+  const m = marketplaceOptions.value.find(x => x.siteCode === option.value)
+  if (!m) return false
+  const s = input.toLowerCase()
+  return m.siteCode.toLowerCase().includes(s) || m.siteName.toLowerCase().includes(s)
 }
 
 function handleSiteChange(siteCode: string) {
-  // 自动设置该站点对应的货币
-  const marketplace = marketplaceOptions.value.find(m => m.siteCode === siteCode)
-  if (marketplace?.currencyCode) {
-    formData.currencyCode = marketplace.currencyCode
+  const m = marketplaceOptions.value.find(x => x.siteCode === siteCode)
+  if (m?.currencyCode && VALID_CURRENCIES.includes(m.currencyCode)) {
+    formData.currencyCode = m.currencyCode
   }
+  if (!formData.storeName) formData.storeName = `慕声-${siteCode}`
 }
 
 function handleYearMonthChange(date: Dayjs | null) {
   formData.yearMonth = date?.format('YYYY-MM') || ''
 }
 
+function buildImportRequest() {
+  const start = formData.yearMonth ? `${formData.yearMonth}-01` : dayjs().format('YYYY-MM-DD')
+  const end = formData.yearMonth
+    ? dayjs(`${formData.yearMonth}-01`).endOf('month').format('YYYY-MM-DD')
+    : dayjs().format('YYYY-MM-DD')
+  const invoiceNo = formData.invoiceNo?.trim() || `MANUAL-${Date.now()}`
+  const amount = Math.max(0, formData.amount ?? 0)
+  return {
+    storeName: formData.storeName.trim(),
+    siteCode: formData.siteCode || undefined,
+    invoiceNumber: invoiceNo,
+    invoiceStatus: 'PAID_IN_FULL',
+    billingStartDate: start,
+    billingEndDate: end,
+    issueDate: end,
+    currency: formData.currencyCode || 'USD',
+    invoiceAmount: amount >= 0.01 ? amount : 0.01,
+    cost: amount,
+    otherCost: 0,
+    remark: formData.remark?.trim() || undefined
+  }
+}
+
 async function handleSubmit() {
   try {
     await formRef.value?.validate()
     submitting.value = true
-
-    const submitData: AdvertisingDataForm = {
-      siteCode: formData.siteCode,
-      yearMonth: formData.yearMonth,
-      amount: formData.amount!,
-      currencyCode: formData.currencyCode,
-      exchangeRateDate: formData.exchangeRateDate?.format('YYYY-MM-DD'),
-      invoiceNo: formData.invoiceNo,
-      remark: formData.remark
-    }
-
-    await createAdvertising(submitData)
-    message.success('录入成功')
-    router.push('/advertising/list')
-  } catch (error: any) {
-    if (error?.errorFields) {
+    const item = buildImportRequest()
+    const res = await importAdvertisingData({ data: [item] }) as any
+    const result = res?.data ?? res
+    const failed = result?.failedCount ?? 0
+    if (failed > 0) {
+      const msg = result?.failedRecords?.[0]?.errorMessage || '导入失败'
+      message.error(msg)
       return
     }
-    console.error('录入失败:', error)
+    message.success('录入成功')
+    router.push('/advertising/list')
+  } catch (e: any) {
+    if (e?.errorFields) return
+    message.error('录入失败: ' + (e?.message || e))
   } finally {
     submitting.value = false
   }
@@ -324,35 +283,25 @@ async function handleSubmitAndContinue() {
   try {
     await formRef.value?.validate()
     submitting.value = true
-
-    const submitData: AdvertisingDataForm = {
-      siteCode: formData.siteCode,
-      yearMonth: formData.yearMonth,
-      amount: formData.amount!,
-      currencyCode: formData.currencyCode,
-      exchangeRateDate: formData.exchangeRateDate?.format('YYYY-MM-DD'),
-      invoiceNo: formData.invoiceNo,
-      remark: formData.remark
+    const item = buildImportRequest()
+    const res = await importAdvertisingData({ data: [item] }) as any
+    const result = res?.data ?? res
+    const failed = result?.failedCount ?? 0
+    if (failed > 0) {
+      const msg = result?.failedRecords?.[0]?.errorMessage || '导入失败'
+      message.error(msg)
+      return
     }
-
-    await createAdvertising(submitData)
     message.success('录入成功，可继续添加')
-    
-    // 重置部分字段，保留站点和货币
     formData.yearMonth = ''
     formData.yearMonthDate = null
     formData.amount = undefined
-    formData.exchangeRateDate = null
     formData.invoiceNo = ''
     formData.remark = ''
-    
-    // 刷新最近记录
     fetchRecentData()
-  } catch (error: any) {
-    if (error?.errorFields) {
-      return
-    }
-    console.error('录入失败:', error)
+  } catch (e: any) {
+    if (e?.errorFields) return
+    message.error('录入失败: ' + (e?.message || e))
   } finally {
     submitting.value = false
   }
@@ -361,12 +310,12 @@ async function handleSubmitAndContinue() {
 function handleReset() {
   formRef.value?.resetFields()
   Object.assign(formData, {
+    storeName: '',
     siteCode: '',
     yearMonth: '',
     yearMonthDate: null,
     amount: undefined,
     currencyCode: '',
-    exchangeRateDate: null,
     invoiceNo: '',
     remark: ''
   })
@@ -376,17 +325,50 @@ function handleGoList() {
   router.push('/advertising/list')
 }
 
-async function handleDeleteRecent(record: AdvertisingData) {
+function goToImport() {
+  router.push({ name: 'AdvertisingImport' })
+}
+
+async function handleDeleteRecent(record: AdvertisingBill) {
   try {
     await deleteAdvertising(record.id)
     message.success('删除成功')
     fetchRecentData()
-  } catch (error) {
-    console.error('删除失败:', error)
+  } catch (e) {
+    message.error('删除失败')
   }
 }
 
-// 初始化
+async function fetchMarketplaces() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    marketplaceOptions.value = res?.data ?? res ?? []
+  } catch {
+    marketplaceOptions.value = []
+  }
+}
+
+async function fetchCurrencies() {
+  try {
+    const res = await getEnabledCurrencies() as any
+    currencyOptions.value = res?.data ?? res ?? []
+  } catch {
+    currencyOptions.value = []
+  }
+}
+
+async function fetchRecentData() {
+  recentLoading.value = true
+  try {
+    const res = await searchAdvertisingData({ current: 1, size: 5 }) as any
+    recentData.value = res?.data?.records ?? res?.records ?? []
+  } catch {
+    recentData.value = []
+  } finally {
+    recentLoading.value = false
+  }
+}
+
 onMounted(() => {
   fetchMarketplaces()
   fetchCurrencies()
@@ -412,6 +394,11 @@ onMounted(() => {
       font-size: $font-size-md;
       color: $text-color-secondary;
       margin: 0;
+
+      a {
+        color: $primary-color;
+        cursor: pointer;
+      }
     }
   }
 
@@ -419,11 +406,9 @@ onMounted(() => {
     margin-bottom: $spacing-lg;
   }
 
-  .recent-card {
-    .amount {
-      font-weight: 500;
-      color: $primary-color;
-    }
+  .recent-card .amount {
+    font-weight: 500;
+    color: $primary-color;
   }
 }
 </style>

@@ -1,42 +1,54 @@
 /**
  * 广告数据类型定义
- * 对应后端 AdvertisingData 实体（广告发票数据模型）
+ * 主表+明细结构（无去重，可复核）
  */
 
-// 广告发票数据实体
-export interface AdvertisingData {
+// 广告发票主表
+export interface AdvertisingBill {
   id: number
+  shopId: number
   storeName: string
-  siteCode: string
+  siteCode?: string
   invoiceNumber: string
-  invoiceStatus: string
+  invoiceStatus?: string
   paymentType?: string
   billingStartDate: string
   billingEndDate: string
-  issueDate: string
+  issueDate?: string
   currency: string
   invoiceAmount: number
-  cost: number
-  otherCost?: number
+  totalCost?: number
+  totalCostCny?: number
+  importBatchId?: string
+  createTime?: string
+  updateTime?: string
+  items?: AdvertisingBillItem[]
+}
+
+// 广告发票明细
+export interface AdvertisingBillItem {
+  id: number
+  shopId: number
+  billId: number
+  invoiceNumber: string
   campaignName?: string
-  campaignId?: string
+  campaignId: string
   pricingModel?: string
   clicks?: number
   avgCpc?: number
+  cost: number
+  otherCost?: number
   dataSource?: string
   productList?: string
   adType?: string
-  attachmentPath?: string
-  remark?: string
   exchangeRate?: number
   exchangeRateDate?: string
   amountCny?: number
-  importBatchId?: string
-  createBy?: number
-  updateBy?: number
   createTime?: string
-  updateTime?: string
 }
+
+// 兼容旧类型别名
+export type AdvertisingData = AdvertisingBill
 
 // 广告费录入表单（单条录入）
 export interface AdvertisingDataForm {

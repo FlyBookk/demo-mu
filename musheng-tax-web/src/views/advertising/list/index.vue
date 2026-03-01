@@ -65,10 +65,10 @@
           </a-col>
           <a-col :span="4" style="text-align: right">
             <a-space>
-              <a-button type="primary" @click="handleAdd">
-                <PlusOutlined /> 广告费录入
+              <a-button @click="handleGoToDetailView">
+                <UnorderedListOutlined /> 活动明细视图
               </a-button>
-              <a-button @click="handleImport">
+              <a-button type="primary" @click="handleImport">
                 <PlusOutlined /> 批量导入
               </a-button>
               <a-button
@@ -92,7 +92,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 2220 }"
+        :scroll="{ x: 1200 }"
         row-key="id"
         @change="handleTableChange"
       >
@@ -107,25 +107,17 @@
             <span>{{ record.billingStartDate }} ~ {{ record.billingEndDate }}</span>
           </template>
 
-          <!-- 费用 -->
-          <template v-else-if="column.key === 'cost'">
-            <span class="amount">{{ formatAmount(record.cost, record.currency) }}</span>
-          </template>
-
-          <!-- 汇率 -->
-          <template v-else-if="column.key === 'exchangeRate'">
-            <span v-if="record.exchangeRate != null">{{ Number(record.exchangeRate).toFixed(6) }}</span>
-            <span v-else class="text-muted">-</span>
-          </template>
-
-          <!-- 汇率取值日期 -->
-          <template v-else-if="column.key === 'exchangeRateDate'">
-            <span>{{ record.exchangeRateDate ?? '-' }}</span>
+          <!-- 费用合计 -->
+          <template v-else-if="column.key === 'totalCost'">
+            <span class="amount">{{ formatAmount(record.totalCost, record.currency) }}</span>
           </template>
 
           <!-- 操作 -->
           <template v-else-if="column.key === 'action'">
             <a-space>
+              <a-button type="link" size="small" @click="handleViewDetail(record)">
+                详情
+              </a-button>
               <a-popconfirm
                 title="确定要删除该记录吗？"
                 ok-text="确定"
@@ -141,6 +133,49 @@
         </template>
       </a-table>
     </a-card>
+
+    <!-- 详情弹窗 -->
+    <a-modal
+      v-model:open="detailModalVisible"
+      title="广告发票详情"
+      width="900px"
+      :footer="null"
+    >
+      <div v-if="detailData">
+        <a-descriptions :column="2" bordered size="small" style="margin-bottom: 16px">
+          <a-descriptions-item label="发票编号">{{ detailData.invoiceNumber }}</a-descriptions-item>
+          <a-descriptions-item label="发票状态">{{ detailData.invoiceStatus || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="店铺">{{ detailData.storeName }}</a-descriptions-item>
+          <a-descriptions-item label="站点">{{ detailData.siteCode || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="账单周期">{{ detailData.billingStartDate }} ~ {{ detailData.billingEndDate }}</a-descriptions-item>
+          <a-descriptions-item label="开具时间">{{ detailData.issueDate || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="账单金额">{{ detailData.currency }} {{ detailData.invoiceAmount?.toFixed(2) }}</a-descriptions-item>
+          <a-descriptions-item label="费用合计">{{ detailData.currency }} {{ detailData.totalCost?.toFixed(2) }}</a-descriptions-item>
+          <a-descriptions-item label="费用(CNY)">¥{{ detailData.totalCostCny?.toFixed(2) }}</a-descriptions-item>
+        </a-descriptions>
+        <div style="margin-top: 16px">
+          <h4 style="margin-bottom: 12px">广告活动明细 ({{ detailData.items?.length ?? 0 }} 条)</h4>
+          <a-table
+            :columns="itemColumns"
+            :data-source="detailData.items || []"
+            :pagination="false"
+            :scroll="{ y: 300 }"
+            size="small"
+            row-key="id"
+          >
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">{{ index + 1 }}</template>
+              <template v-else-if="column.key === 'cost'">
+                {{ record.cost != null ? record.cost.toFixed(2) : '-' }}
+              </template>
+              <template v-else-if="column.key === 'amountCny'">
+                {{ record.amountCny != null ? '¥' + record.amountCny.toFixed(2) : '-' }}
+              </template>
+            </template>
+          </a-table>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -155,17 +190,19 @@ import {
   SearchOutlined,
   ReloadOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import {
+  getAdvertisingById,
   deleteAdvertising,
   batchDeleteAdvertising,
   batchPhysicalDeleteAdvertising,
   searchAdvertisingData
 } from '@/api/advertising'
 import { getEnabledMarketplaces } from '@/api/marketplace'
-import type { AdvertisingData } from '@/types/advertising'
+import type { AdvertisingBill } from '@/types/advertising'
 import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
@@ -186,7 +223,7 @@ const marketplaceOptions = ref<Marketplace[]>([])
 
 // ============= 表格相关 =============
 const loading = ref(false)
-const tableData = ref<AdvertisingData[]>([])
+const tableData = ref<AdvertisingBill[]>([])
 const selectedRowKeys = ref<number[]>([])
 
 const columns = [
@@ -226,10 +263,24 @@ const columns = [
     width: 120
   },
   {
-    title: '费用',
-    dataIndex: 'cost',
-    key: 'cost',
-    width: 140,
+    title: '账单金额',
+    dataIndex: 'invoiceAmount',
+    key: 'invoiceAmount',
+    width: 120,
+    align: 'right' as const
+  },
+  {
+    title: '费用合计',
+    dataIndex: 'totalCost',
+    key: 'totalCost',
+    width: 120,
+    align: 'right' as const
+  },
+  {
+    title: '费用(CNY)',
+    dataIndex: 'totalCostCny',
+    key: 'totalCostCny',
+    width: 120,
     align: 'right' as const
   },
   {
@@ -237,46 +288,6 @@ const columns = [
     dataIndex: 'currency',
     key: 'currency',
     width: 80
-  },
-  {
-    title: '汇率',
-    dataIndex: 'exchangeRate',
-    key: 'exchangeRate',
-    width: 100,
-    align: 'right' as const
-  },
-  {
-    title: '汇率取值日期',
-    dataIndex: 'exchangeRateDate',
-    key: 'exchangeRateDate',
-    width: 120
-  },
-  {
-    title: '广告活动',
-    dataIndex: 'campaignName',
-    key: 'campaignName',
-    width: 150
-  },
-  {
-    title: '点击次数',
-    dataIndex: 'clicks',
-    key: 'clicks',
-    width: 100,
-    align: 'right' as const
-  },
-  {
-    title: '平均CPC',
-    dataIndex: 'avgCpc',
-    key: 'avgCpc',
-    width: 100,
-    align: 'right' as const
-  },
-  {
-    title: '备注',
-    dataIndex: 'remark',
-    key: 'remark',
-    width: 200,
-    ellipsis: true
   },
   {
     title: '创建时间',
@@ -302,6 +313,18 @@ const pagination = reactive({
   showTotal: (total: number) => `共 ${total} 条`
 })
 
+// 明细表格列
+const itemColumns = [
+  { title: '序号', key: 'index', width: 60 },
+  { title: '广告活动', dataIndex: 'campaignName', key: 'campaignName', width: 150 },
+  { title: '活动ID', dataIndex: 'campaignId', key: 'campaignId', width: 180 },
+  { title: '计价方式', dataIndex: 'pricingModel', key: 'pricingModel', width: 80 },
+  { title: '点击', dataIndex: 'clicks', key: 'clicks', width: 80, align: 'right' as const },
+  { title: '平均CPC', dataIndex: 'avgCpc', key: 'avgCpc', width: 90, align: 'right' as const },
+  { title: '费用', key: 'cost', width: 100, align: 'right' as const },
+  { title: '费用(CNY)', key: 'amountCny', width: 110, align: 'right' as const }
+]
+
 // 行选择配置
 const rowSelection = computed<TableRowSelection>(() => ({
   selectedRowKeys: selectedRowKeys.value,
@@ -311,9 +334,18 @@ const rowSelection = computed<TableRowSelection>(() => ({
 }))
 
 // ============= 弹窗相关 =============
-// 列表数据为批量导入的发票数据，使用广告费录入页面进行录入
-function handleAdd() {
-  router.push({ name: 'AdvertisingAdd' })
+const detailModalVisible = ref(false)
+const detailData = ref<AdvertisingBill | null>(null)
+
+function handleViewDetail(record: AdvertisingBill) {
+  getAdvertisingById(record.id).then(res => {
+    detailData.value = res.data
+    detailModalVisible.value = true
+  }).catch(() => message.error('获取详情失败'))
+}
+
+function handleGoToDetailView() {
+  router.push({ name: 'AdvertisingDetail' })
 }
 
 function handleImport() {
@@ -372,7 +404,7 @@ function handleTableChange(pag: TablePaginationConfig) {
   fetchData()
 }
 
-async function handleDelete(record: AdvertisingData) {
+async function handleDelete(record: AdvertisingBill) {
   try {
     // Admin 用户使用物理删除，普通用户使用逻辑删除
     if (authStore.isAdmin) {

@@ -264,6 +264,15 @@ export const routes: RouteRecordRaw[] = [
               title: '数据列表',
               permission: 'advertising:list'
             }
+          },
+          {
+            path: 'detail',
+            name: 'AdvertisingDetail',
+            component: () => import('@/views/advertising/detail/index.vue'),
+            meta: {
+              title: '活动明细',
+              permission: 'advertising:list'
+            }
           }
         ]
       },

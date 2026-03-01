@@ -1,6 +1,7 @@
 package com.musheng.system.service.impl;
 
-import com.musheng.business.advertising.mapper.AdvertisingDataMapper;
+import com.musheng.business.advertising.mapper.AdvertisingBillItemMapper;
+import com.musheng.business.advertising.mapper.AdvertisingBillMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
 import com.musheng.business.sales.mapper.SalesDataMapper;
 import com.musheng.business.shipping.mapper.ShippingDataMapper;
@@ -32,7 +33,9 @@ public class AdminDataDeletionServiceImpl implements AdminDataDeletionService {
     private FbaShipmentMapper fbaShipmentMapper;
     
     @Autowired
-    private AdvertisingDataMapper advertisingDataMapper;
+    private AdvertisingBillMapper advertisingBillMapper;
+    @Autowired
+    private AdvertisingBillItemMapper advertisingBillItemMapper;
 
     /**
      * 批量物理删除销售数据
@@ -126,7 +129,8 @@ public class AdminDataDeletionServiceImpl implements AdminDataDeletionService {
         log.info("开始批量物理删除广告数据, ids={}", ids);
         
         try {
-            int deletedCount = advertisingDataMapper.physicalDeleteByIds(ids);
+            advertisingBillItemMapper.deleteByBillIds(ids);
+            int deletedCount = advertisingBillMapper.physicalDeleteByIds(ids);
             log.info("批量物理删除广告数据成功, 删除数量={}", deletedCount);
         } catch (Exception e) {
             log.error("批量物理删除广告数据失败, ids={}", ids, e);

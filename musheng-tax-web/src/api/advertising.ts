@@ -6,7 +6,8 @@
 import { request } from '@/utils/request'
 import type { PageResult } from '@/types/api'
 import type {
-  AdvertisingData,
+  AdvertisingBill,
+  AdvertisingBillItem,
   AdvertisingDataQuery,
   AdvertisingDataForm,
   AdvertisingSummary,
@@ -19,35 +20,34 @@ import type {
 const BASE_URL = '/api/v1/advertising'
 
 /**
- * 获取广告数据列表
+ * 获取广告发票列表
  */
 export function getAdvertisingList(params: AdvertisingDataQuery) {
-  return request.get<PageResult<AdvertisingData>>(BASE_URL, params)
+  return request.get<PageResult<AdvertisingBill>>(BASE_URL, params)
 }
 
 /**
- * 根据ID获取广告数据详情
+ * 根据ID获取广告发票详情（含明细）
  */
 export function getAdvertisingById(id: number) {
-  return request.get<AdvertisingData>(`${BASE_URL}/${id}`)
+  return request.get<AdvertisingBill>(`${BASE_URL}/${id}`)
 }
 
 /**
- * 创建广告数据
+ * 获取广告活动明细列表（全局视图）
  */
-export function createAdvertising(data: AdvertisingDataForm) {
-  return request.post<AdvertisingData>(BASE_URL, data)
+export function getAdvertisingItemList(params: {
+  invoiceNumber?: string
+  campaignId?: string
+  campaignName?: string
+  page?: number
+  size?: number
+}) {
+  return request.get<PageResult<AdvertisingBillItem>>(`${BASE_URL}/items`, params)
 }
 
 /**
- * 更新广告数据
- */
-export function updateAdvertising(id: number, data: AdvertisingDataForm) {
-  return request.put<AdvertisingData>(`${BASE_URL}/${id}`, data)
-}
-
-/**
- * 删除广告数据
+ * 删除广告发票（级联删除明细）
  */
 export function deleteAdvertising(id: number) {
   return request.delete<void>(`${BASE_URL}/${id}`)
@@ -113,9 +113,13 @@ export function importAdvertisingData(data: AdvertisingImportBatchRequest) {
 }
 
 /**
- * 按条件查询广告数据
- * 支持按账单周期、发票编号等条件查询
+ * 按条件查询广告发票
  */
 export function searchAdvertisingData(params: AdvertisingSearchQuery) {
-  return request.get<PageResult<AdvertisingData>>(`${BASE_URL}/search`, params)
+  const { current, size, ...rest } = params as Record<string, unknown>
+  return request.get<PageResult<AdvertisingBill>>(`${BASE_URL}/search`, {
+    ...rest,
+    page: current ?? 1,
+    size: size ?? 20
+  } as Record<string, unknown>)
 }

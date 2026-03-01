@@ -1,6 +1,6 @@
 package com.musheng.business.common.service.impl;
 
-import com.musheng.business.advertising.entity.AdvertisingData;
+import com.musheng.business.advertising.entity.AdvertisingBillItem;
 import com.musheng.business.rate.entity.ExchangeRate;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.business.shipping.entity.ShippingData;
@@ -31,7 +31,7 @@ public class EntityFieldScannerImpl implements EntityFieldScanner {
     private static final Map<String, Class<?>> DATA_TYPE_ENTITY_MAP = Map.of(
             "SALES", SalesData.class,
             "SHIPPING", ShippingData.class,
-            "ADVERTISING", AdvertisingData.class,
+            "ADVERTISING", AdvertisingBillItem.class,
             "RATE", ExchangeRate.class
     );
 
