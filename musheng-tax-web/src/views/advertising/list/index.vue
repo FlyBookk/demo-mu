@@ -51,7 +51,7 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :span="5">
+          <a-col :span="9">
             <a-form-item>
               <a-space>
                 <a-button type="primary" @click="handleSearch">
@@ -63,7 +63,9 @@
               </a-space>
             </a-form-item>
           </a-col>
-          <a-col :span="4" style="text-align: right">
+        </a-row>
+        <a-row :gutter="16" style="width: 100%; margin-top: 8px">
+          <a-col :span="24" style="text-align: right">
             <a-space>
               <a-button @click="handleGoToDetailView">
                 <UnorderedListOutlined /> 活动明细视图
@@ -113,7 +115,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 1200 }"
+        :scroll="{ x: 1420 }"
         row-key="id"
         @change="handleTableChange"
       >
@@ -131,6 +133,16 @@
           <!-- 费用合计 -->
           <template v-else-if="column.key === 'totalCost'">
             <span class="amount">{{ formatAmount(record.totalCost, record.currency) }}</span>
+          </template>
+
+          <!-- 汇率（由 totalCostCny/totalCost 推算，与发票开具日期一致） -->
+          <template v-else-if="column.key === 'exchangeRate'">
+            <span>{{ formatExchangeRate(record) }}</span>
+          </template>
+
+          <!-- 汇率取值日期（使用发票开具日期） -->
+          <template v-else-if="column.key === 'exchangeRateDate'">
+            <span>{{ record.issueDate || '-' }}</span>
           </template>
 
           <!-- 操作 -->
@@ -235,6 +247,13 @@ function formatAmount(amount: number | null | undefined, currency: string): stri
   return `${currency || ''} ${value.toFixed(2)}`
 }
 
+function formatExchangeRate(record: AdvertisingBill): string {
+  const total = record.totalCost ?? 0
+  const cny = record.totalCostCny ?? 0
+  if (total <= 0) return '-'
+  return (cny / total).toFixed(6)
+}
+
 // ============= 搜索相关 =============
 const searchForm = reactive({
   siteCode: undefined as string | undefined,
@@ -312,6 +331,17 @@ const columns = [
     key: 'totalCostCny',
     width: 120,
     align: 'right' as const
+  },
+  {
+    title: '汇率',
+    key: 'exchangeRate',
+    width: 100,
+    align: 'right' as const
+  },
+  {
+    title: '汇率取值日期',
+    key: 'exchangeRateDate',
+    width: 120
   },
   {
     title: '币种',
