@@ -47,7 +47,7 @@
               <li>每个国家单独文件，系统将自动识别站点</li>
               <li>文件前7-8行为说明信息，系统会自动跳过</li>
               <li>每行是一笔订单的完整信息</li>
-              <li>需要选择站点和数据季度</li>
+              <li>需要选择站点</li>
             </ul>
           </template>
         </a-alert>
@@ -138,16 +138,6 @@
           <a-empty v-else description="暂无可用模板，请先创建字段映射模板" />
         </a-spin>
 
-        <!-- 季度选择 - 仅原始数据模式显示 -->
-        <a-form-item v-if="formState.sourceType === 'ORIGINAL'" label="数据季度" class="quarter-form">
-          <a-date-picker
-            v-model:value="formState.quarterDate"
-            picker="quarter"
-            placeholder="选择数据所属季度（可选）"
-            style="width: 200px"
-          />
-        </a-form-item>
-
         <!-- ERP模式提示 -->
         <a-alert
           v-if="formState.sourceType === 'ERP'"
@@ -157,7 +147,7 @@
         >
           <template #message>ERP数据导入说明</template>
           <template #description>
-            系统将自动从数据中识别站点，并根据结算时间计算所属季度，无需手动选择。
+            系统将自动从数据中识别站点，并根据结算时间计算所属季度。
           </template>
         </a-alert>
       </div>
@@ -251,12 +241,10 @@
         <a-spin :spinning="previewing">
           <div v-if="previewResult" class="preview-section">
             <!-- 导入配置概览 -->
-            <a-descriptions title="导入配置" :column="formState.sourceType === 'ERP' ? 2 : 4" size="small" bordered class="config-summary">
+            <a-descriptions title="导入配置" :column="formState.sourceType === 'ERP' ? 2 : 3" size="small" bordered class="config-summary">
               <a-descriptions-item v-if="formState.sourceType === 'ORIGINAL'" label="站点">{{ formState.siteCode }}</a-descriptions-item>
               <a-descriptions-item label="数据源">{{ getSourceTypeLabel() }}</a-descriptions-item>
               <a-descriptions-item label="模板">{{ getTemplateName() }}</a-descriptions-item>
-              <a-descriptions-item v-if="formState.sourceType === 'ORIGINAL'" label="季度">{{ formState.quarterDate?.format('YYYY-Q') || '未指定' }}</a-descriptions-item>
-              <a-descriptions-item v-if="formState.sourceType === 'ERP'" label="季度">根据结算时间自动计算</a-descriptions-item>
             </a-descriptions>
 
             <!-- 映射状态 -->
@@ -392,7 +380,6 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
 import {
   RightOutlined,
   LeftOutlined,
@@ -490,12 +477,10 @@ const formState = reactive<{
   siteCode: string
   sourceType: SalesSourceType | null
   templateId: number | null
-  quarterDate: Dayjs | null
 }>({
   siteCode: '',
   sourceType: null,
-  templateId: null,
-  quarterDate: null
+  templateId: null
 })
 
 // ============= 模板相关 =============
@@ -546,7 +531,6 @@ function handleSourceTypeChange(type: SalesSourceType) {
   // 清空站点（ERP模式不需要手动选择站点）
   if (type === 'ERP') {
     formState.siteCode = ''
-    formState.quarterDate = null
   }
 }
 
@@ -658,11 +642,6 @@ const handleUpload: UploadProps['customRequest'] = async (options) => {
     uploadResult.value = res.data
     onSuccess?.(res.data)
     message.success('文件上传并解析成功')
-    
-    // 如果检测到站点，更新表单（仅原始数据模式）
-    if (res.data.detectedSiteCode && formState.sourceType === 'ORIGINAL') {
-      formState.siteCode = res.data.detectedSiteCode
-    }
   } catch (error: any) {
     onError?.(error)
     message.error('文件上传失败: ' + (error.message || '未知错误'))
@@ -677,14 +656,23 @@ async function handlePreview() {
     return
   }
 
+  // 原始数据模式：校验模板站点与识别站点一致
+  if (formState.sourceType === 'ORIGINAL') {
+    const selectedTemplate = templateOptions.value.find(t => t.id === formState.templateId)
+    const detectedSite = uploadResult.value.detectedSiteCode
+    if (selectedTemplate?.siteCode && detectedSite && selectedTemplate.siteCode.toUpperCase() !== detectedSite.toUpperCase()) {
+      message.error(`所选模板站点(${selectedTemplate.siteCode})与文件中识别到的站点(${detectedSite})不一致，请选择正确的模板或上传对应站点的数据文件`)
+      return
+    }
+  }
+
   previewing.value = true
   try {
     const res = await previewSalesImport({
       fileId: uploadResult.value.fileId,
       sourceType: formState.sourceType!,
       siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
-      templateId: formState.templateId,
-      quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q')
+      templateId: formState.templateId
     })
     previewResult.value = res.data
     goToStep(getPreviewStep())
@@ -700,6 +688,16 @@ function handleExecuteImport() {
   if (!uploadResult.value || !formState.templateId) {
     message.warning('请先完成上传和配置')
     return
+  }
+
+  // 原始数据模式：校验模板站点与识别站点一致
+  if (formState.sourceType === 'ORIGINAL') {
+    const selectedTemplate = templateOptions.value.find(t => t.id === formState.templateId)
+    const detectedSite = uploadResult.value.detectedSiteCode
+    if (selectedTemplate?.siteCode && detectedSite && selectedTemplate.siteCode.toUpperCase() !== detectedSite.toUpperCase()) {
+      message.error(`所选模板站点(${selectedTemplate.siteCode})与文件中识别到的站点(${detectedSite})不一致，请选择正确的模板或上传对应站点的数据文件`)
+      return
+    }
   }
   
   // 弹出确认窗口
@@ -717,7 +715,6 @@ async function doExecuteImport() {
       sourceType: formState.sourceType!,
       siteCode: formState.sourceType === 'ERP' ? undefined : formState.siteCode,
       templateId: formState.templateId!,
-      quarter: formState.sourceType === 'ERP' ? undefined : formState.quarterDate?.format('YYYY-Q'),
       skipDuplicate: importOptions.skipDuplicate
     })
     importResult.value = res.data
@@ -782,7 +779,6 @@ function handleImportAgain() {
   formState.siteCode = ''
   formState.sourceType = null
   formState.templateId = null
-  formState.quarterDate = null
   fileList.value = []
   uploadResult.value = null
   previewResult.value = null
@@ -987,11 +983,6 @@ onMounted(() => {
         color: #1890ff;
       }
     }
-  }
-
-  .quarter-form {
-    margin-top: 24px;
-    max-width: 400px;
   }
 
   .erp-auto-tip {

@@ -31,9 +31,6 @@ public class SalesImportRequest {
     @NotNull(message = "模板ID不能为空")
     private Long templateId;
     
-    @Schema(description = "数据所属季度", example = "2025-Q3")
-    private String quarter;
-    
     @Schema(description = "是否跳过重复数据", defaultValue = "true")
     private Boolean skipDuplicate = true;
     

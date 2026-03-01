@@ -136,9 +136,8 @@ export interface SalesUploadResult {
 export interface SalesPreviewParams {
   fileId: string
   sourceType: SalesSourceType
-  siteCode: string
+  siteCode?: string
   templateId: number
-  quarter?: string
 }
 
 /**
@@ -178,9 +177,8 @@ export interface SalesPreviewResult {
 export interface SalesDualImportParams {
   fileId: string
   sourceType: SalesSourceType
-  siteCode: string
+  siteCode?: string
   templateId: number
-  quarter?: string
   skipDuplicate?: boolean
   overwriteDuplicate?: boolean
 }

@@ -76,11 +76,6 @@ public class ParseContext {
     private Map<String, String> erpAggregateMapping;
     
     /**
-     * 数据所属季度
-     */
-    private String quarter;
-    
-    /**
      * 是否跳过重复数据
      */
     private Boolean skipDuplicate;
