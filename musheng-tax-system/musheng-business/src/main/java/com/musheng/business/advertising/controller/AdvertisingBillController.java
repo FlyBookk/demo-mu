@@ -3,6 +3,7 @@ package com.musheng.business.advertising.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.advertising.dto.AdvertisingDataImportBatchRequest;
 import com.musheng.business.advertising.dto.AdvertisingDataImportResponse;
+import com.musheng.business.advertising.dto.AdvertisingSummaryDTO;
 import com.musheng.business.advertising.entity.AdvertisingBill;
 import com.musheng.business.advertising.entity.AdvertisingBillItem;
 import com.musheng.business.advertising.service.AdvertisingBillService;
@@ -65,6 +66,16 @@ public class AdvertisingBillController {
         Page<AdvertisingBill> pageResult = advertisingBillService.list(siteCode, start, end, null, page, size);
         return Result.success(PageResult.of(pageResult.getRecords(), pageResult.getTotal(),
                 (int) pageResult.getCurrent(), (int) pageResult.getSize()));
+    }
+
+    @Operation(summary = "汇总统计", description = "按当前筛选条件汇总发票数、活动数、费用")
+    @GetMapping("/summary")
+    public Result<AdvertisingSummaryDTO> getSummary(
+            @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
+            @Parameter(description = "账单开始日期") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate billingStartDate,
+            @Parameter(description = "账单结束日期") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate billingEndDate,
+            @Parameter(description = "发票编号") @RequestParam(required = false) String invoiceNumber) {
+        return Result.success(advertisingBillService.getSummary(siteCode, billingStartDate, billingEndDate, invoiceNumber));
     }
 
     @Operation(summary = "按条件查询", description = "支持账单周期、发票编号")

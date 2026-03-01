@@ -136,3 +136,11 @@ export interface AdvertisingSearchQuery {
   current?: number
   size?: number
 }
+
+// 广告数据汇总（列表页统计）
+export interface AdvertisingSummary {
+  invoiceCount: number
+  itemCount: number
+  totalCost: number
+  totalCostCny: number
+}

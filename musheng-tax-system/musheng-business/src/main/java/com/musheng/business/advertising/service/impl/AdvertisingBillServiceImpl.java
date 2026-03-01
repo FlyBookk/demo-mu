@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.advertising.dto.AdvertisingDataImportBatchRequest;
 import com.musheng.business.advertising.dto.AdvertisingDataImportRequest;
 import com.musheng.business.advertising.dto.AdvertisingDataImportResponse;
+import com.musheng.business.advertising.dto.AdvertisingSummaryDTO;
 import com.musheng.business.advertising.entity.AdvertisingBill;
 import com.musheng.business.advertising.entity.AdvertisingBillItem;
 import com.musheng.business.advertising.mapper.AdvertisingBillItemMapper;
@@ -170,6 +171,42 @@ public class AdvertisingBillServiceImpl implements AdvertisingBillService {
         if (ids == null || ids.isEmpty()) return;
         advertisingBillItemMapper.deleteByBillIds(ids);
         advertisingBillMapper.deleteBatchIds(ids);
+    }
+
+    @Override
+    public AdvertisingSummaryDTO getSummary(String siteCode, LocalDate billingStartDate, LocalDate billingEndDate,
+                                            String invoiceNumber) {
+        LambdaQueryWrapper<AdvertisingBill> wrapper = new LambdaQueryWrapper<>();
+        Long shopId = ShopContext.requireShopId();
+        wrapper.eq(AdvertisingBill::getShopId, shopId);
+        if (StringUtils.hasText(siteCode)) wrapper.eq(AdvertisingBill::getSiteCode, siteCode);
+        if (billingStartDate != null) wrapper.ge(AdvertisingBill::getBillingStartDate, billingStartDate);
+        if (billingEndDate != null) wrapper.le(AdvertisingBill::getBillingEndDate, billingEndDate);
+        if (StringUtils.hasText(invoiceNumber)) wrapper.like(AdvertisingBill::getInvoiceNumber, invoiceNumber);
+
+        List<AdvertisingBill> bills = advertisingBillMapper.selectList(wrapper);
+        long invoiceCount = bills.size();
+        BigDecimal totalCost = bills.stream()
+                .map(AdvertisingBill::getTotalCost)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCostCny = bills.stream()
+                .map(AdvertisingBill::getTotalCostCny)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Long> billIds = bills.stream().map(AdvertisingBill::getId).collect(Collectors.toList());
+        long itemCount = 0;
+        if (!billIds.isEmpty()) {
+            LambdaQueryWrapper<AdvertisingBillItem> itemWrapper = new LambdaQueryWrapper<>();
+            itemWrapper.in(AdvertisingBillItem::getBillId, billIds);
+            itemCount = advertisingBillItemMapper.selectCount(itemWrapper);
+        }
+        return AdvertisingSummaryDTO.builder()
+                .invoiceCount(invoiceCount)
+                .itemCount(itemCount)
+                .totalCost(totalCost.setScale(2, RoundingMode.HALF_UP))
+                .totalCostCny(totalCostCny.setScale(2, RoundingMode.HALF_UP))
+                .build();
     }
 
     @Override

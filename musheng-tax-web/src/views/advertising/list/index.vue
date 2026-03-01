@@ -84,6 +84,27 @@
       </a-form>
     </a-card>
 
+    <!-- 统计汇总 -->
+    <a-row :gutter="16" class="stat-row">
+      <a-col :flex="1">
+        <a-card class="stat-card" size="small">
+          <a-statistic title="发票数量" :value="summary.invoiceCount" :value-style="{ color: '#1890ff' }" />
+        </a-card>
+      </a-col>
+      <a-col :flex="1">
+        <a-card class="stat-card" size="small">
+          <a-statistic title="活动明细" :value="summary.itemCount" :value-style="{ color: '#722ed1' }" />
+        </a-card>
+      </a-col>
+      <a-col :flex="1">
+        <a-card class="stat-card" size="small">
+          <a-statistic title="费用合计(CNY)" :value="summary.totalCostCny" :precision="2" :value-style="{ color: '#52c41a' }">
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+    </a-row>
+
     <!-- 数据表格 -->
     <a-card class="table-card">
       <a-table
@@ -199,10 +220,11 @@ import {
   deleteAdvertising,
   batchDeleteAdvertising,
   batchPhysicalDeleteAdvertising,
-  searchAdvertisingData
+  searchAdvertisingData,
+  getAdvertisingSummary
 } from '@/api/advertising'
 import { getEnabledMarketplaces } from '@/api/marketplace'
-import type { AdvertisingBill } from '@/types/advertising'
+import type { AdvertisingBill, AdvertisingSummary } from '@/types/advertising'
 import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
@@ -225,6 +247,14 @@ const marketplaceOptions = ref<Marketplace[]>([])
 const loading = ref(false)
 const tableData = ref<AdvertisingBill[]>([])
 const selectedRowKeys = ref<number[]>([])
+
+// ============= 统计汇总 =============
+const summary = reactive<AdvertisingSummary>({
+  invoiceCount: 0,
+  itemCount: 0,
+  totalCost: 0,
+  totalCostCny: 0
+})
 
 const columns = [
   {
@@ -361,23 +391,38 @@ async function fetchMarketplaces() {
   }
 }
 
+const summaryParams = () => {
+  const [startDate, endDate] = searchForm.billingPeriod || []
+  return {
+    siteCode: searchForm.siteCode,
+    billingStartDate: startDate?.format('YYYY-MM-DD'),
+    billingEndDate: endDate?.format('YYYY-MM-DD'),
+    invoiceNumber: searchForm.invoiceNumber
+  }
+}
+
 async function fetchData() {
   loading.value = true
   try {
-    const [startDate, endDate] = searchForm.billingPeriod || []
-
     const params = {
-      siteCode: searchForm.siteCode,
-      billingStartDate: startDate?.format('YYYY-MM-DD'),
-      billingEndDate: endDate?.format('YYYY-MM-DD'),
-      invoiceNumber: searchForm.invoiceNumber,
+      ...summaryParams(),
       current: pagination.current,
       size: pagination.pageSize
     }
-    const res = await searchAdvertisingData(params)
-    const pageData = res.data
+    const [listRes, summaryRes] = await Promise.all([
+      searchAdvertisingData(params),
+      getAdvertisingSummary(summaryParams())
+    ])
+    const pageData = listRes.data
     tableData.value = pageData?.records || []
     pagination.total = pageData?.total || 0
+    const s = summaryRes.data
+    Object.assign(summary, {
+      invoiceCount: s?.invoiceCount ?? 0,
+      itemCount: s?.itemCount ?? 0,
+      totalCost: s?.totalCost ?? 0,
+      totalCostCny: s?.totalCostCny ?? 0
+    })
   } catch (error) {
     console.error('获取广告数据列表失败:', error)
   } finally {
@@ -475,6 +520,14 @@ onMounted(() => {
 
   .search-card {
     margin-bottom: $spacing-md;
+  }
+
+  .stat-row {
+    margin-bottom: $spacing-md;
+
+    .stat-card {
+      text-align: center;
+    }
   }
 
   .amount {

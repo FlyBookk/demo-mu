@@ -50,4 +50,11 @@ public interface AdvertisingBillService {
      * 下载导入模板（Excel，含表头与示例行）
      */
     void downloadTemplate(jakarta.servlet.http.HttpServletResponse response);
+
+    /**
+     * 汇总统计（按当前筛选条件）
+     */
+    com.musheng.business.advertising.dto.AdvertisingSummaryDTO getSummary(
+            String siteCode, java.time.LocalDate billingStartDate, java.time.LocalDate billingEndDate,
+            String invoiceNumber);
 }

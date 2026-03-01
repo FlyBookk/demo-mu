@@ -75,9 +75,14 @@ export function deleteAdvertisingByBatch(batchNo: string) {
 }
 
 /**
- * 获取广告数据汇总
+ * 获取广告数据汇总（与搜索条件一致）
  */
-export function getAdvertisingSummary(params: AdvertisingDataQuery) {
+export function getAdvertisingSummary(params: {
+  siteCode?: string
+  billingStartDate?: string
+  billingEndDate?: string
+  invoiceNumber?: string
+}) {
   return request.get<AdvertisingSummary>(`${BASE_URL}/summary`, params)
 }
 
