@@ -438,8 +438,28 @@ public class TaxReportServiceImpl implements TaxReportService {
             }
         }
 
-        log.info("Tax summary calculation completed in {}ms", System.currentTimeMillis() - startTime);
+        // 过滤掉无数据的站点+季度（收入、退款、佣金等均为0的不展示）
+        results = results.stream()
+                .filter(TaxReportServiceImpl::hasAnyTaxData)
+                .collect(Collectors.toList());
+
+        log.info("Tax summary calculation completed in {}ms, filtered to {} rows with data",
+                System.currentTimeMillis() - startTime, results.size());
         return results;
+    }
+
+    /** 判断站点+季度是否有有效数据（任一核心字段非零则展示） */
+    private static boolean hasAnyTaxData(TaxReportSummary s) {
+        return isNonZero(s.getTotalRevenueCny()) || isNonZero(s.getTotalRevenue())
+                || (s.getRefundCountBySettlementAmazon() != null && s.getRefundCountBySettlementAmazon() > 0)
+                || isNonZero(s.getRefundBySettlementAmazonCny())
+                || isNonZero(s.getTotalCommissionFeeCny()) || isNonZero(s.getConsumptionTaxCny())
+                || isNonZero(s.getAdvertisingCostCny()) || isNonZero(s.getPlatformExpensesCny())
+                || isNonZero(s.getProfit4PercentCny());
+    }
+
+    private static boolean isNonZero(BigDecimal b) {
+        return b != null && b.compareTo(BigDecimal.ZERO) != 0;
     }
 
     /**
