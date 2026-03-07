@@ -1,6 +1,7 @@
 package com.musheng.business.document.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.musheng.business.common.config.DocumentPartyProperties;
 import com.musheng.business.document.dto.DnGenerateRequest;
 import com.musheng.business.document.dto.PoGenerateRequest;
 import com.musheng.business.document.dto.SettlementGenerateRequest;
@@ -12,6 +13,10 @@ import com.musheng.business.fbashipment.entity.FbaShipment;
 import com.musheng.business.fbashipment.entity.FbaShipmentItem;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
+import com.musheng.business.sales.entity.SalesData;
+import com.musheng.business.sales.mapper.SalesDataMapper;
+import com.musheng.business.shipping.entity.ShippingData;
+import com.musheng.business.shipping.mapper.ShippingDataMapper;
 import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -69,6 +74,15 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
     @Autowired
     private SettlementImportDataMapper settlementImportDataMapper;
+
+    @Autowired
+    private SalesDataMapper salesDataMapper;
+
+    @Autowired
+    private ShippingDataMapper shippingDataMapper;
+
+    @Autowired
+    private DocumentPartyProperties documentPartyProperties;
 
     /**
      * 根据选定的FBA货件生成PO采购订单
@@ -287,7 +301,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         }
 
         // 调用INV生成器
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1);
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, documentPartyProperties);
 
         // 持久化所有INV
         Long shopId = ShopContext.requireShopId();
@@ -376,47 +390,140 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     }
 
     /**
-     * 根据结算单生成请求查询导入的结算数据并构建 SettlementInput
+     * 根据结算单生成请求，通过配送数据日期范围关联销售数据，构建 SettlementInput
      *
-     * <p>从 t_settlement_import_data 按周期查询结算数据，
-     * 并根据选中货件的 MSKU 列表过滤，仅保留当前 PO/DN 涉及的 MSKU。</p>
+     * <p>新逻辑：
+     * 1. 根据货件ID查询配送数据（t_shipping_data），获取 ship_date 范围
+     * 2. 在该日期范围内查询销售数据（t_sales_data），通过 orderId 关联
+     * 3. 排除退款订单（transactionCategory = 'refund'），统计净销量
+     * 4. 从 t_settlement_import_data 查询对应 MSKU 的单价
+     * 5. 组合为 SettlementInput 传给生成器</p>
      *
      * @param request 结算单生成请求（包含周期和货件ID列表）
      * @return SettlementInput 结算数据输入
      * @author wanhua
-     * 10:30 2026年03月01日
+     * 10:30 2026年03月07日
      */
     private SettlementInput buildSettlementInput(SettlementGenerateRequest request) {
         Long shopId = ShopContext.requireShopId();
 
-        // 根据货件ID查询涉及的 MSKU 列表
-        List<String> shipmentMskus = List.of();
+        // 1. 根据货件ID查询配送数据，获取 orderId 集合和日期范围
+        List<ShippingData> shippingList = List.of();
         if (!CollectionUtils.isEmpty(request.getShipmentIds())) {
+            // 查询货件对应的 FbaShipmentItem，获取 MSKU 列表
             LambdaQueryWrapper<FbaShipmentItem> mskuWrapper = new LambdaQueryWrapper<>();
             mskuWrapper.in(FbaShipmentItem::getShipmentId, request.getShipmentIds());
             List<FbaShipmentItem> shipmentItems = fbaShipmentItemMapper.selectList(mskuWrapper);
-            shipmentMskus = shipmentItems.stream()
+            List<String> shipmentMskus = shipmentItems.stream()
                     .map(FbaShipmentItem::getMsku)
                     .distinct()
                     .collect(Collectors.toList());
             log.info("选中货件涉及 {} 个MSKU", shipmentMskus.size());
+
+            // 查询配送数据（按周期范围）
+            LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
+            shippingWrapper.eq(ShippingData::getShopId, shopId)
+                    .ge(ShippingData::getShipDate, request.getPeriodStart())
+                    .le(ShippingData::getShipDate, request.getPeriodEnd());
+            shippingList = shippingDataMapper.selectList(shippingWrapper);
+            log.info("查询到配送数据 {} 条，周期: {} ~ {}",
+                    shippingList.size(), request.getPeriodStart(), request.getPeriodEnd());
+
+            if (CollectionUtils.isEmpty(shippingList)) {
+                log.warn("周期内无配送数据，无法关联销售数据");
+                return SettlementInput.builder()
+                        .periodStart(request.getPeriodStart())
+                        .periodEnd(request.getPeriodEnd())
+                        .items(List.of())
+                        .build();
+            }
+
+            // 2. 收集 orderId，关联查询销售数据（排除退款）
+            Set<String> orderIds = shippingList.stream()
+                    .map(ShippingData::getOrderId)
+                    .filter(id -> id != null && !id.isEmpty())
+                    .collect(Collectors.toSet());
+
+            LambdaQueryWrapper<SalesData> salesWrapper = new LambdaQueryWrapper<>();
+            salesWrapper.eq(SalesData::getShopId, shopId)
+                    .in(SalesData::getOrderId, orderIds)
+                    .ne(SalesData::getTransactionCategory, "refund");
+            List<SalesData> salesList = salesDataMapper.selectList(salesWrapper);
+            log.info("关联查询到销售数据 {} 条（已排除退款）", salesList.size());
+
+            // 3. 按站点+MSKU 统计净销量（income 累加，其他跳过）
+            // key: siteCode, value: (msku -> 净销量)
+            Map<String, Map<String, Integer>> netSalesMap = new HashMap<>();
+            for (SalesData sales : salesList) {
+                if (!"income".equals(sales.getTransactionCategory())) {
+                    continue;
+                }
+                String siteCode = sales.getSiteCode();
+                String sku = sales.getSku();
+                int qty = sales.getQuantity() != null ? sales.getQuantity() : 0;
+                netSalesMap.computeIfAbsent(siteCode, k -> new HashMap<>())
+                        .merge(sku, qty, Integer::sum);
+            }
+
+            // 4. 从 t_settlement_import_data 查询 MSKU 单价（按货件MSKU过滤）
+            LambdaQueryWrapper<SettlementImportData> priceWrapper = new LambdaQueryWrapper<>();
+            priceWrapper.eq(SettlementImportData::getShopId, shopId)
+                    .eq(SettlementImportData::getDelFlag, 0)
+                    .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
+                    .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart());
+            if (!CollectionUtils.isEmpty(shipmentMskus)) {
+                priceWrapper.in(SettlementImportData::getMsku, shipmentMskus);
+            }
+            List<SettlementImportData> priceList = settlementImportDataMapper.selectList(priceWrapper);
+
+            // 构建 MSKU → 单价映射（同一MSKU取第一条）
+            Map<String, SettlementImportData> mskuPriceMap = new LinkedHashMap<>();
+            for (SettlementImportData data : priceList) {
+                mskuPriceMap.putIfAbsent(data.getMsku(), data);
+            }
+            log.info("查询到结算导入数据 {} 条（用于单价）", priceList.size());
+
+            // 5. 组合：用销售净销量 + 推导单价 构建 SettlementDataItem
+            List<SettlementInput.SettlementDataItem> items = new ArrayList<>();
+            for (Map.Entry<String, Map<String, Integer>> siteEntry : netSalesMap.entrySet()) {
+                String siteCode = siteEntry.getKey();
+                for (Map.Entry<String, Integer> mskuEntry : siteEntry.getValue().entrySet()) {
+                    String msku = mskuEntry.getKey();
+                    int quantity = mskuEntry.getValue();
+                    SettlementImportData priceData = mskuPriceMap.get(msku);
+                    if (priceData == null) {
+                        log.warn("MSKU {} 在结算导入数据中未找到单价，跳过", msku);
+                        continue;
+                    }
+                    items.add(SettlementInput.SettlementDataItem.builder()
+                            .siteCode(siteCode)
+                            .msku(msku)
+                            .currency(priceData.getCurrency())
+                            .unitPrice(priceData.getUnitPrice())
+                            .quantity(quantity)
+                            .build());
+                }
+            }
+
+            log.info("构建 SettlementInput 完成，共 {} 条明细", items.size());
+            return SettlementInput.builder()
+                    .periodStart(request.getPeriodStart())
+                    .periodEnd(request.getPeriodEnd())
+                    .items(items)
+                    .build();
         }
 
-        // 按结算周期范围查询导入的结算数据（仅查未删除数据，按店铺隔离）
-        LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SettlementImportData::getShopId, shopId);
-        queryWrapper.eq(SettlementImportData::getDelFlag, 0);
-        queryWrapper.le(SettlementImportData::getPeriodStart, request.getPeriodEnd());
-        queryWrapper.ge(SettlementImportData::getPeriodEnd, request.getPeriodStart());
-        // 按货件 MSKU 过滤，仅保留当前 PO/DN 涉及的数据
-        if (!CollectionUtils.isEmpty(shipmentMskus)) {
-            queryWrapper.in(SettlementImportData::getMsku, shipmentMskus);
-        }
-        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(queryWrapper);
+        // 无货件ID时，回退到原有逻辑（按周期全量查询）
+        log.warn("未指定货件ID，回退到全量结算数据查询");
+        LambdaQueryWrapper<SettlementImportData> fallbackWrapper = new LambdaQueryWrapper<>();
+        fallbackWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getDelFlag, 0)
+                .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
+                .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart());
+        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(fallbackWrapper);
 
         if (CollectionUtils.isEmpty(dataList)) {
-            log.warn("未查询到结算导入数据，周期: {} ~ {}，MSKU数: {}",
-                    request.getPeriodStart(), request.getPeriodEnd(), shipmentMskus.size());
+            log.warn("未查询到结算导入数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
             return SettlementInput.builder()
                     .periodStart(request.getPeriodStart())
                     .periodEnd(request.getPeriodEnd())
@@ -424,8 +531,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     .build();
         }
 
-        // 映射为 SettlementDataItem
-        List<SettlementInput.SettlementDataItem> items = dataList.stream()
+        List<SettlementInput.SettlementDataItem> fallbackItems = dataList.stream()
                 .map(data -> SettlementInput.SettlementDataItem.builder()
                         .siteCode(data.getSiteCode())
                         .msku(data.getMsku())
@@ -435,13 +541,10 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                         .build())
                 .collect(Collectors.toList());
 
-        log.info("查询到结算导入数据 {} 条，周期: {} ~ {}", items.size(),
-                request.getPeriodStart(), request.getPeriodEnd());
-
         return SettlementInput.builder()
                 .periodStart(request.getPeriodStart())
                 .periodEnd(request.getPeriodEnd())
-                .items(items)
+                .items(fallbackItems)
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package com.musheng.business.document.generator;
 
+import com.musheng.business.common.config.DocumentPartyProperties;
 import com.musheng.business.document.entity.DocumentInv;
 import com.musheng.business.document.entity.DocumentInvItem;
 import com.musheng.business.document.entity.DocumentSettlement;
@@ -149,7 +150,7 @@ class InvGeneratorProperties {
         List<SettlementGenerateResult> settlementResults = SettlementGenerator.generate(input, 1);
 
         // When - 基于结算单生成INV
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1);
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, createTestParty());
 
         // Then - INV数量应与结算单数量一致
         assertEquals(settlementResults.size(), invResults.size(),
@@ -204,7 +205,7 @@ class InvGeneratorProperties {
         List<SettlementGenerateResult> settlementResults = SettlementGenerator.generate(input, 1);
 
         // When - 基于结算单生成INV
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1);
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, createTestParty());
 
         // Then - 每份INV日期 = nextWorkingDay(结算日)
         for (int i = 0; i < settlementResults.size(); i++) {
@@ -244,7 +245,7 @@ class InvGeneratorProperties {
         List<SettlementGenerateResult> settlementResults = SettlementGenerator.generate(input, 1);
 
         // When - 基于结算单生成INV
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1);
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, createTestParty());
 
         // Then
         for (InvGenerateResult invResult : invResults) {
@@ -294,8 +295,8 @@ class InvGeneratorProperties {
         List<SettlementGenerateResult> settlementResults = SettlementGenerator.generate(input, 1);
 
         // When - 调用两次INV生成
-        List<InvGenerateResult> results1 = InvGenerator.generate(settlementResults, 1);
-        List<InvGenerateResult> results2 = InvGenerator.generate(settlementResults, 1);
+        List<InvGenerateResult> results1 = InvGenerator.generate(settlementResults, 1, createTestParty());
+        List<InvGenerateResult> results2 = InvGenerator.generate(settlementResults, 1, createTestParty());
 
         // Then - 输出应完全一致
         assertEquals(results1.size(), results2.size(),
@@ -338,5 +339,21 @@ class InvGeneratorProperties {
                         "第 " + (i + 1) + " 份INV第 " + (j + 1) + " 行金额不一致");
             }
         }
+    }
+
+    private DocumentPartyProperties createTestParty() {
+        DocumentPartyProperties party = new DocumentPartyProperties();
+        party.setSellerName("Hong Kong Andeo Group Limited");
+        party.setSellerAddress("Hong Kong");
+        party.setSellerPhone("00852-54682464");
+        party.setBuyerName("Dongguan Musheng Trade Co., Ltd.");
+        party.setBuyerAddress("Dongguan, Guangdong, China");
+        party.setBuyerPhone("18575382420");
+        party.setBankAccountName("Hong Kong Andeo Group Limited");
+        party.setBankAccountNumber("012-878-0-001234-5");
+        party.setBankName("Bank of China (Hong Kong) Limited");
+        party.setBankAddress("Bank of China Tower, 1 Garden Road, Central, Hong Kong");
+        party.setSwiftCode("BKCHHKHH");
+        return party;
     }
 }

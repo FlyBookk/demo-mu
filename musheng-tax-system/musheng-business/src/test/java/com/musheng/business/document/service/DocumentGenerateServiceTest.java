@@ -348,7 +348,7 @@ class DocumentGenerateServiceTest {
 
         // When
         try (MockedStatic<InvGenerator> mockedInvGen = mockStatic(InvGenerator.class)) {
-            mockedInvGen.when(() -> InvGenerator.generate(anyList(), anyInt()))
+            mockedInvGen.when(() -> InvGenerator.generate(anyList(), anyInt(), any()))
                     .thenReturn(mockInvResults);
 
             List<DocumentInv> results = documentGenerateService.generateInvoices(settlementIds);

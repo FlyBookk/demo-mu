@@ -122,6 +122,21 @@ app:
     purchase-ratio: 0.96
     rate-defer-max-days: 10
 
+  # 单据交易方信息配置（INV/结算单中的卖方/买方信息）
+  document:
+    party:
+      seller-name: "Hong Kong Andeo Group Limited"
+      seller-address: "ROOM 1201, 12/F TAI SANG BANK BUILDING 130-132 DES VOEUX ROAD, CENTRAL HONGKONG"
+      seller-phone: "00852-54682464"
+      buyer-name: "Dongguan Musheng Trade Co., Ltd."
+      buyer-address: "Room 606, Building 2, Humen Wanda Plaza, No. 82 Liansheng Road, Humen Town, Dongguan, Guangdong, China"
+      buyer-phone: "18575382420"
+      bank-account-name: "Hong Kong Andeo Group Limited"
+      bank-account-number: "012-878-0-001234-5"
+      bank-name: "Bank of China (Hong Kong) Limited"
+      bank-address: "Bank of China Tower, 1 Garden Road, Central, Hong Kong"
+      swift-code: "BKCHHKHH"
+
   # Import Configuration
   import:
     # 自动创建站点（当导入数据中的 siteCode 不存在时）

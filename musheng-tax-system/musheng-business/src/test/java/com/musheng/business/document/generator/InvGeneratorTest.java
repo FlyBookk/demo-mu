@@ -1,5 +1,6 @@
 package com.musheng.business.document.generator;
 
+import com.musheng.business.common.config.DocumentPartyProperties;
 import com.musheng.business.document.entity.DocumentInv;
 import com.musheng.business.document.entity.DocumentInvItem;
 import com.musheng.business.document.entity.DocumentSettlement;
@@ -44,7 +45,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             assertEquals(4, results.size());
@@ -65,7 +66,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             LocalDate expectedInvDate = WorkingDayCalculator.nextWorkingDay(LocalDate.of(2025, 9, 9));
@@ -80,7 +81,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 5));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             LocalDate expectedInvDate = WorkingDayCalculator.nextWorkingDay(LocalDate.of(2025, 9, 5));
@@ -102,7 +103,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then - 逐一比对每份INV与对应结算单的明细
             for (int i = 0; i < results.size(); i++) {
@@ -129,7 +130,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (int i = 0; i < results.size(); i++) {
@@ -155,7 +156,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (InvGenerateResult result : results) {
@@ -176,7 +177,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9), "001", "USD");
 
             // When - 起始序号为5
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 5);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 5, createTestParty());
 
             // Then
             assertTrue(results.get(0).getInv().getDocumentNo().endsWith("005"));
@@ -197,7 +198,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (InvGenerateResult result : results) {
@@ -214,7 +215,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (InvGenerateResult result : results) {
@@ -238,7 +239,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (InvGenerateResult result : results) {
@@ -271,7 +272,7 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             for (int i = 0; i < results.size(); i++) {
@@ -296,7 +297,7 @@ class InvGeneratorTest {
             List<SettlementGenerateResult> emptyList = List.of();
 
             // When
-            List<InvGenerateResult> results = InvGenerator.generate(emptyList, 1);
+            List<InvGenerateResult> results = InvGenerator.generate(emptyList, 1, createTestParty());
 
             // Then
             assertTrue(results.isEmpty());
@@ -306,7 +307,7 @@ class InvGeneratorTest {
         @DisplayName("null输入应抛出异常")
         void testGenerate_NullInput_ShouldThrowException() {
             assertThrows(IllegalArgumentException.class,
-                    () -> InvGenerator.generate(null, 1));
+                    () -> InvGenerator.generate(null, 1, createTestParty()));
         }
     }
 
@@ -324,8 +325,8 @@ class InvGeneratorTest {
                     LocalDate.of(2025, 9, 9));
 
             // When
-            List<InvGenerateResult> results1 = InvGenerator.generate(settlementResults, 1);
-            List<InvGenerateResult> results2 = InvGenerator.generate(settlementResults, 1);
+            List<InvGenerateResult> results1 = InvGenerator.generate(settlementResults, 1, createTestParty());
+            List<InvGenerateResult> results2 = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
             assertEquals(results1.size(), results2.size());
@@ -355,6 +356,25 @@ class InvGeneratorTest {
     }
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 创建测试用的交易方配置
+     */
+    private DocumentPartyProperties createTestParty() {
+        DocumentPartyProperties party = new DocumentPartyProperties();
+        party.setSellerName("Hong Kong Andeo Group Limited");
+        party.setSellerAddress("Hong Kong");
+        party.setSellerPhone("00852-54682464");
+        party.setBuyerName("Dongguan Musheng Trade Co., Ltd.");
+        party.setBuyerAddress("Dongguan, Guangdong, China");
+        party.setBuyerPhone("18575382420");
+        party.setBankAccountName("Hong Kong Andeo Group Limited");
+        party.setBankAccountNumber("012-878-0-001234-5");
+        party.setBankName("Bank of China (Hong Kong) Limited");
+        party.setBankAddress("Bank of China Tower, 1 Garden Road, Central, Hong Kong");
+        party.setSwiftCode("BKCHHKHH");
+        return party;
+    }
 
     /**
      * 创建4个站点的结算单结果（模拟 SettlementGenerator 的输出）
