@@ -244,6 +244,32 @@ export const request = {
       message.error('文件下载失败')
       throw error
     }
+  },
+
+  /**
+   * POST方式下载并保存文件（用于批量导出等需要传body的场景）
+   */
+  async downloadAndSavePost(url: string, filename: string, data?: any): Promise<void> {
+    try {
+      const response = await service.post(url, data, { responseType: 'blob' })
+      const disposition = response.headers?.['content-disposition'] as string | undefined
+      let downloadFilename = filename
+      if (disposition) {
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+        if (match?.[1]) {
+          downloadFilename = decodeURIComponent(match[1].trim())
+        }
+      }
+      const blob = new Blob([response.data])
+      const link = document.createElement('a')
+      link.href = window.URL.createObjectURL(blob)
+      link.download = downloadFilename
+      link.click()
+      window.URL.revokeObjectURL(link.href)
+    } catch (error) {
+      message.error('文件下载失败')
+      throw error
+    }
   }
 }
 

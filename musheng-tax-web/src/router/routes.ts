@@ -228,6 +228,56 @@ export const routes: RouteRecordRaw[] = [
         ]
       },
 
+      // ========== FBA单据管理 ==========
+      {
+        path: 'document',
+        name: 'Document',
+        redirect: '/document/list',
+        meta: {
+          title: 'FBA单据管理',
+          icon: 'FileTextOutlined'
+        },
+        children: [
+          {
+            path: 'list',
+            name: 'DocumentList',
+            component: () => import('@/views/document/list/index.vue'),
+            meta: {
+              title: '单据列表',
+              permission: 'document:list'
+            }
+          },
+          {
+            path: 'generate',
+            name: 'DocumentGenerate',
+            component: () => import('@/views/document/generate/index.vue'),
+            meta: {
+              title: '单据生成',
+              permission: 'document:generate'
+            }
+          },
+          // 结算推导：根据结算数据推导税务相关金额
+          {
+            path: 'settlement-derivation',
+            name: 'SettlementDerivation',
+            component: () => import('@/views/document/settlement-derivation/index.vue'),
+            meta: {
+              title: '结算推导',
+              permission: 'document:derivation'
+            }
+          },
+          {
+            path: 'msku-list',
+            name: 'MskuList',
+            component: () => import('@/views/document/msku-list/index.vue'),
+            meta: {
+              title: 'MSKU列表',
+              permission: 'document:msku'
+            }
+          }
+        ]
+      },
+
       // ========== 广告数据 ==========
       {
         path: 'advertising',

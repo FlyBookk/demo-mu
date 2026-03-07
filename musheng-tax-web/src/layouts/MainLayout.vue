@@ -103,6 +103,7 @@ import {
   ShoppingCartOutlined,
   CarOutlined,
   InboxOutlined,
+  FileTextOutlined,
   NotificationOutlined,
   DollarOutlined,
   BarChartOutlined,
@@ -198,6 +199,17 @@ const menuItems = computed<ItemType[]>(() => {
       children: [
         { key: 'FbaShipmentImport', label: '数据导入' },
         { key: 'FbaShipmentList', label: '数据列表' }
+      ]
+    },
+    {
+      key: 'Document',
+      icon: () => h(FileTextOutlined),
+      label: 'FBA单据管理',
+      children: [
+        { key: 'SettlementDerivation', label: '结算推导' },
+        { key: 'DocumentList', label: '单据列表' },
+        { key: 'DocumentGenerate', label: '单据生成' },
+        { key: 'MskuList', label: 'MSKU列表' }
       ]
     },
     {

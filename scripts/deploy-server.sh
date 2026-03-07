@@ -265,7 +265,8 @@ After=network.target mysql.service mysqld.service
 
 [Service]
 Type=simple
-User=root
+User=musheng
+Group=musheng
 WorkingDirectory=$APP_DIR/backend
 ExecStart=/usr/bin/java -jar $APP_DIR/backend/$JAR_NAME --spring.profiles.active=prod
 Restart=on-failure

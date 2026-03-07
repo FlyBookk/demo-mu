@@ -25,22 +25,12 @@
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="开始季度">
+        <a-form-item label="季度">
           <a-select
-            v-model:value="filterForm.startQuarter"
-            placeholder="请选择"
+            v-model:value="filterForm.selectedQuarter"
+            placeholder="请选择季度"
             style="width: 150px"
-          >
-            <a-select-option v-for="q in availableQuarters" :key="q" :value="q">
-              {{ formatQuarter(q) }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="结束季度">
-          <a-select
-            v-model:value="filterForm.endQuarter"
-            placeholder="请选择"
-            style="width: 150px"
+            @change="handleQuarterChange"
           >
             <a-select-option v-for="q in availableQuarters" :key="q" :value="q">
               {{ formatQuarter(q) }}
@@ -298,8 +288,7 @@ import type { Marketplace } from '@/types/marketplace'
 // ============= 筛选条件 =============
 const filterForm = reactive({
   siteCode: undefined as string | undefined,
-  startQuarter: '',
-  endQuarter: ''
+  selectedQuarter: ''
 })
 
 const marketplaceOptions = ref<Marketplace[]>([])
@@ -425,10 +414,8 @@ function generateAvailableQuarters() {
 
   availableQuarters.value = quarters
   // 默认选择上一季度
-  if (!filterForm.startQuarter && quarters.length > 1) {
-    const prevQuarter = quarters[1]
-    filterForm.startQuarter = prevQuarter
-    filterForm.endQuarter = prevQuarter
+  if (!filterForm.selectedQuarter && quarters.length > 1) {
+    filterForm.selectedQuarter = quarters[1]
   }
 }
 
@@ -441,9 +428,16 @@ async function fetchMarketplaces() {
   }
 }
 
+function handleQuarterChange() {
+  // 季度变更后自动查询
+  if (filterForm.selectedQuarter) {
+    handleQuery()
+  }
+}
+
 async function fetchSummary() {
-  if (!filterForm.startQuarter || !filterForm.endQuarter) {
-    message.warning('请选择查询季度范围')
+  if (!filterForm.selectedQuarter) {
+    message.warning('请选择查询季度')
     return
   }
 
@@ -451,8 +445,8 @@ async function fetchSummary() {
   try {
     const res = await getTaxSummary({
       siteCode: filterForm.siteCode,
-      startQuarter: filterForm.startQuarter,
-      endQuarter: filterForm.endQuarter
+      startQuarter: filterForm.selectedQuarter,
+      endQuarter: filterForm.selectedQuarter
     })
     summaryData.value = (res.data || []).map((item, index) => ({
       ...item,
@@ -467,14 +461,14 @@ async function fetchSummary() {
 }
 
 async function fetchFeeBreakdown() {
-  if (!filterForm.startQuarter || !filterForm.endQuarter) return
+  if (!filterForm.selectedQuarter) return
 
   feeLoading.value = true
   try {
     const res = await getFeeBreakdown({
       siteCode: filterForm.siteCode,
-      startQuarter: filterForm.startQuarter,
-      endQuarter: filterForm.endQuarter
+      startQuarter: filterForm.selectedQuarter,
+      endQuarter: filterForm.selectedQuarter
     })
     feeData.value = (res.data || []).map((item, index) => ({
       ...item,
@@ -606,8 +600,8 @@ async function handleQuery() {
 }
 
 async function handleExport() {
-  if (!filterForm.startQuarter || !filterForm.endQuarter) {
-    message.warning('请选择查询季度范围')
+  if (!filterForm.selectedQuarter) {
+    message.warning('请选择查询季度')
     return
   }
 
@@ -615,8 +609,8 @@ async function handleExport() {
   try {
     await exportTaxSummary({
       siteCode: filterForm.siteCode,
-      startQuarter: filterForm.startQuarter,
-      endQuarter: filterForm.endQuarter
+      startQuarter: filterForm.selectedQuarter,
+      endQuarter: filterForm.selectedQuarter
     })
     message.success('导出成功')
   } catch (error) {
@@ -628,8 +622,8 @@ async function handleExport() {
 }
 
 async function handleExportDetail() {
-  if (!filterForm.startQuarter || !filterForm.endQuarter) {
-    message.warning('请选择查询季度范围')
+  if (!filterForm.selectedQuarter) {
+    message.warning('请选择查询季度')
     return
   }
 
@@ -637,8 +631,8 @@ async function handleExportDetail() {
   try {
     await exportTaxSummaryDetail({
       siteCode: filterForm.siteCode,
-      startQuarter: filterForm.startQuarter,
-      endQuarter: filterForm.endQuarter
+      startQuarter: filterForm.selectedQuarter,
+      endQuarter: filterForm.selectedQuarter
     })
     message.success('导出成功（收入/退款/费用/其它 分 sheet 或分文件）')
   } catch (error) {
@@ -660,7 +654,7 @@ onMounted(async () => {
   await fetchMarketplaces()
   generateAvailableQuarters()
   window.addEventListener('resize', handleResize)
-  if (filterForm.startQuarter && filterForm.endQuarter) {
+  if (filterForm.selectedQuarter) {
     handleQuery()
   }
 })
