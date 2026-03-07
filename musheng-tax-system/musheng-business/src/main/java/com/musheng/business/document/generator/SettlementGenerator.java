@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  * 结算单生成器
  *
  * <p>纯函数设计，无状态，不依赖系统时间，确保确定性输出。
- * 核心逻辑：按结算周期汇总 → 按站点拆分4份 → MSKU去重汇总 →
+ * 核心逻辑：按7天拆分子周期 → 每个子周期按站点拆分4份 → MSKU去重汇总 →
  * MSKU字母升序排列 → BigDecimal精确计算金额 → 生成编号（001-004）→ 计算合计。</p>
  *
  * @author wanhua
@@ -30,6 +30,9 @@ public final class SettlementGenerator {
 
     /** 买方名称 */
     private static final String BUYER_NAME = "东莞市慕声商贸有限公司";
+
+    /** 买方地址 */
+    private static final String BUYER_ADDRESS = "广东省东莞市虎门镇连升路82号虎门万达广场2栋606房";
 
     /** 卖方名称 */
     private static final String SELLER_NAME = "Hong Kong Andeo Group Limited";
@@ -41,24 +44,27 @@ public final class SettlementGenerator {
         // 工具类，禁止实例化
     }
 
+    /** 每份结算单覆盖的天数 */
+    private static final int PERIOD_DAYS = 7;
+
     /**
-     * 根据结算数据生成结算单
+     * 根据结算数据生成结算单（按7天拆分子周期，每个子周期按站点生成4份）
      *
      * <p>算法流程：
-     * 1. 按结算周期汇总（使用 SettlementPeriodCalculator）
-     * 2. 每个周期按站点拆分4份（使用 SiteCode 枚举，按 MSKU 前缀匹配站点）
-     * 3. 同一站点内 MSKU 去重汇总（相同 MSKU 的 quantity 相加，amount = quantity × unitPrice）
+     * 1. 将大周期按7天拆分为多个子周期
+     * 2. 每个子周期按站点拆分4份（使用 SiteCode 枚举）
+     * 3. 同一站点内 MSKU 去重汇总
      * 4. MSKU 按字母升序排列
-     * 5. BigDecimal 精确计算金额（RoundingMode.HALF_UP）
-     * 6. 生成编号（使用 DocumentNumberCalculator，序号001-004对应4个站点）
-     * 7. 计算合计行（totalQuantity, totalAmount）</p>
+     * 5. BigDecimal 精确计算金额
+     * 6. 每个子周期的结算日 = 子周期结束日的下一个工作日
+     * 7. 同一结算日的4份结算单序号为 001-004</p>
      *
      * @param input 结算数据输入，不能为 null
      * @param startSequence 起始编号序号（用于同一天多份结算单的序号递增）
-     * @return 结算单生成结果列表，按站点序号排列（001-004）
+     * @return 结算单生成结果列表，按子周期和站点排列
      * @throws IllegalArgumentException 如果 input 为 null
      * @author wanhua
-     * 10:30 2026年01月29日
+     * 20:00 2026年03月07日
      */
     public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence) {
         if (input == null) {
@@ -68,26 +74,38 @@ public final class SettlementGenerator {
             return List.of();
         }
 
-        // 1. 用户传入的周期即为一个完整结算周期，结算日为周期结束日的下一个工作日
         LocalDate periodStart = input.getPeriodStart();
         LocalDate periodEnd = input.getPeriodEnd();
-        LocalDate settlementDate = WorkingDayCalculator.nextWorkingDay(periodEnd);
 
-        // 2. 按站点拆分（按 SiteCode 枚举顺序：US, CA, UK, EU）
+        // 按站点分组全部数据
         Map<SiteCode, List<SettlementInput.SettlementDataItem>> siteGroups =
                 groupBySite(input.getItems());
 
+        // 按7天拆分子周期，每个子周期生成4份结算单
         List<SettlementGenerateResult> allResults = new ArrayList<>();
-        int sequence = startSequence;
+        LocalDate subStart = periodStart;
 
-        // 3. 为每个站点生成一份结算单
-        for (SiteCode site : SiteCode.values()) {
-            List<SettlementInput.SettlementDataItem> siteItems = siteGroups.get(site);
+        while (!subStart.isAfter(periodEnd)) {
+            LocalDate subEnd = subStart.plusDays(PERIOD_DAYS - 1);
+            if (subEnd.isAfter(periodEnd)) {
+                subEnd = periodEnd;
+            }
 
-            SettlementGenerateResult result = buildSettlement(
-                    periodStart, periodEnd, settlementDate, site, siteItems, sequence);
-            allResults.add(result);
-            sequence++;
+            // 该子周期的结算日
+            LocalDate settlementDate = WorkingDayCalculator.nextWorkingDay(subEnd);
+            int sequence = startSequence;
+
+            // 为每个站点生成一份结算单（使用全量数据，因为结算数据不按日期细分）
+            for (SiteCode site : SiteCode.values()) {
+                List<SettlementInput.SettlementDataItem> siteItems = siteGroups.get(site);
+
+                SettlementGenerateResult result = buildSettlement(
+                        subStart, subEnd, settlementDate, site, siteItems, sequence);
+                allResults.add(result);
+                sequence++;
+            }
+
+            subStart = subEnd.plusDays(1);
         }
 
         return allResults;
@@ -191,6 +209,7 @@ public final class SettlementGenerator {
         settlement.setSiteCode(site.getCurrency());
         settlement.setSiteSequence(site.getSequence());
         settlement.setBuyerName(BUYER_NAME);
+        settlement.setBuyerAddress(BUYER_ADDRESS);
         settlement.setSellerName(SELLER_NAME);
         settlement.setTotalQuantity(totalQuantity);
         settlement.setTotalAmount(totalAmount);

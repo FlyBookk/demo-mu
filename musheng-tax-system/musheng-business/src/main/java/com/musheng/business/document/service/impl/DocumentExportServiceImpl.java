@@ -788,6 +788,9 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 paddingRow.setHeightInPoints(41f);
             }
 
+            // 列宽自适应（在嵌入印章之前调用，印章使用 oneCellAnchor 定位，尺寸不受列宽影响）
+            autoFitColumns(sheet, 6);
+
             // 嵌入图片 - 慕声红章2.1×2.1cm（小章），香港蓝章4×4cm（大章）
             // 公司Logo: 标准样本 from(0,219075,0,19050) to(0,1543050,2,447675) ext(1333500,1343025)
             addImageOriginal(wb, sheet, IMG_COMPANY_LOGO,
@@ -804,8 +807,6 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                     4, 447675, rowIdx - 1, 171450,
                     5, 447675, 3, 171450,
                     1440000, 1440000);
-
-            // 列宽已按标准样本精确设置，不调用autoFitColumns避免破坏印章定位
 
             wb.write(os);
         }
@@ -1117,13 +1118,14 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 paddingRow.setHeightInPoints(28f);
             }
 
+            // 列宽自适应（INV 有8列 A-H）
+            autoFitColumns(sheet, 8);
+
             // 嵌入印章图片 - 慕声红章2.1×2.1cm = 756000 EMU
             addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
                     5, 552450, rowIdx - 5, 285750,
                     7, 552450, 3, 285750,
                     756000, 756000);
-
-            // 列宽已按标准样本精确设置，不调用autoFitColumns避免破坏印章定位
 
             wb.write(os);
         }
