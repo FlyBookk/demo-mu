@@ -16,7 +16,7 @@ import java.util.List;
  * INV发票生成器
  *
  * <p>纯函数设计，无状态，不依赖系统时间，确保确定性输出。
- * 核心逻辑：基于结算单数据 → INV日期=nextWorkingDay(结算日) →
+ * 核心逻辑：基于结算单数据 → INV日期=addWorkingDays(结算日, 3) →
  * 复制MSKU/数量/单价/金额 → 生成编号 → 填充卖方/买方/银行信息。
  * 卖方/买方/银行信息通过 DocumentPartyProperties 配置注入，不硬编码。</p>
  *
@@ -34,7 +34,7 @@ public final class InvGenerator {
      *
      * <p>算法流程：
      * 1. 遍历每份结算单
-     * 2. INV日期 = nextWorkingDay(结算日)
+     * 2. INV日期 = addWorkingDays(结算日, 3)
      * 3. 复制结算单的 MSKU/数量/单价/金额 到 INV 明细
      * 4. 生成编号（使用 DocumentNumberCalculator）
      * 5. 从 party 配置填充卖方/买方/银行信息
@@ -86,8 +86,8 @@ public final class InvGenerator {
                                                DocumentPartyProperties party) {
         DocumentSettlement settlement = settlementResult.getSettlement();
 
-        // 计算INV日期：结算日的下一个工作日
-        LocalDate invDate = WorkingDayCalculator.nextWorkingDay(settlement.getSettlementDate());
+        // 计算INV日期：结算日之后第3个工作日（符合协议约定的"确认后3个工作日内"）
+        LocalDate invDate = WorkingDayCalculator.addWorkingDays(settlement.getSettlementDate(), 3);
 
         // 生成编号
         String documentNo = DocumentNumberCalculator.generate(invDate, sequence);

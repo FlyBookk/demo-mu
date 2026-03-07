@@ -45,6 +45,9 @@ public class SettlementInput {
     @AllArgsConstructor
     public static class SettlementDataItem {
 
+        /** 交易日期（用于按月拆分结算周期） */
+        private LocalDate transactionDate;
+
         /** 站点代码（如 "US", "CA", "UK", "EU"） */
         private String siteCode;
 

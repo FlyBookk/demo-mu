@@ -74,6 +74,44 @@ public final class WorkingDayCalculator {
     }
 
     /**
+     * 在给定日期基础上向后推 n 个工作日
+     *
+     * <p>从给定日期的下一天开始计数，累计 n 个工作日后返回。
+     * 例如：addWorkingDays(周五, 3) = 下周三（跳过周末）。</p>
+     *
+     * @param date 起始日期，不能为 null
+     * @param n 要推进的工作日数，必须 >= 1
+     * @return 推进 n 个工作日后的日期
+     * @throws IllegalArgumentException 如果 date 为 null 或 n < 1
+     * @throws IllegalStateException 如果365天内未找到足够的工作日
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    public static LocalDate addWorkingDays(LocalDate date, int n) {
+        if (date == null) {
+            throw new IllegalArgumentException("日期参数不能为 null");
+        }
+        if (n < 1) {
+            throw new IllegalArgumentException("工作日数必须 >= 1，实际值：" + n);
+        }
+        LocalDate candidate = date;
+        int counted = 0;
+        int iteration = 0;
+        while (counted < n) {
+            candidate = candidate.plusDays(1);
+            iteration++;
+            if (iteration >= MAX_ITERATION_DAYS) {
+                throw new IllegalStateException(
+                        "在365天内未找到足够的工作日，请检查节假日配置。起始日期：" + date);
+            }
+            if (isWorkingDay(candidate)) {
+                counted++;
+            }
+        }
+        return candidate;
+    }
+
+    /**
      * 返回给定日期当天或之后的最近工作日
      *
      * <p>如果给定日期本身是工作日，则返回当天；否则向后查找下一个工作日。

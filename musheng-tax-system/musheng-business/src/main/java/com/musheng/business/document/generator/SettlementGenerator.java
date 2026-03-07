@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  * 结算单生成器
  *
  * <p>纯函数设计，无状态，不依赖系统时间，确保确定性输出。
- * 核心逻辑：按7天拆分子周期 → 每个子周期按站点拆分4份 → MSKU去重汇总 →
+ * 核心逻辑：按自然月拆分子周期 → 每个月按站点拆分4份 → MSKU去重汇总 →
  * MSKU字母升序排列 → BigDecimal精确计算金额 → 生成编号（001-004）→ 计算合计。</p>
  *
  * @author wanhua
@@ -44,27 +44,28 @@ public final class SettlementGenerator {
         // 工具类，禁止实例化
     }
 
-    /** 每份结算单覆盖的天数 */
-    private static final int PERIOD_DAYS = 7;
+    /** 结算日为下个月的第几日 */
+    private static final int SETTLEMENT_DAY_OF_MONTH = 5;
 
     /**
-     * 根据结算数据生成结算单（按7天拆分子周期，每个子周期按站点生成4份）
+     * 根据结算数据生成结算单（按自然月拆分，每月按站点生成多份）
      *
      * <p>算法流程：
-     * 1. 将大周期按7天拆分为多个子周期
-     * 2. 每个子周期按站点拆分4份（使用 SiteCode 枚举）
-     * 3. 同一站点内 MSKU 去重汇总
-     * 4. MSKU 按字母升序排列
-     * 5. BigDecimal 精确计算金额
-     * 6. 每个子周期的结算日 = 子周期结束日的下一个工作日
-     * 7. 同一结算日的4份结算单序号为 001-004</p>
+     * 1. 将大周期按自然月拆分（如 2025-01-01 ~ 2025-03-31 → 1月、2月、3月）
+     * 2. 每个自然月只取该月内的交易数据（按 transactionDate 过滤）
+     * 3. 每个自然月按站点拆分（使用 SiteCode 枚举）
+     * 4. 同一站点内 MSKU 去重汇总
+     * 5. MSKU 按字母升序排列
+     * 6. BigDecimal 精确计算金额
+     * 7. 每月的结算日 = 下个月 5 日（非工作日顺延）
+     * 8. 同一结算日的多份结算单序号为 001-004</p>
      *
      * @param input 结算数据输入，不能为 null
-     * @param startSequence 起始编号序号（用于同一天多份结算单的序号递增）
-     * @return 结算单生成结果列表，按子周期和站点排列
+     * @param startSequence 起始编号序号
+     * @return 结算单生成结果列表，按月份和站点排列
      * @throws IllegalArgumentException 如果 input 为 null
      * @author wanhua
-     * 20:00 2026年03月07日
+     * 10:30 2026年03月07日
      */
     public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence) {
         if (input == null) {
@@ -77,35 +78,45 @@ public final class SettlementGenerator {
         LocalDate periodStart = input.getPeriodStart();
         LocalDate periodEnd = input.getPeriodEnd();
 
-        // 按站点分组全部数据
-        Map<SiteCode, List<SettlementInput.SettlementDataItem>> siteGroups =
-                groupBySite(input.getItems());
-
-        // 按7天拆分子周期，每个子周期生成4份结算单
         List<SettlementGenerateResult> allResults = new ArrayList<>();
-        LocalDate subStart = periodStart;
 
-        while (!subStart.isAfter(periodEnd)) {
-            LocalDate subEnd = subStart.plusDays(PERIOD_DAYS - 1);
-            if (subEnd.isAfter(periodEnd)) {
-                subEnd = periodEnd;
-            }
+        // 按自然月拆分：从 periodStart 所在月到 periodEnd 所在月
+        LocalDate monthStart = periodStart.withDayOfMonth(1);
+        while (!monthStart.isAfter(periodEnd)) {
+            // 当月最后一天
+            LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+            // 实际周期起止：与请求范围取交集
+            LocalDate subStart = monthStart.isBefore(periodStart) ? periodStart : monthStart;
+            LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
 
-            // 该子周期的结算日
-            LocalDate settlementDate = WorkingDayCalculator.nextWorkingDay(subEnd);
+            // 结算日 = 下个月 5 日（非工作日顺延）
+            LocalDate nextMonth5th = monthStart.plusMonths(1).withDayOfMonth(SETTLEMENT_DAY_OF_MONTH);
+            LocalDate settlementDate = WorkingDayCalculator.nearestWorkingDay(nextMonth5th);
+
+            // 过滤出本月的交易数据
+            final LocalDate finalSubStart = subStart;
+            final LocalDate finalSubEnd = subEnd;
+            List<SettlementInput.SettlementDataItem> monthItems = input.getItems().stream()
+                    .filter(item -> {
+                        if (item.getTransactionDate() == null) return true; // 无日期的数据归入当前月
+                        return !item.getTransactionDate().isBefore(finalSubStart)
+                                && !item.getTransactionDate().isAfter(finalSubEnd);
+                    })
+                    .collect(Collectors.toList());
+
+            // 按站点分组本月数据
+            Map<SiteCode, List<SettlementInput.SettlementDataItem>> siteGroups = groupBySite(monthItems);
+
             int sequence = startSequence;
-
-            // 为每个站点生成一份结算单（使用全量数据，因为结算数据不按日期细分）
             for (SiteCode site : SiteCode.values()) {
                 List<SettlementInput.SettlementDataItem> siteItems = siteGroups.get(site);
-
                 SettlementGenerateResult result = buildSettlement(
                         subStart, subEnd, settlementDate, site, siteItems, sequence);
                 allResults.add(result);
                 sequence++;
             }
 
-            subStart = subEnd.plusDays(1);
+            monthStart = monthStart.plusMonths(1);
         }
 
         return allResults;

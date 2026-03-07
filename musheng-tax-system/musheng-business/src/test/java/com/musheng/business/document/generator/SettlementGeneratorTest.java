@@ -25,19 +25,19 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("SettlementGenerator 结算单生成器测试")
 class SettlementGeneratorTest {
 
-    // ==================== 单周期4站点生成 ====================
+    // ==================== 单月4站点生成 ====================
 
     @Nested
-    @DisplayName("单周期4站点生成")
+    @DisplayName("单月4站点生成")
     class SinglePeriodFourSitesTest {
 
         @Test
-        @DisplayName("单周期4站点数据应生成4份结算单，序号001-004")
+        @DisplayName("单月4站点数据应生成4份结算单，序号001-004")
         void testGenerate_SinglePeriodFourSites_ShouldGenerateFourSettlements() {
-            // Given - 一个7天周期，4个站点各有1条数据
+            // Given - 一个月度周期，4个站点各有1条数据
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))  // 周二
-                    .periodEnd(LocalDate.of(2025, 9, 8))    // 周一
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSCA-B001", "CAD", "12.50", 3),
@@ -71,8 +71,8 @@ class SettlementGeneratorTest {
         void testGenerate_Settlement_ShouldContainCorrectBuyerAndSeller() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(createItem("MSUS-A001", "USD", "10.00", 5)))
                     .build();
 
@@ -88,21 +88,21 @@ class SettlementGeneratorTest {
         @Test
         @DisplayName("结算单应包含正确的结算周期和结算日")
         void testGenerate_Settlement_ShouldContainCorrectPeriodAndDate() {
-            // Given - 周期 2025-09-02(周二) 到 2025-09-08(周一)
+            // Given - 月度周期 2025-09-01 到 2025-09-30
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(createItem("MSUS-A001", "USD", "10.00", 5)))
                     .build();
 
             // When
             List<SettlementGenerateResult> results = SettlementGenerator.generate(input, 1);
 
-            // Then - 结算日应为周期结束后的下一个工作日 2025-09-09(周二)
+            // Then - 结算日应为下个月5日（2025-10-05至10-07均为国庆假期，顺延到10-08周三）
             DocumentSettlement settlement = results.get(0).getSettlement();
-            assertEquals(LocalDate.of(2025, 9, 2), settlement.getPeriodStart());
-            assertEquals(LocalDate.of(2025, 9, 8), settlement.getPeriodEnd());
-            assertEquals(LocalDate.of(2025, 9, 9), settlement.getSettlementDate());
+            assertEquals(LocalDate.of(2025, 9, 1), settlement.getPeriodStart());
+            assertEquals(LocalDate.of(2025, 9, 30), settlement.getPeriodEnd());
+            assertEquals(LocalDate.of(2025, 10, 8), settlement.getSettlementDate());
         }
     }
 
@@ -117,8 +117,8 @@ class SettlementGeneratorTest {
         void testGenerate_DuplicateMsku_ShouldMerge() {
             // Given - 同一MSKU出现两次
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSUS-A001", "USD", "10.00", 3)
@@ -142,8 +142,8 @@ class SettlementGeneratorTest {
         void testGenerate_DifferentSiteMsku_ShouldNotMerge() {
             // Given - 不同站点的MSKU
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSCA-A001", "CAD", "12.00", 3)
@@ -174,8 +174,8 @@ class SettlementGeneratorTest {
         void testGenerate_Amount_ShouldEqualQuantityTimesUnitPrice() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "12.3456", 7)
                     ))
@@ -198,8 +198,8 @@ class SettlementGeneratorTest {
         void testGenerate_MergedAmount_ShouldRecalculate() {
             // Given - 同一MSKU两条记录
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.50", 3),
                             createItem("MSUS-A001", "USD", "10.50", 2)
@@ -228,8 +228,8 @@ class SettlementGeneratorTest {
         void testGenerate_MskuSorting_ShouldBeAlphabetical() {
             // Given - 故意乱序输入
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-C001", "USD", "10.00", 1),
                             createItem("MSUS-A001", "USD", "10.00", 2),
@@ -255,8 +255,8 @@ class SettlementGeneratorTest {
         void testGenerate_LineNo_ShouldStartFromOneAndBeSequential() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-B001", "USD", "10.00", 1),
                             createItem("MSUS-A001", "USD", "10.00", 2)
@@ -285,8 +285,8 @@ class SettlementGeneratorTest {
         void testGenerate_TotalQuantity_ShouldEqualSumOfItems() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSUS-B001", "USD", "20.00", 3)
@@ -310,8 +310,8 @@ class SettlementGeneratorTest {
         void testGenerate_TotalAmount_ShouldEqualSumOfItemAmounts() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),  // 50.0000
                             createItem("MSUS-B001", "USD", "20.00", 3)   // 60.0000
@@ -343,8 +343,8 @@ class SettlementGeneratorTest {
         void testGenerate_DocumentNo_ShouldMatchFormat() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSCA-B001", "CAD", "12.00", 3),
@@ -356,7 +356,7 @@ class SettlementGeneratorTest {
             // When
             List<SettlementGenerateResult> results = SettlementGenerator.generate(input, 1);
 
-            // Then - 结算日为 2025-09-09，序号001-004
+            // Then - 结算日为 2025-10-08（10月5日至7日为国庆假期顺延），序号001-004
             assertEquals(4, results.size());
             for (SettlementGenerateResult result : results) {
                 assertTrue(result.getSettlement().getDocumentNo().matches("\\d{8}\\d{3}"));
@@ -373,8 +373,8 @@ class SettlementGeneratorTest {
         void testGenerate_StartSequence_ShouldAffectDocumentNo() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(createItem("MSUS-A001", "USD", "10.00", 5)))
                     .build();
 
@@ -397,8 +397,8 @@ class SettlementGeneratorTest {
         void testGenerate_SameInput_ShouldProduceSameOutput() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of(
                             createItem("MSUS-A001", "USD", "10.00", 5),
                             createItem("MSUS-B001", "USD", "20.00", 3),
@@ -445,8 +445,8 @@ class SettlementGeneratorTest {
         void testGenerate_EmptyItems_ShouldReturnEmptyResult() {
             // Given
             SettlementInput input = SettlementInput.builder()
-                    .periodStart(LocalDate.of(2025, 9, 2))
-                    .periodEnd(LocalDate.of(2025, 9, 8))
+                    .periodStart(LocalDate.of(2025, 9, 1))
+                    .periodEnd(LocalDate.of(2025, 9, 30))
                     .items(List.of())
                     .build();
 

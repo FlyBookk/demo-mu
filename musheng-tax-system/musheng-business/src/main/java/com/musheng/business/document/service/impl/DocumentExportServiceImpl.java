@@ -565,7 +565,7 @@ public class DocumentExportServiceImpl implements DocumentExportService {
      * 布局：A1:A3左侧空白合并, B1:F1公司名22pt粗体, B2:F2地址14pt, B3:F3 "Statement of Account" 22pt粗体
      * Row4: Purchasing object / 买方名称(B4:F4合并)
      * Row5: Settlement Period / 周期 / Settlement No. / 编号
-     * Row6: Settlement frequency / every 7 days / Settlement date / 日期
+     * Row6: Settlement frequency / Monthly / Settlement date / 日期
      * Row7: National site / 站点代码(B7:F7合并)
      * Row8: No# / Description / Currency / Unit price / Q'ty / Amount (表头)
      * Row9+: 数据行
@@ -712,11 +712,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             sheet.addMergedRegion(new CellRangeAddress(4, 4, 2, 4));
             createCell(row5, 5, safe(s.getDocumentNo()), csNormal12Center);
 
-            // Row6: Settlement frequency / every 7 days / Settlement date / 日期
+            // Row6: Settlement frequency / Monthly / Settlement date / 日期
             Row row6 = sheet.createRow(rowIdx++);
             row6.setHeightInPoints(39.5f);
             createCell(row6, 0, " Settlement frequency:", csNormal12CenterBorder);
-            createCell(row6, 1, "every 7 days", csNormal12Center);
+            createCell(row6, 1, "Monthly", csNormal12Center);
             createCell(row6, 2, "Settlement date：", csNormal12Center);
             sheet.addMergedRegion(new CellRangeAddress(5, 5, 2, 4));
             createCell(row6, 5, s.getSettlementDate() != null ? s.getSettlementDate().format(DATE_FMT) : "", csNormal12Center);
