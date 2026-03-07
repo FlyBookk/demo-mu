@@ -107,7 +107,7 @@ public final class PoGenerator {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    static LocalDate calculatePoDate(LocalDateTime createTime) {
+    public static LocalDate calculatePoDate(LocalDateTime createTime) {
         LocalDate createDate = createTime.toLocalDate();
         DayOfWeek dayOfWeek = createDate.getDayOfWeek();
 

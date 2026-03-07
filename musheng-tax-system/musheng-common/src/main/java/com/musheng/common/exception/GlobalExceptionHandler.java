@@ -153,6 +153,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理非法参数异常（业务校验失败）
+     *
+     * @param e 异常
+     * @return 错误响应
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public Result<Void> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("参数校验失败: {}", e.getMessage());
+        return Result.error(ErrorCode.PARAM_ERROR, e.getMessage());
+    }
+
+    /**
      * 处理其他未知异常
      * 开发环境下返回实际异常信息便于调试
      */

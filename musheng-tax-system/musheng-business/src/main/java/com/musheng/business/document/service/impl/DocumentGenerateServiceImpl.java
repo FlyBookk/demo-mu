@@ -159,6 +159,19 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建货件输入数据
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
+        // 校验锚点日期不能早于所有货件的最晚PO日期
+        // PO日期 = 货件创建时间所在周的下一个周二（或当天若为周二），非工作日顺延
+        if (!CollectionUtils.isEmpty(shipmentInputs)) {
+            LocalDate latestPoDate = shipmentInputs.stream()
+                    .map(s -> PoGenerator.calculatePoDate(s.getCreateTime()))
+                    .max(LocalDate::compareTo)
+                    .orElse(null);
+            if (latestPoDate != null && request.getAnchorDate().isBefore(latestPoDate)) {
+                throw new IllegalArgumentException(
+                        "DN锚点日期（" + request.getAnchorDate() + "）不能早于货件对应的最晚PO日期（" + latestPoDate + "）");
+            }
+        }
+
         // 调用生成器
         List<DnGenerateResult> results = DnGenerator.generate(
                 request.getAnchorDate(), shipmentInputs, 1);
@@ -216,9 +229,20 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         SettlementInput input = buildSettlementInput(request);
 
         // 调用生成器
-        List<SettlementGenerateResult> results = SettlementGenerator.generate(input, 1);
-        if (CollectionUtils.isEmpty(results)) {
+        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1);
+        if (CollectionUtils.isEmpty(allResults)) {
             log.info("结算单生成结果为空，无数据可持久化");
+            return List.of();
+        }
+
+        // 过滤掉空结算单（total_quantity=0），避免无意义数据入库
+        List<SettlementGenerateResult> results = allResults.stream()
+                .filter(r -> r.getSettlement().getTotalQuantity() > 0)
+                .collect(Collectors.toList());
+        log.info("结算单生成 {} 份，过滤空结算单后剩余 {} 份（有数据）",
+                allResults.size(), results.size());
+        if (CollectionUtils.isEmpty(results)) {
+            log.warn("所有站点结算单均为空，请检查是否已导入对应站点的结算数据");
             return List.of();
         }
 

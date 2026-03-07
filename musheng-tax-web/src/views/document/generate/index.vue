@@ -462,17 +462,24 @@ const earliestShipmentDate = computed(() => {
     .filter(Boolean)
     .map(d => dayjs(d))
   if (dates.length === 0) return null
-  return dates.reduce((min, d) => d.isBefore(min) ? d : min)
+  return dates.reduce((min, d) => d.isBefore(min) ? d : min
+  )
 })
 
-// DN日期禁用规则：不能选货件最早日期之前的日期
+// DN日期禁用规则：
+// 1. 若PO已生成，不能选早于PO日期的日期
+// 2. 否则不能选早于最早货件创建日期的日期
 function dnDisabledDate(current: Dayjs) {
+  if (poResult.value?.poDate) {
+    return current.isBefore(dayjs(poResult.value.poDate), 'day')
+  }
   if (!earliestShipmentDate.value) return false
   return current.isBefore(earliestShipmentDate.value, 'day')
 }
 
-// 日历默认定位到PO日期（即最早货件日期附近）
+// 日历默认定位到PO日期（若已生成），否则定位到最早货件日期附近
 const dnDefaultPickerValue = computed(() => {
+  if (poResult.value?.poDate) return dayjs(poResult.value.poDate)
   return earliestShipmentDate.value || dayjs()
 })
 
