@@ -38,7 +38,7 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
 
     @Override
     public Page<FbaShipment> findByQuery(String shipmentId, String status, String shopName, String country,
-                                          String startDate, String endDate, int page, int size) {
+                                          String siteCode, String startDate, String endDate, int page, int size) {
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -61,6 +61,8 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         if (StringUtils.hasText(country)) {
             wrapper.eq(FbaShipment::getCountry, country);
         }
+        // 站点代码精确匹配
+        wrapper.eq(StringUtils.hasText(siteCode), FbaShipment::getSiteCode, siteCode);
         
         // 使用 DateParseUtils 解析日期 - 与原有逻辑一致
         LocalDateTime startDateTime = DateParseUtils.parseStartDate(startDate);
@@ -171,7 +173,7 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
 
     @Override
     public List<FbaShipment> findListByQuery(String status, String shopName, String country,
-                                              String startDate, String endDate) {
+                                              String siteCode, String startDate, String endDate) {
         LambdaQueryWrapper<FbaShipment> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -188,6 +190,8 @@ public class FbaShipmentRepositoryImpl implements FbaShipmentRepository {
         if (StringUtils.hasText(country)) {
             wrapper.eq(FbaShipment::getCountry, country);
         }
+        // 站点代码精确匹配
+        wrapper.eq(StringUtils.hasText(siteCode), FbaShipment::getSiteCode, siteCode);
         
         // 使用 DateParseUtils 解析日期
         LocalDateTime startDateTime = DateParseUtils.parseStartDate(startDate);

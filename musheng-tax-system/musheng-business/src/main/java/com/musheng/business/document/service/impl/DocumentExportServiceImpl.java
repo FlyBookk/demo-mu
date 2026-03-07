@@ -1320,11 +1320,23 @@ public class DocumentExportServiceImpl implements DocumentExportService {
      * @author wanhua
      * 10:30 2026年01月29日
      */
+    /**
+     * 设置 Excel 文件下载响应头
+     * 使用 RFC 5987 标准格式（filename*=UTF-8''xxx），确保中文文件名在浏览器中正确显示
+     *
+     * @param response HTTP响应对象
+     * @param fileName 文件名（含扩展名）
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
     private void setExcelResponseHeaders(HttpServletResponse response, String fileName) {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("UTF-8");
-        response.setHeader("Content-Disposition", "attachment;filename=" +
-                URLEncoder.encode(fileName, StandardCharsets.UTF_8));
+        // 使用 RFC 5987 标准格式，避免 URLEncoder 将空格编为 + 导致前端解码异常
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        response.setHeader("Content-Disposition",
+                "attachment;filename*=UTF-8''" + encodedFileName);
     }
 
     /**

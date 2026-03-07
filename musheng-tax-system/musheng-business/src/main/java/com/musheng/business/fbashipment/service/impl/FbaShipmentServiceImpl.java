@@ -51,8 +51,21 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> importData(MultipartFile file) {
-        log.info("导入FBA货件明细: fileName={}, size={} bytes",
-                file.getOriginalFilename(), file.getSize());
+        return importData(file, null);
+    }
+
+    /**
+     * 导入Excel文件（带站点代码）
+     *
+     * @param file Excel文件
+     * @param siteCode 站点代码（如 US/CA/UK/DE），可为空
+     * @return 导入结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    private Map<String, Object> importData(MultipartFile file, String siteCode) {
+        log.info("导入FBA货件明细: fileName={}, size={} bytes, siteCode={}",
+                file.getOriginalFilename(), file.getSize(), siteCode);
 
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
@@ -110,6 +123,9 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
                 }
 
                 try {
+                    // 设置站点代码
+                    shipment.setSiteCode(siteCode);
+
                     // 保存货件主表 - 使用 Repository
                     fbaShipmentRepository.save(shipment);
 
@@ -180,8 +196,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
 
     @Override
     public Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
-                                  String startDate, String endDate, int page, int size) {
-        return fbaShipmentRepository.findByQuery(shipmentId, status, shopName, country, startDate, endDate, page, size);
+                                  String siteCode, String startDate, String endDate, int page, int size) {
+        return fbaShipmentRepository.findByQuery(shipmentId, status, shopName, country, siteCode, startDate, endDate, page, size);
     }
 
     @Override
@@ -371,8 +387,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> batchImportData(List<MultipartFile> files) {
-        log.info("批量导入FBA货件明细: 文件数={}", files.size());
+    public Map<String, Object> batchImportData(List<MultipartFile> files, String siteCode) {
+        log.info("批量导入FBA货件明细: 文件数={}, siteCode={}", files.size(), siteCode);
 
         Map<String, Object> batchResult = new HashMap<>();
         List<Map<String, Object>> fileResults = new ArrayList<>();
@@ -392,8 +408,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
             fileResult.put("fileName", file.getOriginalFilename());
 
             try {
-                // 导入文件（数据级别幂等，自动跳过重复记录）
-                Map<String, Object> importResult = importData(file);
+                // 导入文件（数据级别幂等，自动跳过重复记录，传入站点代码）
+                Map<String, Object> importResult = importData(file, siteCode);
 
                 fileResult.put("status", "success");
                 fileResult.put("result", importResult);

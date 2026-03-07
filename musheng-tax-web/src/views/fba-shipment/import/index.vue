@@ -13,6 +13,19 @@
 
     <!-- 步骤1: 上传文件 -->
     <a-card v-show="currentStep === 0" class="step-card">
+      <!-- 站点选择 -->
+      <a-form layout="inline" class="site-select-form">
+        <a-form-item label="站点" required>
+          <a-select
+            v-model:value="selectedSiteCode"
+            placeholder="请选择站点"
+            :options="siteCodeOptions"
+            style="width: 240px"
+            allow-clear
+          />
+        </a-form-item>
+      </a-form>
+
       <div class="upload-area">
         <a-upload-dragger
           v-model:file-list="fileList"
@@ -56,9 +69,10 @@
       </div>
 
       <div class="step-actions">
-        <a-button type="primary" :disabled="uploadedFiles.length === 0" :loading="importing" @click="handleStartImport">
+        <a-button type="primary" :disabled="uploadedFiles.length === 0 || !selectedSiteCode" :loading="importing" @click="handleStartImport">
           <CloudUploadOutlined /> 开始导入 ({{ uploadedFiles.length }} 个文件)
         </a-button>
+        <span v-if="!selectedSiteCode" class="site-hint">请先选择站点</span>
       </div>
     </a-card>
 
@@ -195,6 +209,20 @@ const fileResultColumns = [
 const fileList = ref<UploadFile[]>([])
 const uploadedFiles = ref<File[]>([])
 
+// ============= 站点选择 =============
+const siteCodeOptions = [
+  { label: 'US（美国）', value: 'US' },
+  { label: 'CA（加拿大）', value: 'CA' },
+  { label: 'UK（英国）', value: 'UK' },
+  { label: 'DE（德国）', value: 'DE' },
+  { label: 'FR（法国）', value: 'FR' },
+  { label: 'IT（意大利）', value: 'IT' },
+  { label: 'ES（西班牙）', value: 'ES' },
+  { label: 'JP（日本）', value: 'JP' },
+  { label: 'AU（澳大利亚）', value: 'AU' },
+  { label: 'MX（墨西哥）', value: 'MX' },
+]
+const selectedSiteCode = ref<string | undefined>(undefined)
 // ============= 导入相关 =============
 const importing = ref(false)
 const importResult = ref<FbaShipmentBatchImportResult | null>(null)
@@ -265,7 +293,7 @@ async function doExecuteImport() {
 
   try {
     // 调用批量导入API
-    const result = await batchImportFbaShipment(uploadedFiles.value)
+    const result = await batchImportFbaShipment(uploadedFiles.value, selectedSiteCode.value!)
 
     // 保存导入结果
     importResult.value = result.data
@@ -331,6 +359,7 @@ function handleImportAgain() {
   fileList.value = []
   uploadedFiles.value = []
   importResult.value = null
+  selectedSiteCode.value = undefined
 }
 </script>
 
@@ -360,6 +389,10 @@ function handleImportAgain() {
   }
 
   .step-card {
+    .site-select-form {
+      margin-bottom: $spacing-md;
+    }
+
     .upload-area {
       max-width: 600px;
       margin: 0 auto;
@@ -380,6 +413,12 @@ function handleImportAgain() {
     .step-actions {
       margin-top: $spacing-lg;
       text-align: center;
+
+      .site-hint {
+        margin-left: $spacing-sm;
+        color: $warning-color;
+        font-size: $font-size-sm;
+      }
     }
   }
 

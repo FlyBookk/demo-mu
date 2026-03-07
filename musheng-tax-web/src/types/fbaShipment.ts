@@ -23,6 +23,7 @@ export interface FbaShipment {
   totalReceivedQuantity?: number
   recipient?: string
   postalCode?: string
+  siteCode?: string
   importBatchId?: number
   createTime: string
   updateTime?: string
@@ -47,6 +48,7 @@ export interface FbaShipmentQuery {
   shipmentId?: string
   status?: string
   country?: string
+  siteCode?: string
   startDate?: string
   endDate?: string
   page?: number

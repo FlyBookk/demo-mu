@@ -20,7 +20,26 @@ import java.util.Set;
 public interface FbaShipmentRepository {
 
     /**
-     * 分页查询FBA货件
+     * 分页查询FBA货件（带站点过滤）
+     *
+     * @param shipmentId 货件编号（模糊查询，可选）
+     * @param status 货件状态（可选）
+     * @param shopName 店铺名称（模糊查询，可选）
+     * @param country 国家/地区（精确匹配，可选）
+     * @param siteCode 站点代码（精确匹配，可选，如 US/CA/UK/DE）
+     * @param startDate 开始日期（可选）
+     * @param endDate 结束日期（可选）
+     * @param page 页码（从1开始）
+     * @param size 每页条数
+     * @return 分页结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    Page<FbaShipment> findByQuery(String shipmentId, String status, String shopName, String country,
+                                   String siteCode, String startDate, String endDate, int page, int size);
+
+    /**
+     * 分页查询FBA货件（向后兼容，不含站点过滤）
      *
      * @param shipmentId 货件编号（模糊查询，可选）
      * @param status 货件状态（可选）
@@ -32,8 +51,10 @@ public interface FbaShipmentRepository {
      * @param size 每页条数
      * @return 分页结果
      */
-    Page<FbaShipment> findByQuery(String shipmentId, String status, String shopName, String country,
-                                   String startDate, String endDate, int page, int size);
+    default Page<FbaShipment> findByQuery(String shipmentId, String status, String shopName, String country,
+                                           String startDate, String endDate, int page, int size) {
+        return findByQuery(shipmentId, status, shopName, country, null, startDate, endDate, page, size);
+    }
 
     /**
      * 根据ID查询FBA货件
@@ -114,7 +135,23 @@ public interface FbaShipmentRepository {
     void deleteByIds(List<Long> ids);
 
     /**
-     * 查询货件列表（不分页，用于统计和导出）
+     * 查询货件列表（不分页，带站点过滤，用于统计和导出）
+     *
+     * @param status 货件状态（可选）
+     * @param shopName 店铺名称（模糊查询，可选）
+     * @param country 国家/地区（精确匹配，可选）
+     * @param siteCode 站点代码（精确匹配，可选，如 US/CA/UK/DE）
+     * @param startDate 开始日期（可选）
+     * @param endDate 结束日期（可选）
+     * @return 货件列表
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    List<FbaShipment> findListByQuery(String status, String shopName, String country,
+                                       String siteCode, String startDate, String endDate);
+
+    /**
+     * 查询货件列表（不分页，向后兼容，不含站点过滤）
      *
      * @param status 货件状态（可选）
      * @param shopName 店铺名称（模糊查询，可选）
@@ -123,8 +160,10 @@ public interface FbaShipmentRepository {
      * @param endDate 结束日期（可选）
      * @return 货件列表
      */
-    List<FbaShipment> findListByQuery(String status, String shopName, String country,
-                                       String startDate, String endDate);
+    default List<FbaShipment> findListByQuery(String status, String shopName, String country,
+                                               String startDate, String endDate) {
+        return findListByQuery(status, shopName, country, null, startDate, endDate);
+    }
 
     /**
      * 获取所有国家/地区列表（去重）

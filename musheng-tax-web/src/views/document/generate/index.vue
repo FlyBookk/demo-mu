@@ -42,10 +42,11 @@
 
         <a-form-item label="FBA货件" required>
           <a-alert v-if="!selectedSite" type="info" message="请先选择站点" show-icon style="margin-bottom: 8px" />
+          <a-alert v-else-if="!selectedQuarter" type="info" message="请先选择结算季度" show-icon style="margin-bottom: 8px" />
           <a-spin :spinning="shipmentLoading">
             <a-checkbox-group v-model:value="selectedShipmentIds" style="width: 100%">
               <div v-if="shipmentList.length === 0 && !shipmentLoading && selectedSite" style="color: #999; padding: 8px 0">
-                该站点暂无货件数据
+                当前站点和时间范围内暂无货件数据
               </div>
               <div v-for="item in shipmentList" :key="item.id" class="shipment-item">
                 <a-checkbox :value="item.id">
@@ -184,9 +185,21 @@
           请确保已在"结算推导"中完成对应季度的推导。
         </template>
       </a-alert>
-      <a-form layout="vertical" style="max-width: 400px">
-        <a-form-item label="结算日期">
-          <a-date-picker v-model:value="settlementDate" style="width: 100%" placeholder="可选，默认使用季度结束日" />
+      <a-form layout="vertical" style="max-width: 500px">
+        <a-form-item label="结算周期">
+          <a-select
+            v-model:value="selectedQuarter"
+            style="width: 100%"
+            :options="quarterOptions"
+            placeholder="请选择结算季度"
+            @change="handleSettlementQuarterChange"
+          />
+        </a-form-item>
+        <a-form-item v-if="periodStart && periodEnd">
+          <a-descriptions :column="2" size="small" bordered>
+            <a-descriptions-item label="周期开始">{{ periodStart }}</a-descriptions-item>
+            <a-descriptions-item label="周期结束">{{ periodEnd }}</a-descriptions-item>
+          </a-descriptions>
         </a-form-item>
       </a-form>
 
@@ -345,7 +358,8 @@ const selectedShipmentIds = ref<number[]>([])
 async function handleSiteChange() {
   selectedShipmentIds.value = []
   shipmentList.value = []
-  if (!selectedSite.value) return
+  // 站点和季度都选了才加载货件
+  if (!selectedSite.value || !selectedQuarter.value) return
   await loadShipments()
 }
 
@@ -356,14 +370,26 @@ function handleQuarterChange() {
   settlementResult.value = []
   invResult.value = []
   stepCompleted.value = [false, false, false, false]
+  // 季度选好后，如果站点也已选，则加载货件
+  selectedShipmentIds.value = []
+  shipmentList.value = []
+  if (selectedSite.value && selectedQuarter.value) {
+    loadShipments()
+  }
 }
 
 async function loadShipments() {
-  if (!selectedSite.value) return
+  if (!selectedSite.value || !selectedQuarter.value) return
   shipmentLoading.value = true
   try {
-    // 不传 country 参数，加载当前店铺的所有货件（shop_id 已通过请求头隔离）
-    const res = await getFbaShipmentList({ page: 1, size: 200 })
+    // 按季度时间范围过滤货件（shop_id 已通过请求头隔离）
+    const res = await getFbaShipmentList({
+      page: 1,
+      size: 200,
+      siteCode: selectedSite.value,
+      startDate: periodStart.value,
+      endDate: periodEnd.value
+    })
     shipmentList.value = res.data?.records || []
   } catch (error: any) {
     message.error(error?.message || '加载货件失败')
@@ -483,9 +509,14 @@ async function handleExportDn(id: number) {
 // ==================== Step 3: 生成结算单 + INV ====================
 const settlementLoading = ref(false)
 const settlementResult = ref<any[]>([])
-const settlementDate = ref<Dayjs | null>(null)
 const invLoading = ref(false)
 const invResult = ref<any[]>([])
+
+// 切换结算季度时重置结算单和INV结果
+function handleSettlementQuarterChange() {
+  settlementResult.value = []
+  invResult.value = []
+}
 
 async function handleGenerateSettlements() {
   if (!selectedQuarter.value) return

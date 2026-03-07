@@ -22,15 +22,49 @@ public interface FbaShipmentService {
     Map<String, Object> importData(MultipartFile file);
 
     /**
+     * 批量导入多个Excel文件（支持幂等性，带站点代码）
+     *
+     * @param files Excel文件列表
+     * @param siteCode 站点代码（如 US/CA/UK/DE）
+     * @return 批量导入结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    Map<String, Object> batchImportData(List<MultipartFile> files, String siteCode);
+
+    /**
      * 批量导入多个Excel文件（支持幂等性）
+     * <p>向后兼容方法，站点代码默认为 null</p>
      *
      * @param files Excel文件列表
      * @return 批量导入结果
      */
-    Map<String, Object> batchImportData(List<MultipartFile> files);
+    default Map<String, Object> batchImportData(List<MultipartFile> files) {
+        return batchImportData(files, null);
+    }
+
+    /**
+     * 分页查询货件列表（支持站点过滤）
+     *
+     * @param shipmentId 货件单号（模糊查询）
+     * @param status 货件状态
+     * @param shopName 店铺名称
+     * @param country 国家
+     * @param siteCode 站点代码（如 US/CA/UK/DE），为空时不过滤
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @param page 页码
+     * @param size 每页条数
+     * @return 分页结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
+                          String siteCode, String startDate, String endDate, int page, int size);
 
     /**
      * 分页查询货件列表
+     * <p>向后兼容方法，站点代码默认为 null</p>
      *
      * @param shipmentId 货件单号（模糊查询）
      * @param status 货件状态
@@ -42,8 +76,10 @@ public interface FbaShipmentService {
      * @param size 每页条数
      * @return 分页结果
      */
-    Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
-                          String startDate, String endDate, int page, int size);
+    default Page<FbaShipment> list(String shipmentId, String status, String shopName, String country,
+                                  String startDate, String endDate, int page, int size) {
+        return list(shipmentId, status, shopName, country, null, startDate, endDate, page, size);
+    }
 
     /**
      * 根据ID查询货件详情（包含SKU明细）

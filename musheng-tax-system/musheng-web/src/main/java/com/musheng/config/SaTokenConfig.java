@@ -1,13 +1,14 @@
 package com.musheng.config;
 
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 import cn.dev33.satoken.context.SaHolder;
 import cn.dev33.satoken.filter.SaServletFilter;
 import cn.dev33.satoken.router.SaHttpMethod;
 import cn.dev33.satoken.router.SaRouter;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.dev33.satoken.util.SaResult;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 /**
  * Sa-Token过滤器配置类
@@ -67,6 +68,8 @@ public class SaTokenConfig {
                             .setHeader("Access-Control-Allow-Methods", "*")
                             // 允许的请求头
                             .setHeader("Access-Control-Allow-Headers", "*")
+                            // 暴露给前端的响应头（文件下载时前端需要读取 Content-Disposition 获取文件名）
+                            .setHeader("Access-Control-Expose-Headers", "Content-Disposition")
                             // 有效时间
                             .setHeader("Access-Control-Max-Age", "3600");
 

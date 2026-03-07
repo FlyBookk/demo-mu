@@ -6,11 +6,14 @@ import com.musheng.business.fbashipment.service.FbaShipmentService;
 import com.musheng.common.annotation.OperationLog;
 import com.musheng.common.annotation.RequireShop;
 import com.musheng.common.result.PageResult;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,15 +33,46 @@ public class FbaShipmentController {
 
     private final FbaShipmentService fbaShipmentService;
 
+    /**
+     * 批量导入FBA货件
+     * 从多个Excel文件批量导入FBA货件明细，支持幂等性，需指定站点代码
+     *
+     * @param files Excel文件列表
+     * @param siteCode 站点代码（如 US/CA/UK/DE），必填
+     * @return 批量导入结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
     @OperationLog(module = "FBA货件", operation = "批量导入FBA货件")
-    @Operation(summary = "批量导入FBA货件", description = "从多个Excel文件批量导入FBA货件明细，支持幂等性")
+    @Operation(summary = "批量导入FBA货件", description = "从多个Excel文件批量导入FBA货件明细，支持幂等性，需指定站点代码")
     @PostMapping("/batch-import")
     public Result<Map<String, Object>> batchImportData(
-            @Parameter(description = "Excel文件列表") @RequestParam("files") List<MultipartFile> files) {
-        Map<String, Object> batchResult = fbaShipmentService.batchImportData(files);
+            @Parameter(description = "Excel文件列表") @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "站点代码（必填）") @RequestParam String siteCode) {
+        // 校验站点代码非空
+        if (!StringUtils.hasText(siteCode)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "站点代码不能为空");
+        }
+        Map<String, Object> batchResult = fbaShipmentService.batchImportData(files, siteCode);
         return Result.success(batchResult);
     }
 
+    /**
+     * 分页查询FBA货件列表
+     *
+     * @param shipmentId 货件单号（模糊查询）
+     * @param status 货件状态
+     * @param shopName 店铺名称
+     * @param country 国家
+     * @param siteCode 站点代码（如 US/CA/UK/DE），可选
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @param page 页码（从1开始）
+     * @param size 每页条数
+     * @return 分页查询结果
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
     @Operation(summary = "货件列表", description = "分页查询FBA货件列表")
     @GetMapping("/list")
     public Result<PageResult<FbaShipment>> list(
@@ -46,12 +80,13 @@ public class FbaShipmentController {
             @Parameter(description = "货件状态") @RequestParam(required = false) String status,
             @Parameter(description = "店铺名称") @RequestParam(required = false) String shopName,
             @Parameter(description = "国家") @RequestParam(required = false) String country,
+            @Parameter(description = "站点代码") @RequestParam(required = false) String siteCode,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
             @Parameter(description = "结束日期") @RequestParam(required = false) String endDate,
             @Parameter(description = "页码(从1开始)") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
         Page<FbaShipment> pageResult = fbaShipmentService.list(
-                shipmentId, status, shopName, country, startDate, endDate, page, size);
+                shipmentId, status, shopName, country, siteCode, startDate, endDate, page, size);
         PageResult<FbaShipment> result = PageResult.of(
                 pageResult.getRecords(),
                 pageResult.getTotal(),

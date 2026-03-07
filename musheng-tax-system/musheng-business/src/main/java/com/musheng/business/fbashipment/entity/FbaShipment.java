@@ -37,6 +37,9 @@ public class FbaShipment extends BaseEntity {
     @Schema(description = "收件国家")
     private String country;
 
+    @Schema(description = "站点代码（如 US/CA/UK/DE）")
+    private String siteCode;
+
     @Schema(description = "收件州/省")
     private String state;
 

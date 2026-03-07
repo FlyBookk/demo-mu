@@ -18,12 +18,15 @@ const BASE_URL = '/api/v1/business/fba-shipment'
 
 /**
  * 批量导入FBA货件（多个Excel文件，支持幂等性）
+ * @param files Excel文件列表
+ * @param siteCode 站点代码（必填，如 US/CA/UK/DE）
  */
-export function batchImportFbaShipment(files: File[]) {
+export function batchImportFbaShipment(files: File[], siteCode: string) {
   const formData = new FormData()
   files.forEach(file => {
     formData.append('files', file)
   })
+  formData.append('siteCode', siteCode)
   return request.upload<FbaShipmentBatchImportResult>(`${BASE_URL}/batch-import`, formData)
 }
 

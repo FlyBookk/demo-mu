@@ -169,6 +169,7 @@ CREATE TABLE `t_fba_shipment` (
   `warehouse_code` varchar(255) DEFAULT NULL COMMENT '物流中心编码（亚马逊仓库地址）',
   `shop_name` varchar(100) DEFAULT NULL COMMENT '店铺名称（如：慕声欧洲-UK）',
   `country` varchar(50) DEFAULT NULL COMMENT '国家（如：英国）',
+  `site_code` varchar(10) DEFAULT NULL COMMENT '站点代码（如 US/CA/UK/DE）',
   `created_date` datetime DEFAULT NULL COMMENT '货件创建时间',
   `sku_count` int DEFAULT '0' COMMENT 'SKU种类数量（自动计算）',
   `total_quantity` int DEFAULT '0' COMMENT '总发货量（自动汇总）',
@@ -182,7 +183,8 @@ CREATE TABLE `t_fba_shipment` (
   KEY `idx_shop_id` (`shop_id`) COMMENT '店铺索引',
   KEY `idx_shipment_id` (`shipment_id`) COMMENT '货件单号索引',
   KEY `idx_created_date` (`created_date`) COMMENT '创建时间索引',
-  KEY `idx_import_batch` (`import_batch_id`) COMMENT '导入批次索引'
+  KEY `idx_import_batch` (`import_batch_id`) COMMENT '导入批次索引',
+  KEY `idx_fba_shipment_site_code` (`site_code`) COMMENT '站点代码索引'
 ) ENGINE=InnoDB AUTO_INCREMENT=51 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='FBA货件主表';
 
 

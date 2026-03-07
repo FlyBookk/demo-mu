@@ -62,6 +62,25 @@
               </a-select>
             </a-form-item>
           </a-col>
+          <a-col :span="3">
+            <a-form-item>
+              <a-select
+                v-model:value="searchForm.siteCode"
+                placeholder="站点"
+                allow-clear
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option
+                  v-for="option in siteCodeOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
           <a-col :span="5">
             <a-form-item>
               <a-range-picker
@@ -140,7 +159,7 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        :scroll="{ x: 1600 }"
+        :scroll="{ x: 1680 }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -192,6 +211,7 @@
           <a-descriptions-item label="收件人">{{ detailData.recipient || '-' }}</a-descriptions-item>
           <a-descriptions-item label="收件邮编">{{ detailData.postalCode || '-' }}</a-descriptions-item>
           <a-descriptions-item label="收件国家">{{ detailData.country || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="站点">{{ detailData.siteCode || '-' }}</a-descriptions-item>
           <a-descriptions-item label="收件州/省">{{ detailData.state || '-' }}</a-descriptions-item>
           <a-descriptions-item label="收件城市">{{ detailData.city || '-' }}</a-descriptions-item>
           <a-descriptions-item label="收件街道地址" :span="2">{{ detailData.streetAddress || '-' }}</a-descriptions-item>
@@ -268,8 +288,23 @@ const authStore = useAuthStore()
 const searchForm = reactive({
   shipmentId: '',
   status: undefined as string | undefined,
-  country: undefined as string | undefined
+  country: undefined as string | undefined,
+  siteCode: undefined as string | undefined
 })
+
+// 站点选项（与导入页面保持一致）
+const siteCodeOptions = [
+  { label: 'US（美国）', value: 'US' },
+  { label: 'CA（加拿大）', value: 'CA' },
+  { label: 'UK（英国）', value: 'UK' },
+  { label: 'DE（德国）', value: 'DE' },
+  { label: 'FR（法国）', value: 'FR' },
+  { label: 'IT（意大利）', value: 'IT' },
+  { label: 'ES（西班牙）', value: 'ES' },
+  { label: 'JP（日本）', value: 'JP' },
+  { label: 'AU（澳大利亚）', value: 'AU' },
+  { label: 'MX（墨西哥）', value: 'MX' },
+]
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const countryOptions = ref<Array<{ label: string; value: string }>>([])
 
@@ -320,6 +355,13 @@ const columns = [
     key: 'country',
     width: 180,
     ellipsis: true
+  },
+  {
+    title: '站点',
+    dataIndex: 'siteCode',
+    key: 'siteCode',
+    width: 80,
+    customRender: ({ text }: { text: string }) => text || '-'
   },
   {
     title: '创建时间',
@@ -417,6 +459,7 @@ async function fetchData() {
       shipmentId: searchForm.shipmentId || undefined,
       status: searchForm.status,
       country: searchForm.country,
+      siteCode: searchForm.siteCode,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
@@ -438,6 +481,7 @@ async function fetchSummary() {
     const params = {
       status: searchForm.status,
       country: searchForm.country,
+      siteCode: searchForm.siteCode,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
@@ -458,6 +502,7 @@ function handleReset() {
   searchForm.shipmentId = ''
   searchForm.status = undefined
   searchForm.country = undefined
+  searchForm.siteCode = undefined
   searchDateRange.value = null
   pagination.current = 1
   fetchData()
@@ -488,6 +533,7 @@ async function handleExport() {
     const params = {
       status: searchForm.status,
       country: searchForm.country,
+      siteCode: searchForm.siteCode,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
