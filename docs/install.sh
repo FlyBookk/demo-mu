@@ -86,39 +86,24 @@ if ! systemctl is-active mysqld &>/dev/null; then
     systemctl start mysqld
 fi
 systemctl enable mysqld &>/dev/null
-systemctl status mysqld --no-pager
+systemctl status mysqld --no-pager || true
 
-# 初始化数据库（幂等：已存在则跳过）
+# 初始化数据库
 info "初始化 MySQL 数据库..."
-MYSQL_INIT_SQL=$(cat << EOSQL
-ALTER USER 'root'@'localhost' IDENTIFIED BY 'root';
-ALTER USER 'root'@'%' IDENTIFIED BY 'root' ;
-CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'root';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-CREATE DATABASE IF NOT EXISTS musheng_tax
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+# alinux3 首次安装后 root@localhost 默认无密码，直接登录
+# 只做两件事：设置密码 + 允许远程连接（Navicat 等工具需要）
+mysql -u root << 'EOSQL'
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';
+UPDATE mysql.user SET host='%' WHERE user='root' AND host='localhost';
 FLUSH PRIVILEGES;
 EOSQL
-)
 
-# alinux3 首次安装 mysql-server 默认 root 无密码，直接 socket 登录
-if mysql -u root -e "SELECT 1;" &>/dev/null; then
-    mysql -u root -e "$MYSQL_INIT_SQL"
-    info "数据库初始化完成（root 无密码模式）"
-else
-    # 尝试从日志取临时密码
-    TEMP_PASS=$(grep "temporary password" /var/log/mysqld.log 2>/dev/null | tail -1 | awk '{print $NF}')
-    if [[ -n "$TEMP_PASS" ]]; then
-        info "检测到 MySQL 临时密码，正在初始化..."
-        mysql -u root -p"$TEMP_PASS" --connect-expired-password -e "$MYSQL_INIT_SQL"
-    else
-        warn "无法自动登录 MySQL，请手动执行以下 SQL："
-        echo "$MYSQL_INIT_SQL"
-    fi
-fi
+# 创建业务数据库
+mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS musheng_tax CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-# 验证
-mysql -u root -proot -e "SHOW DATABASES;" 2>/dev/null | grep musheng_tax \
+info "MySQL 初始化完成（root/root，支持外部访问）"
+mysql -u root -proot -e "SHOW DATABASES;" 2>/dev/null | grep -q musheng_tax \
     && info "数据库验证通过" || warn "数据库验证失败，请检查"
 
 # ============================================================
@@ -166,7 +151,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass         http://127.0.0.1:8888/api/;
+        proxy_pass         http://127.0.0.1:8888/;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -212,8 +197,8 @@ ExecStart=/usr/bin/java -jar /opt/musheng/backend/musheng-web-1.0.0-SNAPSHOT.jar
           --server.port=8888
 Restart=on-failure
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:/opt/musheng/logs/app.log
+StandardError=append:/opt/musheng/logs/app.log
 
 [Install]
 WantedBy=multi-user.target
@@ -221,41 +206,22 @@ EOF
 fi
 
 systemctl daemon-reload
-systemctl enable musheng
+systemctl enable musheng || true
 info "systemd 服务注册完成（等上传 JAR 后再启动）"
 
-# ============================================================
-# 第八步：生成生产环境配置
-# ============================================================
-info "第八步：生成 application-prod.yml..."
-if [[ -f /opt/musheng/backend/application-prod.yml ]]; then
-    warn "application-prod.yml 已存在，跳过写入（如需更新请手动编辑）"
+# 配置日志定期清理（每天凌晨2点，保留30天）
+CRON_JOB="0 2 * * * find /opt/musheng/logs -name '*.log' -mtime +30 -delete"
+if ! crontab -u musheng -l 2>/dev/null | grep -qF "musheng/logs"; then
+    (crontab -u musheng -l 2>/dev/null; echo "$CRON_JOB") | crontab -u musheng -
+    info "日志清理 cron 已配置（保留30天，每天凌晨2点执行）"
 else
-su - musheng -c "cat > /opt/musheng/backend/application-prod.yml << EOF
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/musheng_tax?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: root
-    password: root
-
-app:
-  upload:
-    chunk-dir: /opt/musheng/uploads/chunks
-    final-dir:  /opt/musheng/uploads/files
-    temp-dir:  /opt/musheng/uploads/temp
-
-logging:
-  level:
-    root: warn
-    com.musheng: info
-EOF"
-    info "配置文件已写入 /opt/musheng/backend/application-prod.yml"
+    warn "日志清理 cron 已存在，跳过"
 fi
 
 # ============================================================
-# 第九步：开放防火墙
+# 第八步：开放防火墙
 # ============================================================
-info "第九步：配置防火墙..."
+info "第八步：配置防火墙..."
 if systemctl is-active firewalld &>/dev/null; then
     # 已添加过则跳过，避免重复 reload
     if ! firewall-cmd --query-service=http &>/dev/null; then
@@ -291,7 +257,7 @@ info "========== 安装完成 =========="
 echo "  后续步骤："
 echo "  1. 上传 JAR：scp musheng-web-1.0.0-SNAPSHOT.jar musheng@<IP>:/opt/musheng/backend/"
 echo "  2. 上传前端：scp -r dist/* musheng@<IP>:/opt/musheng/frontend/"
-echo "  3. 导入数据库：mysql -u musheng -p${DB_PASSWORD} musheng_tax < musheng_tax.sql"
+echo "  3. 导入数据库：mysql -u root -proot musheng_tax < musheng_tax.sql"
 echo "  4. 启动服务：systemctl start musheng"
 echo "  5. 查看日志：journalctl -u musheng -f"
 echo ""
@@ -300,5 +266,9 @@ echo ""
 info "========== 切换到 musheng 用户 =========="
 echo "  后续操作请在 musheng 用户下进行："
 echo "  上传文件、启动服务、查看日志等均使用此用户"
+echo "  切换命令：su - musheng"
 echo ""
-exec su - musheng
+# 仅在交互式终端下切换用户，远程 ssh 执行时跳过
+if [[ -t 0 ]]; then
+    exec su - musheng
+fi
