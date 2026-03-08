@@ -162,7 +162,8 @@ const menuItems = computed<ItemType[]>(() => {
         { key: 'Shop', label: '店铺管理' },
         { key: 'TransactionType', label: '交易类型映射' },
         { key: 'FieldMapping', label: '字段映射模板' },
-        { key: 'ImportRecord', label: '导入记录' }
+        { key: 'ImportRecord', label: '导入记录' },
+        { key: 'DataClean', label: '数据清理' }
       ]
     },
     {

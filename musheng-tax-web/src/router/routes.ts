@@ -121,6 +121,15 @@ export const routes: RouteRecordRaw[] = [
               title: '导入记录',
               permission: 'config:importRecord'
             }
+          },
+          {
+            path: 'data-clean',
+            name: 'DataClean',
+            component: () => import('@/views/config/dataClean/index.vue'),
+            meta: {
+              title: '数据清理',
+              permission: 'config:dataClean'
+            }
           }
         ]
       },
