@@ -280,6 +280,8 @@ import {
 import type { FbaShipment, FbaShipmentSummary } from '@/types/fbaShipment'
 import { FbaShipmentStatusOptions } from '@/types/fbaShipment'
 import { useAuthStore } from '@/stores/modules/auth'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -292,19 +294,18 @@ const searchForm = reactive({
   siteCode: undefined as string | undefined
 })
 
-// 站点选项（与导入页面保持一致）
-const siteCodeOptions = [
-  { label: 'US（美国）', value: 'US' },
-  { label: 'CA（加拿大）', value: 'CA' },
-  { label: 'UK（英国）', value: 'UK' },
-  { label: 'DE（德国）', value: 'DE' },
-  { label: 'FR（法国）', value: 'FR' },
-  { label: 'IT（意大利）', value: 'IT' },
-  { label: 'ES（西班牙）', value: 'ES' },
-  { label: 'JP（日本）', value: 'JP' },
-  { label: 'AU（澳大利亚）', value: 'AU' },
-  { label: 'MX（墨西哥）', value: 'MX' },
-]
+// 站点选项（动态从 t_marketplace 接口获取）
+const siteCodeOptions = ref<{ label: string; value: string }[]>([])
+
+async function fetchSiteOptions() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    siteCodeOptions.value = list.map(m => ({ label: `${m.siteCode}（${m.siteName}）`, value: m.siteCode }))
+  } catch {
+    siteCodeOptions.value = []
+  }
+}
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const countryOptions = ref<Array<{ label: string; value: string }>>([])
 
@@ -599,6 +600,7 @@ function handleBatchDelete() {
 
 // 初始化
 onMounted(() => {
+  fetchSiteOptions()
   fetchData()
   fetchSummary()
   fetchCountries()

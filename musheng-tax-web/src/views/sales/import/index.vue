@@ -397,6 +397,7 @@ import {
   executeSalesImport,
   getTemplatesByType
 } from '@/api/sales'
+import { getEnabledMarketplaces } from '@/api/marketplace'
 import type {
   SalesSourceType,
   SalesUploadResult,
@@ -404,6 +405,7 @@ import type {
   SalesImportResult,
   FieldMappingTemplateOption
 } from '@/types/sales'
+import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
 
@@ -449,15 +451,17 @@ function getPreviewStep(): number {
 }
 
 // ============= 站点选项 =============
-const siteOptions = [
-  { code: 'US', name: '美国站' },
-  { code: 'UK', name: '英国站' },
-  { code: 'DE', name: '德国站' },
-  { code: 'CA', name: '加拿大站' },
-  { code: 'FR', name: '法国站' },
-  { code: 'IT', name: '意大利站' },
-  { code: 'ES', name: '西班牙站' }
-]
+const siteOptions = ref<{ code: string; name: string }[]>([])
+
+async function fetchSiteOptions() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    siteOptions.value = list.map(m => ({ code: m.siteCode, name: m.siteName }))
+  } catch {
+    siteOptions.value = []
+  }
+}
 
 // ============= 数据源类型选项 =============
 const sourceTypeOptions = [
@@ -792,7 +796,7 @@ function handleImportAgain() {
 
 // 初始化
 onMounted(() => {
-  // 无需初始加载
+  fetchSiteOptions()
 })
 </script>
 

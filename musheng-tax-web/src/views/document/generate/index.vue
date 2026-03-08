@@ -273,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { DownloadOutlined } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
@@ -290,6 +290,8 @@ import {
 } from '@/api/document'
 import { getFbaShipmentList } from '@/api/fbaShipment'
 import type { FbaShipment } from '@/types/fbaShipment'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 
 // ==================== 步骤控制 ====================
 const currentStep = ref(0)
@@ -311,13 +313,18 @@ function stepStatus(index: number) {
 
 // ==================== Step 0: 选择条件 ====================
 
-// 站点选项
-const siteOptions = [
-  { label: 'US - 美国', value: 'US' },
-  { label: 'CA - 加拿大', value: 'CA' },
-  { label: 'UK - 英国', value: 'UK' },
-  { label: 'DE - 德国', value: 'DE' }
-]
+// 站点选项（动态从 t_marketplace 接口获取）
+const siteOptions = ref<{ label: string; value: string }[]>([])
+
+async function fetchSiteOptions() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    siteOptions.value = list.map(m => ({ label: `${m.siteCode} - ${m.siteName}`, value: m.siteCode }))
+  } catch {
+    siteOptions.value = []
+  }
+}
 
 const selectedSite = ref<string | undefined>(undefined)
 
@@ -590,6 +597,10 @@ async function handleExportInv(id: number) {
     message.error('下载失败')
   }
 }
+
+onMounted(() => {
+  fetchSiteOptions()
+})
 </script>
 
 <style lang="scss" scoped>

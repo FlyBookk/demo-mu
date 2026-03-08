@@ -162,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { UploadProps, UploadFile } from 'ant-design-vue'
@@ -174,6 +174,8 @@ import { request } from '@/utils/request'
 import ImportConfirmModal from '@/components/business/ImportConfirmModal/index.vue'
 import type { FbaShipmentImportResult, FbaShipmentBatchImportResult } from '@/types/fbaShipment'
 import { batchImportFbaShipment } from '@/api/fbaShipment'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 
 const router = useRouter()
 
@@ -210,19 +212,18 @@ const fileList = ref<UploadFile[]>([])
 const uploadedFiles = ref<File[]>([])
 
 // ============= 站点选择 =============
-const siteCodeOptions = [
-  { label: 'US（美国）', value: 'US' },
-  { label: 'CA（加拿大）', value: 'CA' },
-  { label: 'UK（英国）', value: 'UK' },
-  { label: 'DE（德国）', value: 'DE' },
-  { label: 'FR（法国）', value: 'FR' },
-  { label: 'IT（意大利）', value: 'IT' },
-  { label: 'ES（西班牙）', value: 'ES' },
-  { label: 'JP（日本）', value: 'JP' },
-  { label: 'AU（澳大利亚）', value: 'AU' },
-  { label: 'MX（墨西哥）', value: 'MX' },
-]
+const siteCodeOptions = ref<{ label: string; value: string }[]>([])
 const selectedSiteCode = ref<string | undefined>(undefined)
+
+async function fetchSiteOptions() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    siteCodeOptions.value = list.map(m => ({ label: `${m.siteCode}（${m.siteName}）`, value: m.siteCode }))
+  } catch {
+    siteCodeOptions.value = []
+  }
+}
 // ============= 导入相关 =============
 const importing = ref(false)
 const importResult = ref<FbaShipmentBatchImportResult | null>(null)
@@ -361,6 +362,10 @@ function handleImportAgain() {
   importResult.value = null
   selectedSiteCode.value = undefined
 }
+
+onMounted(() => {
+  fetchSiteOptions()
+})
 </script>
 
 <style lang="scss" scoped>
