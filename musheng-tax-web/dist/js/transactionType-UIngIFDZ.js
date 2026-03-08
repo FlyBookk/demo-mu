@@ -1,1 +1,0 @@
-import{r as t}from"./index-D2uqqQm1.js";const e="/api/v1/config/transaction-type-mappings";function r(n){return t.get(e,n)}function i(n){return t.post(e,n)}function o(n,a){return t.put("".concat(e,"/").concat(n),a)}function s(n){return t.delete("".concat(e,"/").concat(n))}function c(n){return t.delete(e,{data:{ids:n}})}export{c as b,i as c,s as d,r as g,o as u};
