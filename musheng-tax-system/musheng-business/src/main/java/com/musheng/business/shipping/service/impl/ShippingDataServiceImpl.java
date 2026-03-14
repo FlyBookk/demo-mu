@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.business.common.service.csv.CsvHeaderResult;
 import com.musheng.business.common.service.csv.CsvParseServiceImpl;
+import com.musheng.business.sales.entity.SalesData;
+import com.musheng.business.sales.mapper.SalesDataMapper;
 import com.musheng.business.shipping.entity.ShippingData;
 import com.musheng.business.shipping.mapper.ShippingDataMapper;
 import com.musheng.business.shipping.service.ShippingDataService;
@@ -53,6 +55,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     private final org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory;
     private final ImportConfig importConfig;
     private final MarketplaceService marketplaceService;
+    private final SalesDataMapper salesDataMapper;
 
     @Override
     public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId,
@@ -190,6 +193,23 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             }
 
             log.info("Parsed {} valid records from {} total rows", parsedRecords.size(), totalCount);
+
+            // Step 1.5: 关联 MCF（Non-Amazon）订单的站点编码
+            // 找出所有 siteCode=PENDING 的记录，批量查询销售订单表，用销售订单的站点回填
+            List<ShippingData> pendingRecords = parsedRecords.stream()
+                    .filter(r -> "PENDING".equals(r.getSiteCode()))
+                    .toList();
+
+            if (!pendingRecords.isEmpty()) {
+                log.info("发现 {} 条 MCF 订单（Non-Amazon），开始关联销售订单站点...", pendingRecords.size());
+                resolveMcfSiteCodes(pendingRecords, shopId, rowErrorMap);
+                // 移除仍然是 PENDING 的记录（未找到对应销售订单，已记录错误）
+                int pendingBefore = (int) parsedRecords.stream().filter(r -> "PENDING".equals(r.getSiteCode())).count();
+                parsedRecords.removeIf(r -> "PENDING".equals(r.getSiteCode()));
+                failCount += pendingBefore;
+                log.info("MCF 订单关联完成：成功关联 {} 条，未找到销售订单 {} 条",
+                        pendingRecords.size() - pendingBefore, pendingBefore);
+            }
 
             // Step 2: Batch check for duplicates (单次查询避免N+1)
             List<ShippingData> toInsert = new ArrayList<>();
@@ -391,42 +411,55 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Missing sales channel");
         }
 
-        // 将销售渠道映射为站点编码
+        // 将销售渠道映射为站点编码（Non-Amazon MCF 订单返回 null，后续关联销售订单赋值）
         String siteCode = mapSalesChannelToSiteCode(salesChannel);
 
-        // 从预加载的配置中获取marketplace (避免N+1查询)
-        Marketplace marketplace = marketplaceMap.get(siteCode);
+        ShippingData shippingData = new ShippingData();
 
-        if (marketplace == null) {
-            if (importConfig.isAutoCreateMarketplace()) {
-                marketplace = autoCreateMarketplace(siteCode);
-                marketplaceMap.put(siteCode, marketplace);
-                log.info("Auto-created marketplace for siteCode: {}", siteCode);
-            } else {
-                throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found for site: " + siteCode);
+        if (siteCode == null) {
+            // MCF 订单：站点待定，标记为 PENDING，后续通过关联销售订单表回填
+            shippingData.setSiteCode("PENDING");
+            shippingData.setMarketplace(salesChannel);
+            log.debug("MCF 订单（Non-Amazon），站点待关联：orderId={}", orderIdEarly);
+        } else {
+            // 从预加载的配置中获取 marketplace（避免 N+1 查询）
+            Marketplace marketplace = marketplaceMap.get(siteCode);
+            if (marketplace == null) {
+                if (importConfig.isAutoCreateMarketplace()) {
+                    marketplace = autoCreateMarketplace(siteCode);
+                    marketplaceMap.put(siteCode, marketplace);
+                    log.info("Auto-created marketplace for siteCode: {}", siteCode);
+                } else {
+                    throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found for site: " + siteCode);
+                }
             }
+            shippingData.setSiteCode(siteCode);
+            shippingData.setMarketplace(marketplace.getMarketplaceId());
         }
 
-        ShippingData shippingData = new ShippingData();
-        shippingData.setSiteCode(siteCode);
-        shippingData.setMarketplace(marketplace.getMarketplaceId());
-
-        // Parse currency code (优先使用CSV中的货币，否则使用marketplace默认值)
-        // 列错位时货币列可能被填成数量等，需校验；有效货币为3位字母如GBP/USD
+        // 解析货币编码（优先使用 CSV 中的货币，否则使用 marketplace 默认值）
+        // 列错位时货币列可能被填成数量等，需校验；有效货币为3位字母如 GBP/USD
         String currencyCode = getFieldValue(rowData, "currency", "货币", "currencycode");
         if (StringUtils.hasText(currencyCode) && isValidCurrencyCode(currencyCode)) {
             shippingData.setCurrencyCode(currencyCode.trim().toUpperCase());
+        } else if ("PENDING".equals(shippingData.getSiteCode())) {
+            // MCF 订单：货币暂时留空，resolveMcfSiteCodes 关联站点后会从 marketplace 配置补充
+            shippingData.setCurrencyCode(null);
         } else {
-            shippingData.setCurrencyCode(marketplace.getCurrencyCode());
+            // 从 marketplace 配置中取默认货币
+            Marketplace marketplace = marketplaceMap.get(shippingData.getSiteCode());
+            shippingData.setCurrencyCode(marketplace != null ? marketplace.getCurrencyCode() : "USD");
         }
 
         // Parse order ID（已在前面用于空行判断）
         shippingData.setOrderId(orderIdEarly);
 
         // Parse ship date (支持中文列名)
+        // MCF 订单站点未知时，使用 "US" 作为兼容性 fallback（不依赖站点格式）
         String dateStr = getFieldValue(rowData, "ship date", "shipment date", "shipped date", "versanddatum", "配送日期");
         if (StringUtils.hasText(dateStr)) {
-            LocalDateTime dateTime = csvParseService.parseDate(dateStr, siteCode);
+            String parseSiteCode = siteCode != null ? siteCode : "US";
+            LocalDateTime dateTime = csvParseService.parseDate(dateStr, parseSiteCode);
             if (dateTime != null) {
                 shippingData.setShipDate(dateTime.toLocalDate());
             }
@@ -536,8 +569,89 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
+     * 批量关联 MCF（Non-Amazon）订单的站点编码
+     * 通过订单号查询销售订单表，用销售订单的站点编码回填配送记录
+     *
+     * @param pendingRecords siteCode=PENDING 的配送记录列表
+     * @param shopId         当前店铺ID（数据隔离）
+     * @param rowErrorMap    行错误记录（key=行号/负数，value=错误信息）
+     * @author wanhua
+     * 10:00 2026年03月14日
+     */
+    private void resolveMcfSiteCodes(List<ShippingData> pendingRecords, Long shopId,
+                                     Map<Integer, String> rowErrorMap) {
+        // 收集所有待关联的订单号
+        Set<String> pendingOrderIds = pendingRecords.stream()
+                .map(ShippingData::getOrderId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (pendingOrderIds.isEmpty()) {
+            return;
+        }
+
+        // 批量查询销售订单表，获取订单号 -> 站点编码的映射
+        LambdaQueryWrapper<SalesData> salesWrapper = new LambdaQueryWrapper<>();
+        salesWrapper.eq(SalesData::getShopId, shopId)
+                .in(SalesData::getOrderId, pendingOrderIds)
+                .select(SalesData::getOrderId, SalesData::getSiteCode);
+
+        List<SalesData> salesList = salesDataMapper.selectList(salesWrapper);
+
+        // 构建 orderId -> siteCode 映射（同一订单可能有多条销售记录，取第一条的站点）
+        Map<String, String> orderSiteMap = new HashMap<>();
+        for (SalesData sales : salesList) {
+            if (StringUtils.hasText(sales.getOrderId()) && StringUtils.hasText(sales.getSiteCode())) {
+                orderSiteMap.putIfAbsent(sales.getOrderId(), sales.getSiteCode());
+            }
+        }
+
+        log.info("销售订单查询完成：查询 {} 个订单号，找到 {} 个站点映射",
+                pendingOrderIds.size(), orderSiteMap.size());
+
+        // 回填站点编码，找不到的记录标记为失败
+        int mcfErrorIndex = -1;
+        for (ShippingData record : pendingRecords) {
+            String siteCode = orderSiteMap.get(record.getOrderId());
+            if (StringUtils.hasText(siteCode)) {
+                record.setSiteCode(siteCode);
+                // 补充 marketplace 配置（含货币编码）
+                Marketplace marketplace = marketplaceMapper.selectOne(
+                        new LambdaQueryWrapper<Marketplace>().eq(Marketplace::getSiteCode, siteCode));
+                if (marketplace != null) {
+                    record.setMarketplace(marketplace.getMarketplaceId());
+                    // 用 marketplace 配置的货币覆盖解析阶段的值，确保准确
+                    record.setCurrencyCode(marketplace.getCurrencyCode());
+                } else {
+                    // marketplace 配置不存在，无法确定货币，报错让处理人知晓
+                    rowErrorMap.put(mcfErrorIndex--, String.format(
+                            "MCF 订单关联站点成功（siteCode=%s），但未找到对应 Marketplace 配置，无法确定货币：orderId=%s",
+                            siteCode, record.getOrderId()));
+                    record.setSiteCode("PENDING"); // 回退为 PENDING，调用方会移除
+                    log.warn("MCF 订单 Marketplace 配置缺失：orderId={}, siteCode={}", record.getOrderId(), siteCode);
+                    continue;
+                }
+                log.debug("MCF 订单站点关联成功：orderId={}, siteCode={}, currency={}",
+                        record.getOrderId(), siteCode, record.getCurrencyCode());
+            } else {
+                // 未找到对应销售订单，标记为失败（保持 PENDING，调用方会移除）
+                // 用负数 key 区分 MCF 关联失败与解析阶段失败
+                rowErrorMap.put(mcfErrorIndex--, String.format(
+                        "MCF 订单未找到对应销售订单，无法确定站点：orderId=%s", record.getOrderId()));
+                log.warn("MCF 订单关联失败，未找到销售订单：orderId={}", record.getOrderId());
+            }
+        }
+    }
+
+    /**
      * 将销售渠道映射为站点编码
      * 例如: amazon.de -> DE, amazon.co.uk -> UK, amazon.fr -> FR
+     * Non-Amazon（MCF 多渠道配送订单）返回 null，由调用方关联销售订单确定站点
+     *
+     * @param salesChannel 销售渠道字符串
+     * @return 站点编码，Non-Amazon 时返回 null
+     * @author wanhua
+     * 10:00 2026年03月14日
      */
     private String mapSalesChannelToSiteCode(String salesChannel) {
         if (!StringUtils.hasText(salesChannel)) {
@@ -567,6 +681,10 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             return "CA";
         } else if (channel.contains("amazon.com")) {
             return "US";
+        } else if (channel.contains("non-amazon")) {
+            // MCF（多渠道配送）订单：卖家通过非亚马逊渠道接单，委托亚马逊仓库发货
+            // 站点未知，返回 null，后续通过关联销售订单表来确定站点
+            return null;
         } else {
             throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
                     "Unsupported sales channel: " + salesChannel);
