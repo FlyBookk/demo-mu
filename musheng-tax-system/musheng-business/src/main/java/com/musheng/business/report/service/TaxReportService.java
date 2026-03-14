@@ -1,7 +1,6 @@
 package com.musheng.business.report.service;
 
 import com.musheng.business.report.dto.DashboardData;
-import com.musheng.business.report.dto.FeeBreakdown;
 import com.musheng.business.report.dto.TaxReportSummary;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -31,17 +30,7 @@ public interface TaxReportService {
     List<TaxReportSummary> getTaxSummary(String siteCode, String startQuarter, String endQuarter);
 
     /**
-     * 查询费用分类明细（用于图表展示）
-     *
-     * @param siteCode     站点编码（可选）
-     * @param startQuarter 开始季度
-     * @param endQuarter   结束季度
-     * @return 费用分类列表
-     */
-    List<FeeBreakdown> getFeeBreakdown(String siteCode, String startQuarter, String endQuarter);
-
-    /**
-     * 导出报税汇总报表
+     * 导出报税汇总列表（表头与列表一致）
      *
      * @param siteCode     站点编码（可选）
      * @param startQuarter 开始季度

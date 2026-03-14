@@ -45,9 +45,6 @@
             <a-button @click="handleExport" :loading="exporting">
               <DownloadOutlined /> 导出Excel
             </a-button>
-            <a-button @click="handleExportDetail" :loading="exportDetailLoading">
-              <DownloadOutlined /> 导出统计明细
-            </a-button>
           </a-space>
         </a-form-item>
       </a-form>
@@ -231,56 +228,18 @@
       </a-table>
     </a-card>
 
-    <!-- 费用分类图表 -->
-    <a-row :gutter="16" style="margin-top: 16px">
-      <a-col :span="12">
-        <a-card title="费用分类占比" class="chart-card">
-          <div ref="pieChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-      <a-col :span="12">
-        <a-card title="费用分类对比" class="chart-card">
-          <div ref="barChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-    </a-row>
-
     <!-- 费用明细表格 -->
-    <a-card title="其他费分类明细" class="data-card" style="margin-top: 16px">
-      <a-table
-        :columns="feeColumns"
-        :data-source="feeData"
-        :loading="feeLoading"
-        :pagination="false"
-        row-key="key"
-        bordered
-        size="middle"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'feeType'">
-            <a-tag :color="getFeeTypeColor(record.feeCategory)">{{ record.feeType }}</a-tag>
-          </template>
-          <template v-else-if="column.key === 'amountCny'">
-            <span :class="['amount', (record.amountCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.amountCny) }}</span>
-          </template>
-        </template>
-      </a-table>
-    </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons-vue'
-import * as echarts from 'echarts'
 import {
   getTaxSummary,
-  getFeeBreakdown,
   exportTaxSummary,
-  exportTaxSummaryDetail,
-  type TaxReportSummary,
-  type FeeBreakdown
+  type TaxReportSummary
 } from '@/api/report'
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import type { Marketplace } from '@/types/marketplace'
@@ -296,18 +255,9 @@ const availableQuarters = ref<string[]>([])
 
 // ============= 数据 =============
 const loading = ref(false)
-const feeLoading = ref(false)
 const exporting = ref(false)
-const exportDetailLoading = ref(false)
 
 const summaryData = ref<(TaxReportSummary & { key: string })[]>([])
-const feeData = ref<(FeeBreakdown & { key: string })[]>([])
-
-// 图表引用
-const pieChartRef = ref<HTMLElement | null>(null)
-const barChartRef = ref<HTMLElement | null>(null)
-let pieChart: echarts.ECharts | null = null
-let barChart: echarts.ECharts | null = null
 
 // 汇总统计
 const totalStats = computed(() => {
@@ -345,8 +295,6 @@ const totalStats = computed(() => {
     procurementCostCny
   }
 })
-
-// 表格列定义 - Amazon口径
 const summaryColumns = [
   { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 150, fixed: 'left' },
   { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
@@ -359,15 +307,6 @@ const summaryColumns = [
   { title: '平台支出合计⑨=④+⑤+⑥', dataIndex: 'platformExpensesCny', key: 'platformExpensesCny', width: 180, align: 'right' },
   { title: '4%利润⑩=③×4%', dataIndex: 'profit4PercentCny', key: 'profit4PercentCny', width: 150, align: 'right' },
   { title: '采购成本⑪=③-⑨-⑩', dataIndex: 'procurementCostCny', key: 'procurementCostCny', width: 170, align: 'right' }
-]
-
-const feeColumns = [
-  { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 80 },
-  { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
-  { title: '费用类型', dataIndex: 'feeType', key: 'feeType', width: 200 },
-  { title: '费用分类', dataIndex: 'feeCategory', key: 'feeCategory', width: 100 },
-  { title: '金额(人民币)', dataIndex: 'amountCny', key: 'amountCny', width: 150, align: 'right' },
-  { title: '交易笔数', dataIndex: 'transactionCount', key: 'transactionCount', width: 100, align: 'right' }
 ]
 
 // ============= 方法 =============
@@ -386,15 +325,6 @@ function formatAmountWithSign(value: number | null | undefined): string {
   const num = value ?? 0
   const prefix = num < 0 ? '-¥' : '¥'
   return `${prefix}${formatNumber(Math.abs(num))}`
-}
-
-function getFeeTypeColor(category: string): string {
-  switch (category) {
-    case 'fee': return 'orange'
-    case 'adjustment': return 'purple'
-    case 'other': return 'default'
-    default: return 'blue'
-  }
 }
 
 function generateAvailableQuarters() {
@@ -460,143 +390,8 @@ async function fetchSummary() {
   }
 }
 
-async function fetchFeeBreakdown() {
-  if (!filterForm.selectedQuarter) return
-
-  feeLoading.value = true
-  try {
-    const res = await getFeeBreakdown({
-      siteCode: filterForm.siteCode,
-      startQuarter: filterForm.selectedQuarter,
-      endQuarter: filterForm.selectedQuarter
-    })
-    feeData.value = (res.data || []).map((item, index) => ({
-      ...item,
-      key: `${item.siteCode}-${item.yearQuarter}-${item.feeType}-${index}`
-    }))
-    // 更新图表
-    await nextTick()
-    updateCharts()
-  } catch (error) {
-    console.error('获取费用明细失败:', error)
-  } finally {
-    feeLoading.value = false
-  }
-}
-
-function updateCharts() {
-  // 按费用类型汇总（其他费明细）
-  const feeTypeMap = new Map<string, number>()
-  feeData.value.forEach(item => {
-    const current = feeTypeMap.get(item.feeType) || 0
-    feeTypeMap.set(item.feeType, current + item.amountCny)
-  })
-
-  // 加入广告费汇总（来自报税汇总数据），按原始正负值累加
-  const advertisingTotal = totalStats.value.advertisingCostCny
-  if (advertisingTotal != null && advertisingTotal !== 0) {
-    const current = feeTypeMap.get('广告费') || 0
-    feeTypeMap.set('广告费', current + advertisingTotal)
-  }
-
-  // 按原始值排序，图表展示用原始值（柱状图可显示负值）
-  const pieDataArr = Array.from(feeTypeMap.entries())
-    .map(([name, value]) => ({ name, value, displayValue: Math.abs(value) }))
-    .filter(item => item.value !== 0)
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-
-  if (!pieDataArr.length) return
-
-  // 饼图
-  if (pieChartRef.value) {
-    if (!pieChart) {
-      pieChart = echarts.init(pieChartRef.value)
-    }
-    pieChart.setOption({
-      tooltip: {
-        trigger: 'item',
-        formatter: (params: any) => {
-          const actual = params.data.actualValue ?? params.value
-          const prefix = actual < 0 ? '-¥' : '¥'
-          return `${params.name}: ${prefix}${formatNumber(Math.abs(actual))} (${params.percent}%)`
-        }
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'center'
-      },
-      series: [{
-        type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['40%', '50%'],
-        data: pieDataArr.map(item => ({ name: item.name, value: item.displayValue, actualValue: item.value })),
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        },
-        label: {
-          show: false
-        }
-      }]
-    })
-  }
-
-  // 柱状图
-  if (barChartRef.value) {
-    if (!barChart) {
-      barChart = echarts.init(barChartRef.value)
-    }
-    barChart.setOption({
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params: any) => {
-          const item = params[0]
-          const v = item.value
-          const prefix = v < 0 ? '-¥' : '¥'
-          return `${item.name}: ${prefix}${formatNumber(Math.abs(v))}`
-        }
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        data: pieDataArr.slice(0, 10).map(item => item.name),
-        axisLabel: {
-          rotate: 30,
-          interval: 0
-        }
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: {
-          formatter: (value: number) => `¥${(value / 1000).toFixed(0)}k`
-        }
-      },
-      series: [{
-        type: 'bar',
-        data: pieDataArr.slice(0, 10).map(item => item.value),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#ff7875' },
-            { offset: 1, color: '#ff4d4f' }
-          ])
-        }
-      }]
-    })
-  }
-}
-
 async function handleQuery() {
   await fetchSummary()
-  await fetchFeeBreakdown()
 }
 
 async function handleExport() {
@@ -621,39 +416,10 @@ async function handleExport() {
   }
 }
 
-async function handleExportDetail() {
-  if (!filterForm.selectedQuarter) {
-    message.warning('请选择查询季度')
-    return
-  }
-
-  exportDetailLoading.value = true
-  try {
-    await exportTaxSummaryDetail({
-      siteCode: filterForm.siteCode,
-      startQuarter: filterForm.selectedQuarter,
-      endQuarter: filterForm.selectedQuarter
-    })
-    message.success('导出成功（收入/退款/费用/其它 分 sheet 或分文件）')
-  } catch (error) {
-    console.error('导出统计明细失败:', error)
-    message.error('导出失败')
-  } finally {
-    exportDetailLoading.value = false
-  }
-}
-
-// 窗口大小变化时重绘图表
-function handleResize() {
-  pieChart?.resize()
-  barChart?.resize()
-}
-
 // 初始化
 onMounted(async () => {
   await fetchMarketplaces()
   generateAvailableQuarters()
-  window.addEventListener('resize', handleResize)
   if (filterForm.selectedQuarter) {
     handleQuery()
   }

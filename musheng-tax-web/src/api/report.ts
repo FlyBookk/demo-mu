@@ -143,19 +143,9 @@ export function getFeeBreakdown(params: { siteCode?: string; startQuarter: strin
 }
 
 /**
- * 导出报税汇总
+ * 导出报税汇总列表（表头与列表一致）
  */
 export function exportTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
   const filename = `报税汇总_${new Date().toISOString().slice(0, 10)}.xlsx`
   return request.downloadAndSave(`${BASE_URL}/tax-summary/export`, filename, params)
-}
-
-/**
- * 导出报税统计明细（参与统计的原始数据，分 sheet：收入/退款/费用/其它）
- * 数据量>10万时自动降级为 CSV+ZIP
- */
-export function exportTaxSummaryDetail(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
-  const ts = new Date().toISOString().slice(0, 10)
-  // 服务端会通过 Content-Disposition 返回正确文件名（.xlsx 或 .zip），此处作为兜底
-  return request.downloadAndSave(`${BASE_URL}/tax-summary/export-detail`, `报税统计明细_${ts}.xlsx`, params)
 }

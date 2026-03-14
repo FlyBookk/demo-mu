@@ -8,7 +8,6 @@ import com.musheng.business.advertising.mapper.AdvertisingBillMapper;
 import com.musheng.business.rate.dto.RateWithDateDTO;
 import com.musheng.business.rate.service.RateService;
 import com.musheng.business.report.dto.DashboardData;
-import com.musheng.business.report.dto.FeeBreakdown;
 import com.musheng.business.report.dto.TaxReportSummary;
 import com.musheng.business.report.service.TaxReportService;
 import com.musheng.business.sales.entity.SalesData;
@@ -974,105 +973,6 @@ public class TaxReportServiceImpl implements TaxReportService {
         return adEnd != null && !adEnd.isBefore(startDate);
     }
 
-    @Override
-    public List<FeeBreakdown> getFeeBreakdown(String siteCode, String startQuarter, String endQuarter) {
-        log.info("Getting fee breakdown: siteCode={}, startQuarter={}, endQuarter={}", siteCode, startQuarter, endQuarter);
-
-        // 店铺数据隔离
-        Long shopId = ShopContext.requireShopId();
-
-        List<String> sites = StringUtils.hasText(siteCode)
-                ? List.of(siteCode)
-                : List.of("US", "CA", "UK", "DE");
-
-        List<String> quarters = getQuartersInRange(startQuarter, endQuarter);
-
-        List<FeeBreakdown> results = new ArrayList<>();
-
-        for (String site : sites) {
-            for (String quarter : quarters) {
-                List<FeeBreakdown> fees = calculateFeeBreakdown(site, quarter, shopId);
-                results.addAll(fees);
-            }
-        }
-
-        return results;
-    }
-
-    /**
-     * 计算费用分类明细
-     */
-    private List<FeeBreakdown> calculateFeeBreakdown(String siteCode, String yearQuarter, Long shopId) {
-        int year = Integer.parseInt(yearQuarter.substring(0, 4));
-        int quarter = Integer.parseInt(yearQuarter.substring(6, 7));
-        LocalDate startDate = getQuarterStartDate(year, quarter);
-        LocalDate endDate = getQuarterEndDate(year, quarter);
-
-        // 查询费用类数据
-        LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SalesData::getShopId, shopId)  // 店铺数据隔离
-                .eq(SalesData::getSiteCode, siteCode)
-                .in(SalesData::getTransactionCategory, List.of("fee", "adjustment", "other"))
-                .ge(SalesData::getTransactionDate, startDate.atStartOfDay())
-                .lt(SalesData::getTransactionDate, endDate.plusDays(1).atStartOfDay());
-        List<SalesData> feeList = salesDataMapper.selectList(wrapper);
-
-        // 按 transactionType 分组统计
-        Map<String, List<SalesData>> groupedByType = feeList.stream()
-                .filter(f -> f.getTransactionType() != null)
-                .collect(Collectors.groupingBy(SalesData::getTransactionType));
-
-        List<FeeBreakdown> results = new ArrayList<>();
-
-        for (Map.Entry<String, List<SalesData>> entry : groupedByType.entrySet()) {
-            String feeType = entry.getKey();
-            List<SalesData> fees = entry.getValue();
-
-            BigDecimal totalAmount = BigDecimal.ZERO;
-            BigDecimal totalAmountCny = BigDecimal.ZERO;
-
-            for (SalesData fee : fees) {
-                BigDecimal amount = sumFeeFields(fee);
-                totalAmount = totalAmount.add(amount);
-
-                BigDecimal rate = fee.getExchangeRate();
-                if (rate != null && rate.compareTo(BigDecimal.ZERO) > 0) {
-                    totalAmountCny = totalAmountCny.add(amount.multiply(rate));
-                } else {
-                    totalAmountCny = totalAmountCny.add(amount);
-                }
-            }
-
-            FeeBreakdown breakdown = new FeeBreakdown();
-            breakdown.setSiteCode(siteCode);
-            breakdown.setYearQuarter(yearQuarter);
-            breakdown.setFeeType(feeType);
-            breakdown.setFeeCategory(fees.get(0).getTransactionCategory());
-            breakdown.setAmount(totalAmount.setScale(2, RoundingMode.HALF_UP));
-            breakdown.setAmountCny(totalAmountCny.setScale(2, RoundingMode.HALF_UP));
-            breakdown.setTransactionCount(fees.size());
-
-            results.add(breakdown);
-        }
-
-        // 按金额降序排序（费用多为负，数值越小影响越大，故用 a.compareTo(b) 使更负的排前）
-        results.sort((a, b) -> a.getAmountCny().compareTo(b.getAmountCny()));
-
-        return results;
-    }
-
-    /**
-     * 合计费用字段
-     */
-    private BigDecimal sumFeeFields(SalesData data) {
-        BigDecimal sum = BigDecimal.ZERO;
-        if (data.getSellingFees() != null) sum = sum.add(data.getSellingFees());
-        if (data.getFbaFees() != null) sum = sum.add(data.getFbaFees());
-        if (data.getOtherTransactionFees() != null) sum = sum.add(data.getOtherTransactionFees());
-        if (data.getOther() != null) sum = sum.add(data.getOther());
-        return sum;
-    }
-
     /**
      * 计算发货单总计费用（当 totalAmount 为空时回退）
      * 总计 = 商品价格 + 商品税 + 运费 + 运费税 + 礼品包装价格 + 礼品包装税 + 商品促销折扣 + 货件促销折扣
@@ -1167,12 +1067,12 @@ public class TaxReportServiceImpl implements TaxReportService {
 
     @Override
     public void exportTaxSummary(String siteCode, String startQuarter, String endQuarter, HttpServletResponse response) {
-        log.info("Exporting tax summary: siteCode={}, startQuarter={}, endQuarter={}", siteCode, startQuarter, endQuarter);
+        log.info("导出报税汇总列表: siteCode={}, startQuarter={}, endQuarter={}", siteCode, startQuarter, endQuarter);
 
         try {
             List<TaxReportSummary> summaries = getTaxSummary(siteCode, startQuarter, endQuarter);
 
-            String fileName = "tax_summary_" + System.currentTimeMillis() + ".xlsx";
+            String fileName = "报税汇总_" + System.currentTimeMillis() + ".xlsx";
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8));
 
@@ -1181,27 +1081,18 @@ public class TaxReportServiceImpl implements TaxReportService {
 
                 Sheet sheet = workbook.createSheet("报税汇总");
 
-                // 表头 - V2版本（移除发货订单数，其他费拆分为 ServiceFee + 其他）
-                Row headerRow = sheet.createRow(0);
+                // 表头与前端列表一致
                 String[] headers = {
-                        "站点", "季度", "币种",
-                        "收入总额(原币)", "收入总额(人民币)",
-                        "退款-发货(原币)", "退款-发货(人民币)", "退款笔数-发货",
-                        "退款-结算(原币)", "退款-结算(人民币)", "退款笔数-结算",
-                        "退款-Amazon(原币)", "退款-Amazon(人民币)", "退款笔数-Amazon",
-                        "消费税(原币)", "消费税(人民币)",
-                        "销售费用(原币)", "销售费用(人民币)",
-                        "FBA费用(原币)", "FBA费用(人民币)",
-                        "其他交易费(原币)", "其他交易费(人民币)",
-                        "其他(原币)", "其他(人民币)",
-                        "佣金/服务费合计(原币)", "佣金/服务费合计(人民币)",
-                        "佣金-Amazon(原币)", "佣金-Amazon(人民币)",
-                        "其他费-ServiceFee(原币)", "其他费-ServiceFee(人民币)",
-                        "其他费-其他(原币)", "其他费-其他(人民币)", "其他费笔数",
-                        "广告费(原币)", "广告费(人民币)",
-                        "总成本(人民币)",
-                        // 平台支出与采购成本（按图片公式）
-                        "平台支出合计(人民币)", "4%利润(人民币)", "采购成本(人民币)"
+                        "站点", "季度",
+                        "收入总额①(人民币)",
+                        "退款金额②(人民币)",
+                        "收入净额③=①-②(人民币)",
+                        "平台代扣税④(人民币)",
+                        "佣金服务费⑤(人民币)",
+                        "广告费⑥(人民币)",
+                        "平台支出合计⑨=④+⑤+⑥(人民币)",
+                        "4%利润⑩=③×4%(人民币)",
+                        "采购成本⑪=③-⑨-⑩(人民币)"
                 };
 
                 CellStyle headerStyle = workbook.createCellStyle();
@@ -1209,6 +1100,7 @@ public class TaxReportServiceImpl implements TaxReportService {
                 headerFont.setBold(true);
                 headerStyle.setFont(headerFont);
 
+                Row headerRow = sheet.createRow(0);
                 for (int i = 0; i < headers.length; i++) {
                     Cell cell = headerRow.createCell(i);
                     cell.setCellValue(headers[i]);
@@ -1222,56 +1114,19 @@ public class TaxReportServiceImpl implements TaxReportService {
                     int col = 0;
                     row.createCell(col++).setCellValue(s.getSiteName());
                     row.createCell(col++).setCellValue(s.getYearQuarter());
-                    row.createCell(col++).setCellValue(s.getCurrencyCode());
-                    row.createCell(col++).setCellValue(toDouble(s.getTotalRevenue()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalRevenueCny()));
-                    // 退款-发货
-                    row.createCell(col++).setCellValue(toDouble(s.getRefundByShipment()));
-                    row.createCell(col++).setCellValue(toDouble(s.getRefundByShipmentCny()));
-                    row.createCell(col++).setCellValue(s.getRefundCountByShipment() != null ? s.getRefundCountByShipment() : 0);
-                    // 退款-结算
-                    row.createCell(col++).setCellValue(toDouble(s.getRefundBySettlement()));
-                    row.createCell(col++).setCellValue(toDouble(s.getRefundBySettlementCny()));
-                    row.createCell(col++).setCellValue(s.getRefundCountBySettlement() != null ? s.getRefundCountBySettlement() : 0);
-                    // 退款-Amazon口径
-                    row.createCell(col++).setCellValue(toDouble(s.getRefundBySettlementAmazon()));
                     row.createCell(col++).setCellValue(toDouble(s.getRefundBySettlementAmazonCny()));
-                    row.createCell(col++).setCellValue(s.getRefundCountBySettlementAmazon() != null ? s.getRefundCountBySettlementAmazon() : 0);
-                    // 消费税
-                    row.createCell(col++).setCellValue(toDouble(s.getConsumptionTax()));
+                    // 收入净额 = 收入总额 - |退款金额|
+                    double netRevenue = toDouble(s.getTotalRevenueCny()) - Math.abs(toDouble(s.getRefundBySettlementAmazonCny()));
+                    row.createCell(col++).setCellValue(netRevenue);
                     row.createCell(col++).setCellValue(toDouble(s.getConsumptionTaxCny()));
-                    // 佣金/服务费明细
-                    row.createCell(col++).setCellValue(toDouble(s.getSellingFees()));
-                    row.createCell(col++).setCellValue(toDouble(s.getSellingFeesCny()));
-                    row.createCell(col++).setCellValue(toDouble(s.getFbaFees()));
-                    row.createCell(col++).setCellValue(toDouble(s.getFbaFeesCny()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherTransactionFees()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherTransactionFeesCny()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherAmount()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherAmountCny()));
-                    row.createCell(col++).setCellValue(toDouble(s.getTotalServiceFee()));
-                    row.createCell(col++).setCellValue(toDouble(s.getTotalServiceFeeCny()));
-                    // 佣金-Amazon口径
-                    row.createCell(col++).setCellValue(toDouble(s.getTotalCommissionFee()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalCommissionFeeCny()));
-                    // 其他费（拆分）
-                    row.createCell(col++).setCellValue(toDouble(s.getMiscServiceFee()));
-                    row.createCell(col++).setCellValue(toDouble(s.getMiscServiceFeeCny()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherFees()));
-                    row.createCell(col++).setCellValue(toDouble(s.getOtherFeesCny()));
-                    row.createCell(col++).setCellValue(s.getMiscFeesCount() != null ? s.getMiscFeesCount() : 0);
-                    // 广告费
-                    row.createCell(col++).setCellValue(toDouble(s.getAdvertisingCost()));
                     row.createCell(col++).setCellValue(toDouble(s.getAdvertisingCostCny()));
-                    // 总成本
-                    row.createCell(col++).setCellValue(toDouble(s.getTotalCost()));
-                    // 平台支出与采购成本（按图片公式）
                     row.createCell(col++).setCellValue(toDouble(s.getPlatformExpensesCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getProfit4PercentCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getProcurementCostCny()));
                 }
 
-                // 自动列宽
                 for (int i = 0; i < headers.length; i++) {
                     sheet.autoSizeColumn(i);
                 }
@@ -1280,8 +1135,8 @@ public class TaxReportServiceImpl implements TaxReportService {
                 outputStream.flush();
             }
         } catch (IOException e) {
-            log.error("Failed to export tax summary", e);
-            throw new RuntimeException("Failed to export report", e);
+            log.error("导出报税汇总失败", e);
+            throw new RuntimeException("导出报表失败", e);
         }
     }
 

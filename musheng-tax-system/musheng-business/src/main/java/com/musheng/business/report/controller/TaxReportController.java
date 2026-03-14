@@ -1,9 +1,7 @@
 package com.musheng.business.report.controller;
 
 import com.musheng.business.report.dto.DashboardData;
-import com.musheng.business.report.dto.FeeBreakdown;
 import com.musheng.business.report.dto.TaxReportSummary;
-import com.musheng.business.report.service.TaxReportDetailExportService;
 import com.musheng.business.report.service.TaxReportService;
 import com.musheng.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,7 +23,6 @@ import java.util.List;
 public class TaxReportController {
 
     private final TaxReportService taxReportService;
-    private final TaxReportDetailExportService taxReportDetailExportService;
 
     @Operation(summary = "首页仪表盘数据", description = "获取首页核心指标和图表数据，支持按季度筛选")
     @GetMapping("/dashboard")
@@ -45,17 +42,7 @@ public class TaxReportController {
         return Result.success(summaries);
     }
 
-    @Operation(summary = "费用分类明细", description = "按费用类型分类统计（用于图表展示）")
-    @GetMapping("/fee-breakdown")
-    public Result<List<FeeBreakdown>> getFeeBreakdown(
-            @Parameter(description = "站点编码（不传则查询所有站点）") @RequestParam(required = false) String siteCode,
-            @Parameter(description = "开始季度", required = true) @RequestParam String startQuarter,
-            @Parameter(description = "结束季度", required = true) @RequestParam String endQuarter) {
-        List<FeeBreakdown> fees = taxReportService.getFeeBreakdown(siteCode, startQuarter, endQuarter);
-        return Result.success(fees);
-    }
-
-    @Operation(summary = "导出报税汇总", description = "导出报税汇总报表为Excel文件")
+    @Operation(summary = "导出报税汇总列表", description = "导出报税汇总数据列表为Excel文件，表头与列表一致")
     @GetMapping("/tax-summary/export")
     public void exportTaxSummary(
             @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
@@ -63,15 +50,5 @@ public class TaxReportController {
             @Parameter(description = "结束季度") @RequestParam String endQuarter,
             HttpServletResponse response) {
         taxReportService.exportTaxSummary(siteCode, startQuarter, endQuarter, response);
-    }
-
-    @Operation(summary = "导出报税统计明细", description = "导出参与统计的原始数据，分sheet：收入/退款/费用/其它。数据量>10万时自动降级为CSV+ZIP")
-    @GetMapping("/tax-summary/export-detail")
-    public void exportTaxSummaryDetail(
-            @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
-            @Parameter(description = "开始季度") @RequestParam String startQuarter,
-            @Parameter(description = "结束季度") @RequestParam String endQuarter,
-            HttpServletResponse response) {
-        taxReportDetailExportService.exportTaxSummaryDetail(siteCode, startQuarter, endQuarter, response);
     }
 }
