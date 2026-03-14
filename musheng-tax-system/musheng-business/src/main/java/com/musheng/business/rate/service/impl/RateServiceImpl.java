@@ -173,9 +173,11 @@ public class RateServiceImpl implements RateService {
         }
 
         LocalDate queryDate = LocalDate.parse(date);
-        ExchangeRate rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, queryDate);
+        // 优先取当天或之前最近的汇率（节假日取前一个工作日）
+        ExchangeRate rate = exchangeRateRepository.findLatestBefore(currencyCode, queryDate);
         if (rate == null) {
-            rate = exchangeRateRepository.findLatestBefore(currencyCode, queryDate);
+            // 回退：取之后最早的汇率
+            rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, queryDate);
         }
         if (rate == null) {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST,
@@ -212,9 +214,11 @@ public class RateServiceImpl implements RateService {
                     .build();
         }
 
-        ExchangeRate rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, date);
+        // 优先取当天或之前最近的汇率（节假日取前一个工作日）
+        ExchangeRate rate = exchangeRateRepository.findLatestBefore(currencyCode, date);
         if (rate == null) {
-            rate = exchangeRateRepository.findLatestBefore(currencyCode, date);
+            // 回退：取之后最早的汇率
+            rate = exchangeRateRepository.findEarliestOnOrAfter(currencyCode, date);
         }
         if (rate == null) {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST,

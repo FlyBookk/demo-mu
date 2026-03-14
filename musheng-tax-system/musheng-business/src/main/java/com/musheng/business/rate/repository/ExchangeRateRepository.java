@@ -80,7 +80,7 @@ public interface ExchangeRateRepository {
 
     /**
      * 查询指定日期及之后最早有汇率的记录
-     * 用于节假日顺延：遇假期/周末无汇率时，取下一个有汇率的日期
+     * 用于回退兜底：当指定日期之前无汇率数据时，取之后最近的汇率
      *
      * @param currencyCode 货币代码
      * @param date 起始日期（含）
@@ -89,13 +89,14 @@ public interface ExchangeRateRepository {
     ExchangeRate findEarliestOnOrAfter(String currencyCode, LocalDate date);
 
     /**
-     * 查询指定日期之前最近的汇率
+     * 查询指定日期及之前最近的汇率（含当天）
+     * 用于节假日前移：遇假期/周末无汇率时，取前一个有汇率的日期
      *
      * @param currencyCode 货币代码
-     * @param date 日期
+     * @param date 截止日期（含）
      * @return 汇率数据实体，不存在返回null
      * @author wanhua
-     * 10:30 2026年02月02日
+     * 10:30 2026年03月14日
      */
     ExchangeRate findLatestBefore(String currencyCode, LocalDate date);
 
