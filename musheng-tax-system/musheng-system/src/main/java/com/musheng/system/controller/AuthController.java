@@ -5,6 +5,7 @@ import com.musheng.common.result.Result;
 import com.musheng.system.dto.ChangePasswordRequest;
 import com.musheng.system.dto.LoginRequest;
 import com.musheng.system.dto.LoginResponse;
+import com.musheng.system.dto.UpdateProfileRequest;
 import com.musheng.system.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,6 +48,14 @@ public class AuthController {
     public Result<LoginResponse> getCurrentUser() {
         LoginResponse response = authService.getCurrentUser();
         return Result.success(response);
+    }
+
+    @OperationLog(module = "认证管理", operation = "更新个人信息")
+    @Operation(summary = "更新个人信息", description = "更新当前用户的真实姓名、邮箱、手机号")
+    @PostMapping("/update-profile")
+    public Result<Void> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        authService.updateProfile(request);
+        return Result.success();
     }
 
     @OperationLog(module = "认证管理", operation = "修改密码")

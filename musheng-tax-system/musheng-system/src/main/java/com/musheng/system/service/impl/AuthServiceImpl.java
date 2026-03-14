@@ -7,6 +7,7 @@ import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
 import com.musheng.system.dto.LoginRequest;
 import com.musheng.system.dto.LoginResponse;
+import com.musheng.system.dto.UpdateProfileRequest;
 import com.musheng.system.entity.Role;
 import com.musheng.system.entity.User;
 import com.musheng.system.mapper.RoleMapper;
@@ -172,6 +173,28 @@ public class AuthServiceImpl implements AuthService {
                         .build())
                 .permissions(permissions)
                 .build();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateProfile(UpdateProfileRequest request) {
+        if (!StpUtil.isLogin()) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+
+        Long userId = StpUtil.getLoginIdAsLong();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // 更新个人信息
+        user.setRealName(request.getRealName());
+        user.setEmail(request.getEmail());
+        user.setPhone(request.getPhone());
+        userMapper.updateById(user);
+
+        log.info("用户更新个人信息: {}", user.getUsername());
     }
 
     @Override

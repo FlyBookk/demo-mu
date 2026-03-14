@@ -2,6 +2,7 @@ package com.musheng.system.service;
 
 import com.musheng.system.dto.LoginRequest;
 import com.musheng.system.dto.LoginResponse;
+import com.musheng.system.dto.UpdateProfileRequest;
 
 import java.util.List;
 
@@ -30,6 +31,13 @@ public interface AuthService {
      * @return Login response with user info
      */
     LoginResponse getCurrentUser();
+
+    /**
+     * 更新个人信息
+     *
+     * @param request 更新请求
+     */
+    void updateProfile(UpdateProfileRequest request);
 
     /**
      * Change password

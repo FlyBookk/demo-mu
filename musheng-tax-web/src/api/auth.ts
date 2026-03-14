@@ -4,7 +4,7 @@
  */
 
 import { request } from '@/utils/request'
-import type { LoginParams, LoginResult, UserInfo, ChangePasswordParams } from '@/types/auth'
+import type { LoginParams, LoginResult, UserInfo, ChangePasswordParams, UpdateProfileParams } from '@/types/auth'
 
 /**
  * 用户登录
@@ -39,6 +39,13 @@ export function getCurrentUser() {
  */
 export function changePassword(data: ChangePasswordParams) {
   return request.post<void>('/api/v1/auth/change-password', data)
+}
+
+/**
+ * 更新个人信息
+ */
+export function updateProfile(data: UpdateProfileParams) {
+  return request.post<void>('/api/v1/auth/update-profile', data)
 }
 
 /**

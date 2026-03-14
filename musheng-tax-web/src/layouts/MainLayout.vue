@@ -87,6 +87,53 @@
       </a-layout-content>
     </a-layout>
   </a-layout>
+
+  <!-- 个人信息弹窗 -->
+  <a-modal
+    v-model:open="profileVisible"
+    title="个人信息"
+    :confirm-loading="profileLoading"
+    @ok="handleProfileOk"
+    ok-text="保存"
+    cancel-text="取消"
+  >
+    <a-form ref="profileFormRef" :model="profileForm" layout="vertical" style="margin-top: 16px">
+      <a-form-item label="用户名">
+        <a-input :value="authStore.username" disabled />
+      </a-form-item>
+      <a-form-item label="真实姓名" name="realName" :rules="[{ required: true, message: '请输入真实姓名' }]">
+        <a-input v-model:value="profileForm.realName" placeholder="请输入真实姓名" />
+      </a-form-item>
+      <a-form-item label="邮箱" name="email" :rules="[{ type: 'email', message: '邮箱格式不正确' }]">
+        <a-input v-model:value="profileForm.email" placeholder="请输入邮箱" />
+      </a-form-item>
+      <a-form-item label="手机号" name="phone">
+        <a-input v-model:value="profileForm.phone" placeholder="请输入手机号" />
+      </a-form-item>
+    </a-form>
+  </a-modal>
+
+  <!-- 修改密码弹窗 -->
+  <a-modal
+    v-model:open="passwordVisible"
+    title="修改密码"
+    :confirm-loading="passwordLoading"
+    @ok="handlePasswordOk"
+    ok-text="确认修改"
+    cancel-text="取消"
+  >
+    <a-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" layout="vertical" style="margin-top: 16px">
+      <a-form-item label="原密码" name="oldPassword">
+        <a-input-password v-model:value="passwordForm.oldPassword" placeholder="请输入原密码" />
+      </a-form-item>
+      <a-form-item label="新密码" name="newPassword">
+        <a-input-password v-model:value="passwordForm.newPassword" placeholder="请输入新密码（6-20位）" />
+      </a-form-item>
+      <a-form-item label="确认新密码" name="confirmPassword">
+        <a-input-password v-model:value="passwordForm.confirmPassword" placeholder="请再次输入新密码" />
+      </a-form-item>
+    </a-form>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
@@ -110,9 +157,12 @@ import {
   ToolOutlined
 } from '@ant-design/icons-vue'
 import type { MenuProps, ItemType } from 'ant-design-vue'
+import { message, Form } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import { useAppStore } from '@/stores/modules/app'
 import ShopSelector from '@/components/business/ShopSelector/index.vue'
+import { changePassword, updateProfile } from '@/api/auth'
+import type { UpdateProfileParams, ChangePasswordParams } from '@/types/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -276,14 +326,104 @@ const handleMenuClick: MenuProps['onClick'] = (info) => {
   router.push({ name: key })
 }
 
+// ── 个人信息弹窗 ──────────────────────────────────────────
+const profileVisible = ref(false)
+const profileLoading = ref(false)
+const profileFormRef = ref()
+const profileForm = ref({
+  realName: '',
+  email: '',
+  phone: ''
+})
+
+function openProfileModal() {
+  profileForm.value = {
+    realName: authStore.userInfo?.realName || '',
+    email: authStore.userInfo?.email || '',
+    phone: authStore.userInfo?.phone || ''
+  }
+  profileVisible.value = true
+}
+
+async function handleProfileOk() {
+  try {
+    await profileFormRef.value.validate()
+    profileLoading.value = true
+    await updateProfile(profileForm.value)
+    // 更新本地 store 中的用户信息
+    if (authStore.userInfo) {
+      authStore.userInfo.realName = profileForm.value.realName
+      authStore.userInfo.email = profileForm.value.email
+      authStore.userInfo.phone = profileForm.value.phone
+    }
+    message.success('个人信息更新成功')
+    profileVisible.value = false
+  } catch (e: any) {
+    if (e?.errorFields) return // 表单校验失败，不提示
+    message.error(e?.message || '更新失败，请重试')
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+// ── 修改密码弹窗 ──────────────────────────────────────────
+const passwordVisible = ref(false)
+const passwordLoading = ref(false)
+const passwordFormRef = ref()
+const passwordForm = ref({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const passwordRules = {
+  oldPassword: [{ required: true, message: '请输入原密码' }],
+  newPassword: [
+    { required: true, message: '请输入新密码' },
+    { min: 6, max: 20, message: '密码长度6-20位' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码' },
+    {
+      validator: (_: any, value: string) => {
+        if (value && value !== passwordForm.value.newPassword) {
+          return Promise.reject('两次输入的密码不一致')
+        }
+        return Promise.resolve()
+      }
+    }
+  ]
+}
+
+function openPasswordModal() {
+  passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+  passwordVisible.value = true
+}
+
+async function handlePasswordOk() {
+  try {
+    await passwordFormRef.value.validate()
+    passwordLoading.value = true
+    await changePassword(passwordForm.value)
+    message.success('密码修改成功，请重新登录')
+    passwordVisible.value = false
+    authStore.logoutAction()
+  } catch (e: any) {
+    if (e?.errorFields) return
+    message.error(e?.message || '修改失败，请重试')
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
 // 用户菜单点击
 function handleUserMenuClick({ key }: { key: string }) {
   switch (key) {
     case 'profile':
-      // TODO: 打开个人信息弹窗
+      openProfileModal()
       break
     case 'password':
-      // TODO: 打开修改密码弹窗
+      openPasswordModal()
       break
     case 'logout':
       authStore.logoutAction()

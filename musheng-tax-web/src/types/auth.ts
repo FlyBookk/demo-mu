@@ -47,3 +47,10 @@ export interface ChangePasswordParams {
   newPassword: string
   confirmPassword: string
 }
+
+// 更新个人信息参数
+export interface UpdateProfileParams {
+  realName: string
+  email?: string
+  phone?: string
+}
