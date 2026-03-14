@@ -59,7 +59,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
 
     @Override
     public Page<ShippingData> list(String siteCode, String trackingNumber, String orderId,
-                                   String startDate, String endDate, int page, int size) {
+                                   String startDate, String endDate, Integer isOwnSite, int page, int size) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -74,6 +74,9 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         }
         if (StringUtils.hasText(orderId)) {
             wrapper.like(ShippingData::getOrderId, orderId);
+        }
+        if (isOwnSite != null) {
+            wrapper.eq(ShippingData::getIsOwnSite, isOwnSite);
         }
         // 按发货日期过滤
         if (StringUtils.hasText(startDate)) {
@@ -158,6 +161,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             // Pre-load all marketplace configurations to avoid N+1 queries
             List<Marketplace> allMarketplaces = marketplaceMapper.selectList(null);
             Map<String, Marketplace> marketplaceMap = allMarketplaces.stream()
+                    .filter(m -> StringUtils.hasText(m.getSiteCode()))
                     .collect(java.util.stream.Collectors.toMap(Marketplace::getSiteCode, m -> m));
             log.info("Pre-loaded {} marketplace configurations", marketplaceMap.size());
 
@@ -193,23 +197,6 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             }
 
             log.info("Parsed {} valid records from {} total rows", parsedRecords.size(), totalCount);
-
-            // Step 1.5: 关联 MCF（Non-Amazon）订单的站点编码
-            // 找出所有 siteCode=PENDING 的记录，批量查询销售订单表，用销售订单的站点回填
-            List<ShippingData> pendingRecords = parsedRecords.stream()
-                    .filter(r -> "PENDING".equals(r.getSiteCode()))
-                    .toList();
-
-            if (!pendingRecords.isEmpty()) {
-                log.info("发现 {} 条 MCF 订单（Non-Amazon），开始关联销售订单站点...", pendingRecords.size());
-                resolveMcfSiteCodes(pendingRecords, shopId, rowErrorMap);
-                // 移除仍然是 PENDING 的记录（未找到对应销售订单，已记录错误）
-                int pendingBefore = (int) parsedRecords.stream().filter(r -> "PENDING".equals(r.getSiteCode())).count();
-                parsedRecords.removeIf(r -> "PENDING".equals(r.getSiteCode()));
-                failCount += pendingBefore;
-                log.info("MCF 订单关联完成：成功关联 {} 条，未找到销售订单 {} 条",
-                        pendingRecords.size() - pendingBefore, pendingBefore);
-            }
 
             // Step 2: Batch check for duplicates (单次查询避免N+1)
             List<ShippingData> toInsert = new ArrayList<>();
@@ -417,10 +404,17 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         ShippingData shippingData = new ShippingData();
 
         if (siteCode == null) {
-            // MCF 订单：站点待定，标记为 PENDING，后续通过关联销售订单表回填
-            shippingData.setSiteCode("PENDING");
+            // Non-Amazon（MCF 多渠道配送）订单：站点设为销售渠道值，标记非本站数据
+            shippingData.setSiteCode(salesChannel);
             shippingData.setMarketplace(salesChannel);
-            log.debug("MCF 订单（Non-Amazon），站点待关联：orderId={}", orderIdEarly);
+            shippingData.setIsOwnSite(0);
+            log.debug("Non-Amazon 订单，站点设为销售渠道值：orderId={}, salesChannel={}", orderIdEarly, salesChannel);
+
+            // 解析货币（Non-Amazon 无 marketplace 配置，直接从 CSV 取，取不到则留空）
+            String currencyCodeNonAmazon = getFieldValue(rowData, "currency", "货币", "currencycode");
+            if (StringUtils.hasText(currencyCodeNonAmazon) && isValidCurrencyCode(currencyCodeNonAmazon)) {
+                shippingData.setCurrencyCode(currencyCodeNonAmazon.trim().toUpperCase());
+            }
         } else {
             // 从预加载的配置中获取 marketplace（避免 N+1 查询）
             Marketplace marketplace = marketplaceMap.get(siteCode);
@@ -430,25 +424,21 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                     marketplaceMap.put(siteCode, marketplace);
                     log.info("Auto-created marketplace for siteCode: {}", siteCode);
                 } else {
-                    throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "Marketplace not found for site: " + siteCode);
+                    throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
+                            String.format("Marketplace 配置缺失，已跳过：siteCode=%s, orderId=%s", siteCode, orderIdEarly));
                 }
             }
             shippingData.setSiteCode(siteCode);
             shippingData.setMarketplace(marketplace.getMarketplaceId());
-        }
+            shippingData.setIsOwnSite(1);
 
-        // 解析货币编码（优先使用 CSV 中的货币，否则使用 marketplace 默认值）
-        // 列错位时货币列可能被填成数量等，需校验；有效货币为3位字母如 GBP/USD
-        String currencyCode = getFieldValue(rowData, "currency", "货币", "currencycode");
-        if (StringUtils.hasText(currencyCode) && isValidCurrencyCode(currencyCode)) {
-            shippingData.setCurrencyCode(currencyCode.trim().toUpperCase());
-        } else if ("PENDING".equals(shippingData.getSiteCode())) {
-            // MCF 订单：货币暂时留空，resolveMcfSiteCodes 关联站点后会从 marketplace 配置补充
-            shippingData.setCurrencyCode(null);
-        } else {
-            // 从 marketplace 配置中取默认货币
-            Marketplace marketplace = marketplaceMap.get(shippingData.getSiteCode());
-            shippingData.setCurrencyCode(marketplace != null ? marketplace.getCurrencyCode() : "USD");
+            // 解析货币编码（优先使用 CSV 中的货币，否则使用 marketplace 默认值）
+            String currencyCode = getFieldValue(rowData, "currency", "货币", "currencycode");
+            if (StringUtils.hasText(currencyCode) && isValidCurrencyCode(currencyCode)) {
+                shippingData.setCurrencyCode(currencyCode.trim().toUpperCase());
+            } else {
+                shippingData.setCurrencyCode(marketplace.getCurrencyCode() != null ? marketplace.getCurrencyCode() : "USD");
+            }
         }
 
         // Parse order ID（已在前面用于空行判断）
@@ -766,9 +756,9 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         // Build conditions for batch query
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
 
-        // Group records by site code for efficient querying
+        // Group records by site code for efficient querying（siteCode 为 null 的 Non-Amazon 订单跳过重复检查）
         Map<String, List<ShippingData>> bySite = records.stream()
-                .filter(r -> StringUtils.hasText(r.getOrderId()))
+                .filter(r -> StringUtils.hasText(r.getOrderId()) && StringUtils.hasText(r.getSiteCode()))
                 .collect(java.util.stream.Collectors.groupingBy(ShippingData::getSiteCode));
 
         for (Map.Entry<String, List<ShippingData>> entry : bySite.entrySet()) {

@@ -25,7 +25,7 @@ public interface ShippingDataService {
      * @param size           每页条数
      * @return 分页结果
      */
-    Page<ShippingData> list(String siteCode, String trackingNumber, String orderId, String startDate, String endDate, int page, int size);
+    Page<ShippingData> list(String siteCode, String trackingNumber, String orderId, String startDate, String endDate, Integer isOwnSite, int page, int size);
 
     /**
      * 根据ID获取配送数据

@@ -11,6 +11,7 @@ export interface ShippingData {
   shipDate: string
   siteCode: string
   marketplace: string
+  isOwnSite: number  // 是否本站数据：0-否，1-是
   currencyCode: string
   // 收入相关字段
   productPrice: number
@@ -40,6 +41,7 @@ export interface ShippingData {
 export interface ShippingDataQuery {
   keyword?: string
   siteCode?: string
+  isOwnSite?: number  // 是否本站数据：0-否，1-是
   startDate?: string
   endDate?: string
   sku?: string

@@ -41,6 +41,20 @@
               </a-select>
             </a-form-item>
           </a-col>
+          <a-col :span="3">
+            <a-form-item>
+              <a-select
+                v-model:value="searchForm.isOwnSite"
+                placeholder="数据类型"
+                allow-clear
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option :value="1">本站数据</a-select-option>
+                <a-select-option :value="0">非本站数据</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
           <a-col :span="5">
             <a-form-item>
               <a-range-picker
@@ -163,6 +177,13 @@
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
           </template>
 
+          <!-- 数据类型 -->
+          <template v-else-if="column.key === 'isOwnSite'">
+            <a-tag :color="record.isOwnSite === 1 ? 'green' : 'orange'">
+              {{ record.isOwnSite === 1 ? '本站' : '非本站' }}
+            </a-tag>
+          </template>
+
           <!-- 总计费用 -->
           <template v-else-if="column.key === 'totalAmount'">
             <span class="amount">{{ formatAmount(record.totalAmount, record.currencyCode) }}</span>
@@ -272,7 +293,8 @@ function formatAmountValue(amount: number | null | undefined): string {
 // ============= 搜索相关 =============
 const searchForm = reactive({
   keyword: '',
-  siteCode: undefined as string | undefined
+  siteCode: undefined as string | undefined,
+  isOwnSite: undefined as number | undefined
 })
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const marketplaceOptions = ref<Marketplace[]>([])
@@ -313,6 +335,12 @@ const columns = [
     dataIndex: 'siteCode',
     key: 'siteCode',
     width: 80
+  },
+  {
+    title: '数据类型',
+    dataIndex: 'isOwnSite',
+    key: 'isOwnSite',
+    width: 90
   },
   {
     title: 'SKU',
@@ -482,6 +510,7 @@ async function fetchData() {
       orderId: searchForm.keyword || undefined,
       trackingNumber: undefined as string | undefined,
       siteCode: searchForm.siteCode,
+      isOwnSite: searchForm.isOwnSite,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
@@ -521,6 +550,7 @@ function handleSearch() {
 function handleReset() {
   searchForm.keyword = ''
   searchForm.siteCode = undefined
+  searchForm.isOwnSite = undefined
   searchDateRange.value = null
   pagination.current = 1
   fetchData()

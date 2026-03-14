@@ -97,10 +97,11 @@ public class TaxReportServiceImpl implements TaxReportService {
         // 1. 站点信息
         Map<String, Marketplace> marketplaceMap = loadMarketplaceMap(sites);
 
-        // 2. 发货数据（收入来源）- 使用聚合查询
+        // 2. 发货数据（收入来源）- 使用聚合查询，排除站点为空的数据
         LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
         shippingWrapper.eq(ShippingData::getShopId, shopId)
                 .in(ShippingData::getSiteCode, sites)
+                .isNotNull(ShippingData::getSiteCode)
                 .between(ShippingData::getShipDate, minStartDate, maxEndDate);
         List<ShippingData> shippingData = shippingDataMapper.selectList(shippingWrapper);
 
@@ -350,11 +351,12 @@ public class TaxReportServiceImpl implements TaxReportService {
         Map<String, Marketplace> marketplaceMap = loadMarketplaceMap(sites);
 
         // 2. 批量查询发货数据（按日期范围，向前扩展6个月以覆盖Q-1发货→Q退款的订单汇率）
-        // 排除 Non-Amazon 渠道订单（S01前缀为非亚马逊渠道，不参与报税计算）
+        // 排除 Non-Amazon 渠道订单（S01前缀为非亚马逊渠道，不参与报税计算），排除站点为空的数据
         LocalDate expandedMinStartDate = minStartDate.minusMonths(6);
         LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
         shippingWrapper.eq(ShippingData::getShopId, shopId)
                 .in(ShippingData::getSiteCode, sites)
+                .isNotNull(ShippingData::getSiteCode)
                 .between(ShippingData::getShipDate, expandedMinStartDate, maxEndDate)
                 .and(w -> w.isNull(ShippingData::getOrderId)
                         .or().notLike(ShippingData::getOrderId, "S01%"));

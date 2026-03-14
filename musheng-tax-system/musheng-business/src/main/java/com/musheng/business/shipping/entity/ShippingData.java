@@ -159,4 +159,10 @@ public class ShippingData extends BaseEntityWithoutUpdateTime {
      */
     @FieldMapping(label = "汇率日期", ignore = true)
     private LocalDate exchangeRateDate;
+
+    /**
+     * 是否本站销售数据：1=是（Amazon 订单），0=否（Non-Amazon 订单）
+     */
+    @FieldMapping(label = "是否本站", ignore = true)
+    private Integer isOwnSite;
 }
