@@ -802,7 +802,6 @@ public class TaxReportServiceImpl implements TaxReportService {
 
         // Amazon口径佣金: income+refund 类型，交易日期在本季度内
         // 统计 sellingFees + fbaFees + otherTransactionFees（取绝对值）
-        // 经三站点(US/UK/CA) Q3数据验证，此口径综合误差最小（US +2.3%，CA -3.5%，UK -5.4%）
         // Non-Amazon渠道订单（sim1.stores.amazon.com）已在数据加载层排除
         BigDecimal totalCommissionFee = BigDecimal.ZERO;
         BigDecimal totalCommissionFeeCny = BigDecimal.ZERO;
