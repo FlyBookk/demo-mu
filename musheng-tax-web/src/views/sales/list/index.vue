@@ -11,6 +11,20 @@
       <a-form :model="searchForm">
         <!-- 第一行：搜索条件 -->
         <a-row :gutter="16">
+          <a-col :span="3">
+            <a-form-item label="数据归属">
+              <a-select
+                v-model:value="searchForm.isOwnSite"
+                placeholder="全部"
+                allow-clear
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option :value="1">本站</a-select-option>
+                <a-select-option :value="0">非本站</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
           <a-col :span="5">
             <a-form-item label="关键字">
               <a-input
@@ -92,7 +106,7 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :span="4">
+          <a-col :span="2">
             <a-form-item label=" " :colon="false">
               <a-space>
                 <a-button type="primary" @click="handleSearch">
@@ -226,6 +240,13 @@
             </a-tag>
           </template>
 
+          <!-- 数据归属 -->
+          <template v-else-if="column.key === 'isOwnSite'">
+            <a-tag :color="record.isOwnSite === 0 ? 'red' : 'green'">
+              {{ record.isOwnSite === 0 ? '非本站' : '本站' }}
+            </a-tag>
+          </template>
+
           <!-- 站点 -->
           <template v-else-if="column.key === 'siteCode'">
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
@@ -289,6 +310,11 @@
         <a-descriptions-item label="数据来源">
           <a-tag :color="detailData.sourceType === 'ERP' ? 'purple' : 'cyan'">
             {{ detailData.sourceType === 'ERP' ? 'ERP结算数据' : '亚马逊原始数据' }}
+          </a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="数据归属">
+          <a-tag :color="detailData.isOwnSite === 0 ? 'red' : 'green'">
+            {{ detailData.isOwnSite === 0 ? '非本站' : '本站' }}
           </a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="站点">{{ detailData.siteCode }}</a-descriptions-item>
@@ -443,7 +469,8 @@ const searchForm = reactive({
   sourceType: undefined as string | undefined,
   siteCode: undefined as string | undefined,
   transactionCategory: undefined as string | undefined,
-  settlementId: ''
+  settlementId: '',
+  isOwnSite: undefined as number | undefined
 })
 const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
 const marketplaceOptions = ref<Marketplace[]>([])
@@ -486,6 +513,12 @@ const columns = [
     dataIndex: 'sourceType',
     key: 'sourceType',
     width: 100
+  },
+  {
+    title: '数据归属',
+    dataIndex: 'isOwnSite',
+    key: 'isOwnSite',
+    width: 90
   },
   {
     title: '站点',
@@ -639,6 +672,7 @@ async function fetchData() {
       siteCode: searchForm.siteCode,
       settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
+      isOwnSite: searchForm.isOwnSite,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
       page: pagination.current,
@@ -663,6 +697,7 @@ async function fetchSummary() {
       siteCode: searchForm.siteCode,
       settlementId: searchForm.settlementId || undefined,
       transactionCategory: searchForm.transactionCategory,
+      isOwnSite: searchForm.isOwnSite,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
@@ -685,6 +720,7 @@ function handleReset() {
   searchForm.siteCode = undefined
   searchForm.transactionCategory = undefined
   searchForm.settlementId = ''
+  searchForm.isOwnSite = undefined
   searchDateRange.value = null
   pagination.current = 1
   fetchData()

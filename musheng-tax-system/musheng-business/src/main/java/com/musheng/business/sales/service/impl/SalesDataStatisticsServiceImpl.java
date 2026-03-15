@@ -35,8 +35,8 @@ public class SalesDataStatisticsServiceImpl implements SalesDataStatisticsServic
     private final SalesDataMapper salesDataMapper;
 
     @Override
-    public Map<String, Object> getSummary(String keyword, String siteCode, String settlementId, 
-                                          String transactionCategory, String startDate, String endDate) {
+    public Map<String, Object> getSummary(String keyword, String sourceType, String siteCode, String settlementId,
+                                          String transactionCategory, Integer isOwnSite, String startDate, String endDate) {
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
 
         // 店铺数据隔离
@@ -50,6 +50,10 @@ public class SalesDataStatisticsServiceImpl implements SalesDataStatisticsServic
                     .or()
                     .like(SalesData::getSku, keyword));
         }
+        // 数据来源过滤
+        if (StringUtils.hasText(sourceType)) {
+            wrapper.eq(SalesData::getSourceType, sourceType);
+        }
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(SalesData::getSiteCode, siteCode);
         }
@@ -58,6 +62,10 @@ public class SalesDataStatisticsServiceImpl implements SalesDataStatisticsServic
         }
         if (StringUtils.hasText(transactionCategory)) {
             wrapper.eq(SalesData::getTransactionCategory, transactionCategory);
+        }
+        // 数据归属过滤
+        if (isOwnSite != null) {
+            wrapper.eq(SalesData::getIsOwnSite, isOwnSite);
         }
         applyDateRangeFilter(wrapper, startDate, endDate);
 

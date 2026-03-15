@@ -300,7 +300,44 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         log.info("Shipping data import completed: total={}, success={}, fail={}, duplicate={}, skip={}",
                 totalCount, successCount, failCount, duplicateCount, skipCount);
 
+        // 同步：将本次导入中 is_own_site=0 的配送订单对应的销售数据也标记为非本站
+        syncSalesDataIsOwnSite(shopId);
+
         return result;
+    }
+
+    /**
+     * 同步配送数据中 is_own_site=0 的订单到销售数据
+     * 将对应订单号的销售数据 is_own_site 字段更新为 0
+     *
+     * @param shopId 店铺ID
+     * @author wanhua
+     * 10:30 2026年03月15日
+     */
+    private void syncSalesDataIsOwnSite(Long shopId) {
+        try {
+            // 查询该店铺配送数据中所有 is_own_site=0 的订单号
+            LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(ShippingData::getShopId, shopId)
+                   .eq(ShippingData::getIsOwnSite, 0)
+                   .select(ShippingData::getOrderId);
+            List<ShippingData> nonOwnSiteList = shippingDataMapper.selectList(wrapper);
+            if (nonOwnSiteList.isEmpty()) {
+                return;
+            }
+            List<String> orderIds = nonOwnSiteList.stream()
+                    .map(ShippingData::getOrderId)
+                    .filter(id -> id != null && !id.isEmpty())
+                    .distinct()
+                    .collect(java.util.stream.Collectors.toList());
+            if (orderIds.isEmpty()) {
+                return;
+            }
+            int updated = salesDataMapper.batchMarkNonOwnSite(shopId, orderIds);
+            log.info("同步配送非本站订单到销售数据完成: shopId={}, 订单数={}, 更新销售数据行数={}", shopId, orderIds.size(), updated);
+        } catch (Exception e) {
+            log.error("同步配送非本站订单到销售数据失败: shopId={}", shopId, e);
+        }
     }
 
     @Override

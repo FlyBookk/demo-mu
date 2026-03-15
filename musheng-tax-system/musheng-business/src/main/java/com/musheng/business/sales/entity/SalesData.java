@@ -229,4 +229,11 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
      */
     @FieldMapping(label = "汇率日期", ignore = true)
     private java.time.LocalDate exchangeRateDate;
+
+    /**
+     * 是否本站销售数据（0-否 1-是）
+     * 当配送数据中对应订单号的 is_own_site=0 时，同步标记为 0
+     */
+    @FieldMapping(label = "是否本站", ignore = true)
+    private Integer isOwnSite;
 }

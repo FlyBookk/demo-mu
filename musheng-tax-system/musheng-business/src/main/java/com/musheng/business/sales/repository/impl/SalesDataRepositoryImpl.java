@@ -124,6 +124,11 @@ public class SalesDataRepositoryImpl implements SalesDataRepository {
         // 交易类型过滤
         QueryWrapperUtils.applyEqFilter(wrapper, SalesData::getTransactionType, query.getTransactionType());
 
+        // 是否本站过滤
+        if (query.getIsOwnSite() != null) {
+            wrapper.eq(SalesData::getIsOwnSite, query.getIsOwnSite());
+        }
+
         // 关键字搜索：订单号、SKU
         if (StringUtils.hasText(query.getKeyword())) {
             wrapper.and(w -> w

@@ -41,6 +41,8 @@ export interface SalesData {
   // 汇率信息
   exchangeRate?: number
   exchangeRateDate?: string
+  // 数据归属
+  isOwnSite?: number             // 是否本站数据：0-非本站，1-本站
   createTime: string
 }
 

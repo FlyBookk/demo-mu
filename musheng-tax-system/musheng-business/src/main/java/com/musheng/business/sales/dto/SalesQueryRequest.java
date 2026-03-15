@@ -34,6 +34,9 @@ public class SalesQueryRequest {
     @Schema(description = "结束日期 (YYYY-MM-DD)")
     private String endDate;
 
+    @Schema(description = "是否本站销售数据(0-否 1-是)")
+    private Integer isOwnSite;
+
     @Schema(description = "页码(从1开始)", example = "1")
     private Integer page = 1;
 

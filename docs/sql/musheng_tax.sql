@@ -1893,6 +1893,7 @@ CREATE TABLE `t_sales_data` (
   `total` decimal(15,2) DEFAULT '0.00' COMMENT '合计金额',
   `exchange_rate` decimal(10,6) DEFAULT NULL COMMENT '当日汇率（对人民币）',
   `exchange_rate_date` date DEFAULT NULL COMMENT '汇率取值日期',
+  `is_own_site` tinyint DEFAULT 1 COMMENT '是否本站销售数据 0-否 1-是',
   PRIMARY KEY (`id`),
   KEY `idx_sales_transaction_date` (`transaction_date`),
   KEY `idx_sales_site_code` (`site_code`),

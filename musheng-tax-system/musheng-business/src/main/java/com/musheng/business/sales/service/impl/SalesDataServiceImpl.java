@@ -69,8 +69,9 @@ public class SalesDataServiceImpl implements SalesDataService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String keyword, String siteCode, String settlementId, String transactionCategory, String startDate, String endDate) {
-        return statisticsService.getSummary(keyword, siteCode, settlementId, transactionCategory, startDate, endDate);
+    public Map<String, Object> getSummary(String keyword, String sourceType, String siteCode, String settlementId,
+                                          String transactionCategory, Integer isOwnSite, String startDate, String endDate) {
+        return statisticsService.getSummary(keyword, sourceType, siteCode, settlementId, transactionCategory, isOwnSite, startDate, endDate);
     }
 
     @Override
