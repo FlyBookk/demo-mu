@@ -158,27 +158,22 @@ const router = useRouter()
 function getPreviousQuarter(): string {
   const now = new Date()
   let year = now.getFullYear()
-  let month = now.getMonth() + 1
-  let q = Math.ceil(month / 3)
-  q--
-  if (q < 1) {
-    q = 4
-    year--
-  }
+  let q = Math.ceil((now.getMonth() + 1) / 3) - 1
+  if (q < 1) { q = 4; year-- }
   return `${year}-Q${q}`
 }
 
 function generateQuarterOptions(): { label: string; value: string }[] {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
   const options: { label: string; value: string }[] = []
-  let year = new Date().getFullYear()
-  let q = Math.ceil((new Date().getMonth() + 1) / 3)
-  for (let i = 0; i < 8; i++) {
-    options.push({ label: `${year}年 Q${q}`, value: `${year}-Q${q}` })
-    q--
-    if (q < 1) {
-      q = 4
-      year--
-    }
+  // 从当前季度往过去推3年（共13个季度）
+  for (let offset = 0; offset <= 12; offset++) {
+    let q = currentQuarter - offset
+    let y = currentYear
+    while (q < 1) { q += 4; y-- }
+    options.push({ label: `${y}年 Q${q}`, value: `${y}-Q${q}` })
   }
   return options
 }

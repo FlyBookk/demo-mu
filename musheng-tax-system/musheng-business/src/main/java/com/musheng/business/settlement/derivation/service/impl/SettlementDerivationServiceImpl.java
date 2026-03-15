@@ -303,8 +303,9 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
     private BigDecimal calcSkuWeight(String sku) {
         String series = extractSeries(sku);
         String size = extractSize(sku);
-        BigDecimal seriesWeight = SERIES_WEIGHT_MAP.getOrDefault(series, BigDecimal.ONE);
-        BigDecimal sizeFactor = SIZE_FACTOR_MAP.getOrDefault(size, BigDecimal.ONE);
+        // 修复：ImmutableCollections（Map.ofEntries 创建）不支持 null key，需提前判断
+        BigDecimal seriesWeight = (series != null) ? SERIES_WEIGHT_MAP.getOrDefault(series, BigDecimal.ONE) : BigDecimal.ONE;
+        BigDecimal sizeFactor = (size != null) ? SIZE_FACTOR_MAP.getOrDefault(size, BigDecimal.ONE) : BigDecimal.ONE;
         return seriesWeight.multiply(sizeFactor);
     }
 

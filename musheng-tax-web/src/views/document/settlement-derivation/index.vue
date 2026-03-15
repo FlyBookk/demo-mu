@@ -133,27 +133,25 @@ function formatQuarter(quarter: string): string {
   return `${year}年Q${q}`
 }
 
-/** 生成最近12个季度的选项列表 */
+/** 生成从当前季度往过去推3年（共13个季度）的选项列表 */
 function generateAvailableQuarters() {
-  const quarters: string[] = []
   const now = new Date()
-  let year = now.getFullYear()
-  let quarter = Math.ceil((now.getMonth() + 1) / 3)
+  const currentYear = now.getFullYear()
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
 
-  for (let i = 0; i < 12; i++) {
-    quarters.push(`${year}-Q${quarter}`)
-    quarter--
-    if (quarter === 0) {
-      quarter = 4
-      year--
-    }
+  const quarters: string[] = []
+  for (let offset = 0; offset <= 12; offset++) {
+    let q = currentQuarter - offset
+    let y = currentYear
+    while (q < 1) { q += 4; y-- }
+    quarters.push(`${y}-Q${q}`)
   }
 
   availableQuarters.value = quarters
   // 默认选上一季度
-  if (quarters.length > 1) {
-    selectedQuarter.value = quarters[1]
-  }
+  const prevQ = currentQuarter === 1 ? 4 : currentQuarter - 1
+  const prevY = currentQuarter === 1 ? currentYear - 1 : currentYear
+  selectedQuarter.value = `${prevY}-Q${prevQ}`
 }
 
 // ==================== 采购成本 ====================

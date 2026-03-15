@@ -394,16 +394,25 @@ public class TaxReportServiceImpl implements TaxReportService {
         List<SalesData> allSalesData = salesDataMapper.selectList(salesWrapper);
 
         // 6. 批量查询其他费用数据（非income/refund类型，按日期过滤）
-        // 同样排除 Non-Amazon 渠道订单
+        // 不排除 sim1.stores.amazon.com，该渠道的非收入类型数据也属于平台费用
         LambdaQueryWrapper<SalesData> otherWrapper = new LambdaQueryWrapper<>();
         otherWrapper.eq(SalesData::getShopId, shopId)
                 .in(SalesData::getSiteCode, sites)
                 .notIn(SalesData::getTransactionCategory, List.of("income", "refund"))
-                .and(w -> w.isNull(SalesData::getMarketplace)
-                        .or().notLike(SalesData::getMarketplace, "sim1.stores.amazon.com"))
                 .ge(SalesData::getTransactionDate, minStartDate.atStartOfDay())
                 .lt(SalesData::getTransactionDate, maxEndDate.plusDays(1).atStartOfDay());
         List<SalesData> allOtherData = salesDataMapper.selectList(otherWrapper);
+
+        // 6.1 单独查询 sim1.stores.amazon.com 渠道的 income 类型数据
+        // 这类数据（S01-前缀订单）的 total 字段是三方平台配送费扣款，需计入其他费用
+        LambdaQueryWrapper<SalesData> sim1Wrapper = new LambdaQueryWrapper<>();
+        sim1Wrapper.eq(SalesData::getShopId, shopId)
+                .in(SalesData::getSiteCode, sites)
+                .eq(SalesData::getTransactionCategory, "income")
+                .like(SalesData::getMarketplace, "sim1.stores.amazon.com")
+                .ge(SalesData::getTransactionDate, minStartDate.atStartOfDay())
+                .lt(SalesData::getTransactionDate, maxEndDate.plusDays(1).atStartOfDay());
+        List<SalesData> sim1Data = salesDataMapper.selectList(sim1Wrapper);
 
         // 7. 批量查询广告数据（主表+明细）
         // 按「账单周期与查询范围有交集」过滤：billingEndDate >= minStartDate 且 billingStartDate <= maxEndDate
@@ -435,17 +444,19 @@ public class TaxReportServiceImpl implements TaxReportService {
             }
         }
 
-        log.info("Data loaded in {}ms: shipping={}, sales={}, other={}, ads={}",
+        log.info("Data loaded in {}ms: shipping={}, sales={}, other={}, sim1={}, ads={}",
                 System.currentTimeMillis() - startTime,
-                allShippingData.size(), allSalesData.size(), allOtherData.size(), allAdData.size());
+                allShippingData.size(), allSalesData.size(), allOtherData.size(), sim1Data.size(), allAdData.size());
 
         // ========== 按站点分组（内存操作，快速） ==========
         Map<String, List<ShippingData>> shippingBySite = allShippingData.stream()
                 .collect(Collectors.groupingBy(ShippingData::getSiteCode));
         Map<String, List<SalesData>> salesBySite = allSalesData.stream()
                 .collect(Collectors.groupingBy(SalesData::getSiteCode));
-        Map<String, List<SalesData>> otherBySite = allOtherData.stream()
-                .collect(Collectors.groupingBy(SalesData::getSiteCode));
+        // sim1 数据合并到 otherBySite，其 total 字段将计入其他费用
+        Map<String, List<SalesData>> otherBySite = new HashMap<>();
+        allOtherData.forEach(d -> otherBySite.computeIfAbsent(d.getSiteCode(), k -> new ArrayList<>()).add(d));
+        sim1Data.forEach(d -> otherBySite.computeIfAbsent(d.getSiteCode(), k -> new ArrayList<>()).add(d));
         Map<String, List<AdDataForTax>> adBySite = allAdData.stream()
                 .filter(ad -> ad.siteCode != null)
                 .collect(Collectors.groupingBy(ad -> ad.siteCode));
@@ -728,11 +739,16 @@ public class TaxReportServiceImpl implements TaxReportService {
             LocalDate transDate = other.getTransactionDate().toLocalDate();
             if (transDate.isBefore(startDate) || transDate.isAfter(endDate)) continue;
 
-            boolean isServiceFee = "ServiceFee".equalsIgnoreCase(other.getTransactionType());
+            // Transfer 为资金划转，不属于费用，排除
+            if ("Transfer".equalsIgnoreCase(other.getTransactionType())) continue;
+
+            // 注意：数据库中实际值为 "Service Fee"（含空格），需兼容两种写法
+            String txType = other.getTransactionType();
+            boolean isServiceFee = txType != null && (
+                    "ServiceFee".equalsIgnoreCase(txType) || "Service Fee".equalsIgnoreCase(txType));
 
             BigDecimal rate = other.getExchangeRate();
             if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) rate = BigDecimal.ONE;
-
 
             BigDecimal amount = nullToZero(other.getTotal());
             if (amount.compareTo(BigDecimal.ZERO) == 0) continue;
@@ -835,11 +851,14 @@ public class TaxReportServiceImpl implements TaxReportService {
 
         // ④消费税 = consumptionTaxCny (绝对值，因为是支出)
         // ⑤佣金服务费 = totalCommissionFeeCny (绝对值)
-        // ⑥其他 = advertisingCostCny (广告费，图片中的"其他")
-        // ⑨平台支出合计 = ④ + ⑤ + ⑥
+        // ⑥广告费 = advertisingCostCny
+        // ⑦其他费用 = totalMiscFeesCny（ServiceFee + 其他）
+        // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费 + ⑦其他费用
+        BigDecimal totalMiscFeesCny = miscServiceFeeCny.add(otherFeesCny);
         BigDecimal platformExpensesCny = consumptionTaxCny.abs()
                 .add(totalCommissionFeeCny.abs())
-                .add(advertisingCostCny.abs());
+                .add(advertisingCostCny.abs())
+                .add(totalMiscFeesCny.abs());
 
         // ⑩4%利润 = ③ × 4%
         BigDecimal profit4PercentCny = netRevenueCny.multiply(new BigDecimal("0.04"));
@@ -899,6 +918,11 @@ public class TaxReportServiceImpl implements TaxReportService {
         summary.setOtherFees(otherFees.setScale(2, RoundingMode.HALF_UP));
         summary.setOtherFeesCny(otherFeesCny.setScale(2, RoundingMode.HALF_UP));
         summary.setMiscFeesCount(miscFeesCount);
+
+        // 其他费合计 = ServiceFee + 其他
+        BigDecimal totalMiscFees = miscServiceFee.add(otherFees);
+        summary.setTotalMiscFees(totalMiscFees.setScale(2, RoundingMode.HALF_UP));
+        summary.setTotalMiscFeesCny(totalMiscFeesCny.setScale(2, RoundingMode.HALF_UP));
 
         // 广告费
         summary.setAdvertisingCost(advertisingCost.setScale(2, RoundingMode.HALF_UP));
@@ -1091,6 +1115,7 @@ public class TaxReportServiceImpl implements TaxReportService {
                         "收入净额③=①-②(人民币)",
                         "平台代扣税④(人民币)",
                         "佣金服务费⑤(人民币)",
+                        "其他费用(人民币)",
                         "广告费⑥(人民币)",
                         "平台支出合计⑨=④+⑤+⑥(人民币)",
                         "4%利润⑩=③×4%(人民币)",
@@ -1123,6 +1148,7 @@ public class TaxReportServiceImpl implements TaxReportService {
                     row.createCell(col++).setCellValue(netRevenue);
                     row.createCell(col++).setCellValue(toDouble(s.getConsumptionTaxCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getTotalCommissionFeeCny()));
+                    row.createCell(col++).setCellValue(toDouble(s.getTotalMiscFeesCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getAdvertisingCostCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getPlatformExpensesCny()));
                     row.createCell(col++).setCellValue(toDouble(s.getProfit4PercentCny()));

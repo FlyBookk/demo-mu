@@ -131,6 +131,14 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "其他费笔数（ServiceFee+其他合计）")
     private Integer miscFeesCount;
 
+    // ========== 其他费合计（ServiceFee + 其他，用于前端展示） ==========
+
+    @Schema(description = "其他费合计（原币）= miscServiceFee + otherFees")
+    private BigDecimal totalMiscFees;
+
+    @Schema(description = "其他费合计（人民币）")
+    private BigDecimal totalMiscFeesCny;
+
     // ========== 广告费 ==========
 
     @Schema(description = "广告费（原币）")

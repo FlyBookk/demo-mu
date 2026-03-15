@@ -57,7 +57,7 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="收入总额(a)"
+              title="收入总额①(a)"
               :value="Math.abs(totalStats.totalRevenueCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.totalRevenueCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -68,7 +68,7 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="退款金额(b)"
+              title="退款金额②(b)"
               :value="Math.abs(totalStats.refundBySettlementAmazonCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.refundBySettlementAmazonCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -79,7 +79,7 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="收入净额(c=a-b)"
+              title="收入净额③(c=a-b)"
               :value="Math.abs(totalStats.netRevenueCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.netRevenueCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -90,7 +90,7 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="佣金服务费"
+              title="佣金服务费⑤"
               :value="Math.abs(totalStats.totalCommissionFeeCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.totalCommissionFeeCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -117,7 +117,18 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="广告费"
+              title="其他费用⑦"
+              :value="Math.abs(totalStats.otherFeesTotalCny ?? 0)"
+              :precision="2"
+              :prefix="(totalStats.otherFeesTotalCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.otherFeesTotalCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="广告费⑥"
               :value="Math.abs(totalStats.advertisingCostCny ?? 0)"
               :precision="2"
               :prefix="(totalStats.advertisingCostCny ?? 0) >= 0 ? '¥' : '-¥'"
@@ -135,13 +146,13 @@
         <a-col :span="6">
           <a-card class="stat-card highlight-card">
             <a-statistic
-              title="平台支出合计⑨=④+⑤+⑥"
+              title="平台支出合计⑨=④+⑤+⑥+⑦"
               :value="Math.abs(totalStats.platformExpensesCny ?? 0)"
               :precision="2"
               :prefix="'¥'"
               :value-style="{ color: '#fa8c16', fontWeight: 'bold' }"
             />
-            <div class="stat-desc">消费税+佣金服务费+广告费</div>
+            <div class="stat-desc">消费税+佣金服务费+广告费+其他费用</div>
           </a-card>
         </a-col>
         <a-col :span="6">
@@ -202,6 +213,9 @@
           </template>
           <template v-else-if="column.key === 'totalCommissionFeeCny'">
             <span :class="['amount', (record.totalCommissionFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalCommissionFeeCny) }}</span>
+          </template>
+          <template v-else-if="column.key === 'totalMiscFeesCny'">
+            <span :class="['amount', (record.totalMiscFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalMiscFeesCny) }}</span>
           </template>
           <template v-else-if="column.key === 'consumptionTaxCny'">
             <span :class="['amount', (record.consumptionTaxCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.consumptionTaxCny) }}</span>
@@ -272,8 +286,8 @@ const totalStats = computed(() => {
   const advertisingCostCny = data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0)
 
   // 按图片公式计算
-  // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费
-  const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny)
+  // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费 + ⑦其他费用
+  const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny) + Math.abs(miscServiceFeeCny + otherFeesCny)
   // ⑩4%利润 = ③收入净额 × 4%
   const profit4PercentCny = netRevenueCny * 0.04
   // ⑪采购成本 = ③ − ⑨ − ⑩
@@ -303,8 +317,9 @@ const summaryColumns = [
   { title: '收入净额③=①-②', key: 'netRevenueCny', width: 160, align: 'right' },
   { title: '平台代扣税④', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 130, align: 'right' },
   { title: '佣金服务费⑤', dataIndex: 'totalCommissionFeeCny', key: 'totalCommissionFeeCny', width: 150, align: 'right' },
+  { title: '其他费用', dataIndex: 'totalMiscFeesCny', key: 'totalMiscFeesCny', width: 130, align: 'right' },
   { title: '广告费⑥', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 130, align: 'right' },
-  { title: '平台支出合计⑨=④+⑤+⑥', dataIndex: 'platformExpensesCny', key: 'platformExpensesCny', width: 180, align: 'right' },
+  { title: '平台支出合计⑨=④+⑤+⑥+⑦', dataIndex: 'platformExpensesCny', key: 'platformExpensesCny', width: 200, align: 'right' },
   { title: '4%利润⑩=③×4%', dataIndex: 'profit4PercentCny', key: 'profit4PercentCny', width: 150, align: 'right' },
   { title: '采购成本⑪=③-⑨-⑩', dataIndex: 'procurementCostCny', key: 'procurementCostCny', width: 170, align: 'right' }
 ]
@@ -328,24 +343,25 @@ function formatAmountWithSign(value: number | null | undefined): string {
 }
 
 function generateAvailableQuarters() {
-  const quarters: string[] = []
   const now = new Date()
-  let year = now.getFullYear()
-  let quarter = Math.ceil((now.getMonth() + 1) / 3)
+  const currentYear = now.getFullYear()
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
 
-  for (let i = 0; i < 12; i++) {
-    quarters.push(`${year}-Q${quarter}`)
-    quarter--
-    if (quarter === 0) {
-      quarter = 4
-      year--
-    }
+  // 从当前季度往过去推3年（共13个季度）
+  const quarters: string[] = []
+  for (let offset = 0; offset <= 12; offset++) {
+    let q = currentQuarter - offset
+    let y = currentYear
+    while (q < 1) { q += 4; y-- }
+    quarters.push(`${y}-Q${q}`)
   }
 
   availableQuarters.value = quarters
   // 默认选择上一季度
-  if (!filterForm.selectedQuarter && quarters.length > 1) {
-    filterForm.selectedQuarter = quarters[1]
+  if (!filterForm.selectedQuarter) {
+    const prevQ = currentQuarter === 1 ? 4 : currentQuarter - 1
+    const prevY = currentQuarter === 1 ? currentYear - 1 : currentYear
+    filterForm.selectedQuarter = `${prevY}-Q${prevQ}`
   }
 }
 

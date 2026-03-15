@@ -329,21 +329,25 @@ async function fetchSiteOptions() {
 const selectedSite = ref<string | undefined>(undefined)
 
 // 季度选项
-const currentYear = new Date().getFullYear()
+// 季度选项：从当前季度往过去推3年（共13个季度）
 const quarterOptions = computed(() => {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
   const options = []
-  for (let y = currentYear; y >= currentYear - 1; y--) {
-    for (let q = 4; q >= 1; q--) {
-      const startMonth = (q - 1) * 3 + 1
-      const endMonth = q * 3
-      const lastDay = new Date(y, endMonth, 0).getDate()
-      const start = `${y}-${String(startMonth).padStart(2, '0')}-01`
-      const end = `${y}-${String(endMonth).padStart(2, '0')}-${lastDay}`
-      options.push({
-        label: `${y}年 Q${q}（${start} ~ ${end}）`,
-        value: `${start}|${end}`
-      })
-    }
+  for (let offset = 0; offset <= 12; offset++) {
+    let q = currentQuarter - offset
+    let y = currentYear
+    while (q < 1) { q += 4; y-- }
+    const startMonth = (q - 1) * 3 + 1
+    const endMonth = q * 3
+    const lastDay = new Date(y, endMonth, 0).getDate()
+    const start = `${y}-${String(startMonth).padStart(2, '0')}-01`
+    const end = `${y}-${String(endMonth).padStart(2, '0')}-${lastDay}`
+    options.push({
+      label: `${y}年 Q${q}（${start} ~ ${end}）`,
+      value: `${start}|${end}`
+    })
   }
   return options
 })

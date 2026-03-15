@@ -51,12 +51,23 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
                     .build();
         }
 
-        // 2. 收集 orderId 集合，构建 orderRateMap
+        // 2. 收集 orderId 集合，构建 orderRateMap（过滤 orderId 为空的记录）
         Set<String> orderIds = new HashSet<>();
         Map<String, BigDecimal> orderRateMap = new HashMap<>();
         for (ShippingData shipping : shippingList) {
+            if (shipping.getOrderId() == null || shipping.getOrderId().isBlank()) {
+                continue;
+            }
             orderIds.add(shipping.getOrderId());
             orderRateMap.put(shipping.getOrderId(), shipping.getExchangeRate());
+        }
+
+        if (CollectionUtils.isEmpty(orderIds)) {
+            log.info("周期 {} ~ {} 内配送数据均无有效订单号，返回空结果", periodStart, periodEnd);
+            return AggregationResult.builder()
+                    .netSalesMap(Collections.emptyMap())
+                    .orderRateMap(Collections.emptyMap())
+                    .build();
         }
 
         log.info("配送数据查询完成，订单数: {}", orderIds.size());
@@ -96,7 +107,7 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
     }
 
     /**
-     * 用 orderId 集合关联查询销售数据
+     * 用 orderId 集合关联查询销售数据（分批查询，避免 IN 子句过长）
      *
      * @param shopId 店铺ID
      * @param orderIds 订单ID集合
@@ -105,10 +116,18 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
      * 10:30 2026年01月29日
      */
     private List<SalesData> querySalesData(Long shopId, Set<String> orderIds) {
-        LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SalesData::getShopId, shopId)
-                .in(SalesData::getOrderId, orderIds);
-        return salesDataMapper.selectList(wrapper);
+        List<String> orderIdList = new ArrayList<>(orderIds);
+        List<SalesData> result = new ArrayList<>();
+        // 分批查询，每批最多 500 个 orderId，避免 SQL IN 子句过长
+        int batchSize = 500;
+        for (int i = 0; i < orderIdList.size(); i += batchSize) {
+            List<String> batch = orderIdList.subList(i, Math.min(i + batchSize, orderIdList.size()));
+            LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(SalesData::getShopId, shopId)
+                    .in(SalesData::getOrderId, batch);
+            result.addAll(salesDataMapper.selectList(wrapper));
+        }
+        return result;
     }
 
     /**

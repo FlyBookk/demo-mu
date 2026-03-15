@@ -101,6 +101,9 @@ export interface TaxReportSummary {
   otherFees: number
   otherFeesCny: number
   miscFeesCount: number
+  // 其他费合计
+  totalMiscFees: number
+  totalMiscFeesCny: number
   // 广告费
   advertisingCost: number
   advertisingCostCny: number
