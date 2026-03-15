@@ -160,7 +160,7 @@ public final class PoGenerator {
                     poItem.setFbaAddress(shipment.getFullAddress());
                     isFirstItem = false;
                 } else {
-                    poItem.setFbaAddress("");
+                    poItem.setFbaAddress(null);
                 }
 
                 items.add(poItem);

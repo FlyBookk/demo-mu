@@ -71,7 +71,6 @@ class DerivationConfirmServiceTest {
     void testConfirm_Write_ShouldReturnCorrectResult() {
         // Given
         when(settlementImportDataMapper.insert(any(SettlementImportData.class))).thenReturn(1);
-        when(settlementImportDataMapper.logicalDeleteByPeriodAndSite(any(), any(), any())).thenReturn(0);
 
         DerivationConfirmRequest request = buildRequest(List.of(
                 buildSiteData("US", "USD", new BigDecimal("10000.00"), new BigDecimal("7.200000"),
@@ -104,7 +103,6 @@ class DerivationConfirmServiceTest {
     void testConfirm_FieldCompleteness_ShouldFillAllFields() {
         // Given
         when(settlementImportDataMapper.insert(any(SettlementImportData.class))).thenReturn(1);
-        when(settlementImportDataMapper.logicalDeleteByPeriodAndSite(any(), any(), any())).thenReturn(0);
 
         BigDecimal costCny = new BigDecimal("8000.00");
         BigDecimal avgRate = new BigDecimal("5.300000");

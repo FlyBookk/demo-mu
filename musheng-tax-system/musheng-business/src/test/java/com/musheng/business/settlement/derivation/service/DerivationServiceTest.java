@@ -224,10 +224,10 @@ class DerivationServiceTest {
         SiteDerivationResult usResult = result.getSiteResults().get(0);
         MskuDerivationItem item = usResult.getItems().get(0);
 
-        assertEquals(4, item.getUnitPrice().scale(), "单价应保留 4 位小数");
-        assertEquals(4, item.getAmount().scale(), "金额应保留 4 位小数");
+        assertEquals(2, item.getUnitPrice().scale(), "单价应保留 2 位小数");
+        assertEquals(2, item.getAmount().scale(), "金额应保留 2 位小数");
         BigDecimal expectedAmount = item.getUnitPrice().multiply(new BigDecimal(item.getQuantity()))
-                .setScale(4, RoundingMode.HALF_UP);
+                .setScale(2, RoundingMode.HALF_UP);
         assertEquals(expectedAmount, item.getAmount(), "金额应等于数量×单价");
     }
 

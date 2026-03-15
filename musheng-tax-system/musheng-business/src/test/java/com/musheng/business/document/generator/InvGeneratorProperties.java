@@ -212,7 +212,7 @@ class InvGeneratorProperties {
             DocumentSettlement settlement = settlementResults.get(i).getSettlement();
             DocumentInv inv = invResults.get(i).getInv();
 
-            LocalDate expectedInvDate = WorkingDayCalculator.nextWorkingDay(settlement.getSettlementDate());
+            LocalDate expectedInvDate = WorkingDayCalculator.addWorkingDays(settlement.getSettlementDate(), 3);
             assertEquals(expectedInvDate, inv.getInvDate(),
                     "第 " + (i + 1) + " 份INV日期应为结算日 "
                             + settlement.getSettlementDate() + " 的下一个工作日 "

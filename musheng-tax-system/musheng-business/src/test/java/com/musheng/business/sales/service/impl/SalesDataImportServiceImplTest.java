@@ -388,49 +388,47 @@ class SalesDataImportServiceImplTest {
      * buildOrderKey 方法测试
      */
     @Nested
-    @DisplayName("buildOrderKey 方法测试")
+    @DisplayName("buildUnifiedUniqueKey 方法测试")
     class BuildOrderKeyTests {
 
         @Test
-        @DisplayName("构建订单 Key - 所有字段都有值")
+        @DisplayName("构建唯一键 - 标准订单所有字段都有值")
         void testBuildOrderKey_AllFieldsPresent_ShouldBuildCorrectKey() throws Exception {
-            // Given: 准备测试数据
+            // Given: 准备测试数据（标准订单号格式）
             SalesData salesData = new SalesData();
-            salesData.setSettlementId("SETTLE-001");
-            salesData.setOrderId("ORDER-001");
-            salesData.setTransactionType("Order");
+            salesData.setOrderId("111-1234567-1234567");
+            salesData.setSiteCode("US");
+            salesData.setTransactionCategory("Order");
             salesData.setSku("SKU-001");
 
             // When: 通过反射调用私有方法
-            Method buildOrderKeyMethod = SalesDataImportServiceImpl.class
-                    .getDeclaredMethod("buildOrderKey", SalesData.class, boolean.class);
-            buildOrderKeyMethod.setAccessible(true);
-            String result = (String) buildOrderKeyMethod.invoke(
-                    salesDataImportService, salesData, false);
+            Method buildKeyMethod = SalesDataImportServiceImpl.class
+                    .getDeclaredMethod("buildUnifiedUniqueKey", SalesData.class);
+            buildKeyMethod.setAccessible(true);
+            String result = (String) buildKeyMethod.invoke(salesDataImportService, salesData);
 
-            // Then: 验证结果
-            assertEquals("SETTLE-001|ORDER-001|Order|SKU-001", result, "应正确构建订单 Key");
+            // Then: 验证结果（标准订单：orderId|siteCode|transactionCategory|sku）
+            assertEquals("111-1234567-1234567|US|Order|SKU-001", result, "应正确构建唯一键");
         }
 
         @Test
-        @DisplayName("构建订单 Key - 部分字段为空")
+        @DisplayName("构建唯一键 - 部分字段为空")
         void testBuildOrderKey_SomeFieldsNull_ShouldHandleNulls() throws Exception {
-            // Given: 准备测试数据（部分字段为空）
+            // Given: 准备测试数据（部分字段为空，标准订单号格式）
             SalesData salesData = new SalesData();
-            salesData.setSettlementId(null);
-            salesData.setOrderId("ORDER-002");
-            salesData.setTransactionType(null);
+            salesData.setOrderId("111-1234567-1234567");
+            salesData.setSiteCode(null);
+            salesData.setTransactionCategory(null);
             salesData.setSku("SKU-002");
 
             // When: 通过反射调用私有方法
-            Method buildOrderKeyMethod = SalesDataImportServiceImpl.class
-                    .getDeclaredMethod("buildOrderKey", SalesData.class, boolean.class);
-            buildOrderKeyMethod.setAccessible(true);
-            String result = (String) buildOrderKeyMethod.invoke(
-                    salesDataImportService, salesData, false);
+            Method buildKeyMethod = SalesDataImportServiceImpl.class
+                    .getDeclaredMethod("buildUnifiedUniqueKey", SalesData.class);
+            buildKeyMethod.setAccessible(true);
+            String result = (String) buildKeyMethod.invoke(salesDataImportService, salesData);
 
             // Then: 验证结果（空值应替换为空字符串）
-            assertEquals("|ORDER-002||SKU-002", result, "空值应替换为空字符串");
+            assertEquals("111-1234567-1234567|||SKU-002", result, "空值应替换为空字符串");
         }
     }
 }

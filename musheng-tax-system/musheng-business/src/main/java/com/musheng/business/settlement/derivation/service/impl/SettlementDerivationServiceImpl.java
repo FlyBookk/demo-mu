@@ -206,8 +206,8 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                             .ge(ExchangeRate::getRateDate, periodStart)
                             .le(ExchangeRate::getRateDate, periodEnd));
             if (CollectionUtils.isEmpty(rates)) {
-                log.warn("货币{}在周期{}~{}内无汇率数据", currency, periodStart, periodEnd);
-                continue;
+                throw new IllegalArgumentException(
+                        String.format("货币%s在周期%s~%s内无汇率数据", currency, periodStart, periodEnd));
             }
             BigDecimal sum = rates.stream().map(ExchangeRate::getRate).reduce(BigDecimal.ZERO, BigDecimal::add);
             result.put(currency, sum.divide(BigDecimal.valueOf(rates.size()), 6, RoundingMode.HALF_UP));
@@ -303,8 +303,8 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
     private BigDecimal calcSkuWeight(String sku) {
         String series = extractSeries(sku);
         String size = extractSize(sku);
-        BigDecimal seriesWeight = SERIES_WEIGHT_MAP.getOrDefault(series, BigDecimal.ONE);
-        BigDecimal sizeFactor = SIZE_FACTOR_MAP.getOrDefault(size, BigDecimal.ONE);
+        BigDecimal seriesWeight = (series != null) ? SERIES_WEIGHT_MAP.getOrDefault(series, BigDecimal.ONE) : BigDecimal.ONE;
+        BigDecimal sizeFactor = (size != null) ? SIZE_FACTOR_MAP.getOrDefault(size, BigDecimal.ONE) : BigDecimal.ONE;
         return seriesWeight.multiply(sizeFactor);
     }
 
@@ -364,6 +364,8 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
             items.add(MskuDerivationItem.builder().msku(sku).quantity(qty)
                     .unitPrice(unitPrice).amount(amount).adjusted(false).build());
         }
+        // 按 MSKU 字母升序排列
+        items.sort(Comparator.comparing(MskuDerivationItem::getMsku));
         return SiteDerivationResult.builder().siteCode(siteCode).currency(currency)
                 .procurementCostCny(costCny).averageExchangeRate(avgRate).procurementCostOriginal(costOriginal)
                 .totalQuantity(totalQuantity).totalAmount(totalAmount).items(items).build();

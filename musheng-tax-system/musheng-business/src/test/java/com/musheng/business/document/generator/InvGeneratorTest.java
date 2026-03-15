@@ -59,9 +59,9 @@ class InvGeneratorTest {
     class InvDateCalculationTest {
 
         @Test
-        @DisplayName("INV日期应为结算日的下一个工作日")
+        @DisplayName("INV日期应为结算日之后第3个工作日")
         void testGenerate_InvDate_ShouldBeNextWorkingDayOfSettlementDate() {
-            // Given - 结算日 2025-09-09（周二），下一个工作日应为 2025-09-10（周三）
+            // Given - 结算日 2025-09-09（周二），第3个工作日应为 2025-09-12（周五）
             List<SettlementGenerateResult> settlementResults = createFourSiteSettlements(
                     LocalDate.of(2025, 9, 9));
 
@@ -69,14 +69,14 @@ class InvGeneratorTest {
             List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
-            LocalDate expectedInvDate = WorkingDayCalculator.nextWorkingDay(LocalDate.of(2025, 9, 9));
+            LocalDate expectedInvDate = WorkingDayCalculator.addWorkingDays(LocalDate.of(2025, 9, 9), 3);
             assertEquals(expectedInvDate, results.get(0).getInv().getInvDate());
         }
 
         @Test
-        @DisplayName("结算日为周五时，INV日期应跳过周末")
+        @DisplayName("结算日为周五时，INV日期应跳过周末后第3个工作日")
         void testGenerate_SettlementDateFriday_ShouldSkipWeekend() {
-            // Given - 结算日 2025-09-05（周五），下一个工作日应为 2025-09-08（周一）
+            // Given - 结算日 2025-09-05（周五），第3个工作日应为 2025-09-10（周三）
             List<SettlementGenerateResult> settlementResults = createFourSiteSettlements(
                     LocalDate.of(2025, 9, 5));
 
@@ -84,7 +84,7 @@ class InvGeneratorTest {
             List<InvGenerateResult> results = InvGenerator.generate(settlementResults, 1, createTestParty());
 
             // Then
-            LocalDate expectedInvDate = WorkingDayCalculator.nextWorkingDay(LocalDate.of(2025, 9, 5));
+            LocalDate expectedInvDate = WorkingDayCalculator.addWorkingDays(LocalDate.of(2025, 9, 5), 3);
             assertEquals(expectedInvDate, results.get(0).getInv().getInvDate());
         }
     }
