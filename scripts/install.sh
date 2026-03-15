@@ -197,8 +197,8 @@ ExecStart=/usr/bin/java -jar /opt/musheng/backend/musheng-web-1.0.0-SNAPSHOT.jar
           --server.port=8888
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:/opt/musheng/logs/app.log
-StandardError=append:/opt/musheng/logs/app.log
+StandardOutput=null
+StandardError=null
 
 [Install]
 WantedBy=multi-user.target

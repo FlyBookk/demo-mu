@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="60 seconds">
+
+    <!-- 日志输出目录：项目运行目录下的 logs 文件夹 -->
+    <property name="LOG_HOME" value="./logs"/>
+    <!-- 应用名称 -->
+    <property name="APP_NAME" value="musheng-tax"/>
+    <!-- 日志格式：包含 traceId 用于链路追踪，traceId 由 TraceIdFilter 写入 MDC -->
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:--}] %-5level %logger{50} - %msg%n"/>
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- INFO 级别日志：按天切割，超过 100MB 也切割，保留 15 天 -->
+    <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>15</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+    </appender>
+
+    <!-- ERROR 级别日志：单独归档 -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_HOME}/${APP_NAME}-error.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>15</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- 第三方框架噪音日志压制（全局生效，不区分环境）                    -->
+    <!-- ============================================================ -->
+
+    <!-- Spring 框架 -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework.boot.autoconfigure" level="WARN"/>
+    <logger name="org.springframework.boot.web" level="WARN"/>
+    <logger name="org.springframework.security" level="WARN"/>
+    <logger name="org.springframework.web" level="WARN"/>
+    <logger name="org.springframework.context" level="WARN"/>
+
+    <!-- MyBatis / MyBatis-Plus -->
+    <logger name="org.mybatis" level="WARN"/>
+    <logger name="com.baomidou.mybatisplus" level="WARN"/>
+    <logger name="com.baomidou.mybatisplus.core.MybatisConfiguration" level="WARN"/>
+
+    <!-- 数据库连接池 -->
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="com.alibaba.druid" level="WARN"/>
+
+    <!-- Sa-Token -->
+    <logger name="cn.dev33.satoken" level="WARN"/>
+
+    <!-- Knife4j / Swagger -->
+    <logger name="springfox" level="WARN"/>
+    <logger name="io.swagger" level="WARN"/>
+    <logger name="com.github.xiaoymin" level="WARN"/>
+    <logger name="org.springdoc" level="WARN"/>
+
+    <!-- Netty / Tomcat / Undertow -->
+    <logger name="io.netty" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+    <logger name="org.apache.catalina" level="WARN"/>
+    <logger name="org.apache.coyote" level="WARN"/>
+
+    <!-- EasyExcel -->
+    <logger name="com.alibaba.excel" level="WARN"/>
+
+    <!-- Hutool -->
+    <logger name="cn.hutool" level="WARN"/>
+
+    <!-- 其他常见噪音 -->
+    <logger name="org.hibernate.validator" level="WARN"/>
+    <logger name="com.sun.xml" level="WARN"/>
+    <logger name="javax.management" level="WARN"/>
+
+    <!-- ============================================================ -->
+    <!-- 环境配置                                                       -->
+    <!-- ============================================================ -->
+
+    <!-- 开发环境：控制台 + 文件，业务包 DEBUG，mapper 包 DEBUG 打印 SQL -->
+    <springProfile name="dev">
+        <logger name="com.musheng" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </logger>
+        <!-- SQL 日志：dev 环境打印，mapper 包 DEBUG 级别 -->
+        <logger name="com.musheng.business.sales.mapper" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+        </logger>
+        <logger name="com.musheng.business.report.mapper" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+        </logger>
+        <logger name="com.musheng.system.mapper" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+        </logger>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="INFO_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 生产/测试环境：只写文件 -->
+    <springProfile name="prod,test">
+        <logger name="com.musheng" level="INFO" additivity="false">
+            <appender-ref ref="INFO_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </logger>
+        <root level="WARN">
+            <appender-ref ref="INFO_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

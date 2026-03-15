@@ -69,7 +69,8 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # SQL 日志交给 logback 控制：dev 环境 DEBUG 打印，prod 环境 WARN 屏蔽
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 # Sa-Token Configuration
 sa-token:
@@ -144,12 +145,4 @@ app:
     # 自动创建货币（当导入数据中的 currencyCode 不存在时）
     auto-create-currency: false
 
-# Logging Configuration
-logging:
-  level:
-    root: info
-    com.musheng: debug
-    org.springframework: info
-    com.baomidou.mybatisplus: debug
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+# 日志配置由 logback-spring.xml 统一管理，此处不重复配置
