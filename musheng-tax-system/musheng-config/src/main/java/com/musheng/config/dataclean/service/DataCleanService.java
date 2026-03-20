@@ -23,7 +23,8 @@ public interface DataCleanService {
      * 按模块清理当前店铺数据
      *
      * @param moduleCode 模块编码
+     * @param siteCode   站点编码（可选，为空则清理所有站点）
      * @return 清理的数据条数
      */
-    int cleanModule(String moduleCode);
+    int cleanModule(String moduleCode, String siteCode);
 }

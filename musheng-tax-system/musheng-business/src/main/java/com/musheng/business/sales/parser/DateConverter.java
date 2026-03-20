@@ -176,6 +176,18 @@ public class DateConverter {
     private static LocalDateTime parseSpecificFormats(String dateStr, String siteCode) {
         String processed = removeTimezoneAbbr(dateStr);
         
+        // ISO 8601 带时区偏移格式: 2025-07-31T18:31:36+02:00 或 2025-07-31T18:31:36Z
+        // 按字面时间解析，不做时区转换（直接取本地时间部分）
+        if (processed.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*")) {
+            try {
+                // 截取前19位 "yyyy-MM-ddTHH:mm:ss"，忽略时区偏移
+                String isoLocal = processed.substring(0, 19).replace("T", " ");
+                return LocalDateTime.parse(isoLocal, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } catch (Exception e) {
+                log.debug("ISO 8601 带时区格式解析失败: {}, 错误: {}", dateStr, e.getMessage());
+            }
+        }
+
         // 英国/欧洲 Amazon 格式: 30 Jun 2025 23:01:46 UTC, 1 Sept 2025 03:28:04 UTC（dd MMM yyyy HH:mm:ss）
         // 月份支持 3-4 字母缩写：Jun, Jul, Sept, June, July 等
         // 按字面值解析，不做时区转换

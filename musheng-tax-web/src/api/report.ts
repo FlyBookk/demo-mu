@@ -66,18 +66,12 @@ export interface TaxReportSummary {
   // 收入（按发货）
   totalRevenue: number
   totalRevenueCny: number
-  // 退款-按发货归属
-  refundByShipment: number
-  refundByShipmentCny: number
-  refundCountByShipment: number
-  // 退款-按结算时间
-  refundBySettlement: number
-  refundBySettlementCny: number
-  refundCountBySettlement: number
-  // 退款-Amazon口径
-  refundBySettlementAmazon: number
-  refundBySettlementAmazonCny: number
-  refundCountBySettlementAmazon: number
+  // 退款 - 配送日期口径（单一维度）
+  refundAmount: number
+  refundAmountCny: number
+  refundCount: number
+  // 配送匹配订单数
+  shippingMatchCount: number
   // 消费税
   consumptionTax: number
   consumptionTaxCny: number
@@ -90,26 +84,16 @@ export interface TaxReportSummary {
   otherTransactionFeesCny: number
   otherAmount: number
   otherAmountCny: number
-  totalServiceFee: number
-  totalServiceFeeCny: number
-  // 佣金-Amazon口径
+  // 佣金服务费合计（方式一+方式二 3项）
   totalCommissionFee: number
   totalCommissionFeeCny: number
-  // 其他费（拆分）
-  miscServiceFee: number
-  miscServiceFeeCny: number
-  otherFees: number
-  otherFeesCny: number
-  miscFeesCount: number
-  // 其他费合计
-  totalMiscFees: number
-  totalMiscFeesCny: number
+  // 其他费合计（方式一+方式二 other）
+  totalOtherFee: number
+  totalOtherFeeCny: number
   // 广告费
   advertisingCost: number
   advertisingCostCny: number
-  // 总成本
-  totalCost: number
-  // 平台支出与采购成本（按图片公式）
+  // 平台支出与采购成本
   platformExpenses: number
   platformExpensesCny: number
   profit4Percent: number
@@ -134,7 +118,7 @@ export interface FeeBreakdown {
 /**
  * 查询报税汇总
  */
-export function getTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+export function getTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string; refundDateMode?: string }) {
   return request.get<TaxReportSummary[]>(`${BASE_URL}/tax-summary`, params)
 }
 
@@ -148,7 +132,7 @@ export function getFeeBreakdown(params: { siteCode?: string; startQuarter: strin
 /**
  * 导出报税汇总列表（表头与列表一致）
  */
-export function exportTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string }) {
+export function exportTaxSummary(params: { siteCode?: string; startQuarter: string; endQuarter: string; refundDateMode?: string }) {
   const filename = `报税汇总_${new Date().toISOString().slice(0, 10)}.xlsx`
   return request.downloadAndSave(`${BASE_URL}/tax-summary/export`, filename, params)
 }

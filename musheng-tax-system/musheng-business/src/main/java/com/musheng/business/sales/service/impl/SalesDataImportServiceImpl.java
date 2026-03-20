@@ -1272,7 +1272,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
         String[][] standardColumns = {
             {"orderId", "订单号"},
             {"siteCode", "站点"},
-            {"transactionDate", "交易日期"},
+            {"transactionDate", "结算日期"},
             {"transactionType", "交易类型"},
             {"transactionCategory", "交易分类"},
             {"sku", "SKU"},

@@ -147,6 +147,18 @@ public class ShippingData extends BaseEntityWithoutUpdateTime {
     private String trackingNumber;
 
     /**
+     * 购买日期（亚马逊原始字段 purchase-date）
+     */
+    @FieldMapping(label = "购买日期", description = "买家下单日期", order = 20)
+    private java.time.LocalDateTime purchaseDate;
+
+    /**
+     * 付款日期（亚马逊原始字段 payments-date）
+     */
+    @FieldMapping(label = "付款日期", description = "买家付款日期", order = 21)
+    private java.time.LocalDateTime paymentsDate;
+
+    /**
      * 配送日期当天汇率（对人民币）
      * 如果当天是节假日/周末，则取下一个工作日的汇率
      */

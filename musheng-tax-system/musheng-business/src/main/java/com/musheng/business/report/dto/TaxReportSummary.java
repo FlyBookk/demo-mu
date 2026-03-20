@@ -38,35 +38,21 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "收入总额（人民币）")
     private BigDecimal totalRevenueCny;
 
-    // ========== 退款数据（双维度） ==========
+    // ========== 配送匹配数据 ==========
 
-    // 维度一：按发货订单归属（主要报税维度）
-    @Schema(description = "退款金额-按发货归属（原币）")
-    private BigDecimal refundByShipment;
+    @Schema(description = "配送数据匹配到的订单笔数")
+    private Integer shippingMatchCount;
 
-    @Schema(description = "退款金额-按发货归属（人民币）")
-    private BigDecimal refundByShipmentCny;
+    // ========== 退款数据（单一配送日期口径） ==========
 
-    @Schema(description = "退款笔数-按发货归属")
-    private Integer refundCountByShipment;
+    @Schema(description = "退款金额（原币）- 配送日期口径")
+    private BigDecimal refundAmount;
 
-    // 维度二：按结算时间统计（辅助参考）
-    @Schema(description = "退款金额-按结算时间（原币）")
-    private BigDecimal refundBySettlement;
+    @Schema(description = "退款金额（人民币）- 配送日期口径")
+    private BigDecimal refundAmountCny;
 
-    @Schema(description = "退款金额-按结算时间（人民币）")
-    private BigDecimal refundBySettlementCny;
-
-    @Schema(description = "退款笔数-按结算时间")
-    private Integer refundCountBySettlement;
-
-    // ========== Amazon口径退款（按结算时间，不限制配送数据匹配） ==========
-    @Schema(description = "退款金额-Amazon口径（原币）")
-    private BigDecimal refundBySettlementAmazon;
-    @Schema(description = "退款金额-Amazon口径（人民币）")
-    private BigDecimal refundBySettlementAmazonCny;
-    @Schema(description = "退款笔数-Amazon口径")
-    private Integer refundCountBySettlementAmazon;
+    @Schema(description = "退款笔数")
+    private Integer refundCount;
 
     // ========== 消费税（平台代扣税） ==========
 
@@ -102,42 +88,21 @@ public class TaxReportSummary implements Serializable {
     @Schema(description = "其他（人民币）")
     private BigDecimal otherAmountCny;
 
-    @Schema(description = "佣金/服务费合计（原币）= sellingFees + fbaFees + otherTransactionFees + otherAmount")
-    private BigDecimal totalServiceFee;
+    // ========== 佣金服务费合计（方式一+方式二，3项：sellingFees+fbaFees+otherTransactionFees） ==========
 
-    @Schema(description = "佣金/服务费合计（人民币）")
-    private BigDecimal totalServiceFeeCny;
-
-    // ========== 佣金合计-Amazon口径（selling+fba+otherTx 全类型，不含other/marketplaceWithheldTax） ==========
-    @Schema(description = "佣金合计-Amazon口径（原币）")
+    @Schema(description = "佣金服务费合计（原币）= 方式一(3项) + 方式二(3项)")
     private BigDecimal totalCommissionFee;
-    @Schema(description = "佣金合计-Amazon口径（人民币）")
+
+    @Schema(description = "佣金服务费合计（人民币）")
     private BigDecimal totalCommissionFeeCny;
 
-    // ========== 其他费拆分（非收入/退款类型） ==========
+    // ========== 其他费合计（方式一other + 方式二other） ==========
 
-    @Schema(description = "其他费-ServiceFee（原币）- transaction_type=ServiceFee，保留原正负")
-    private BigDecimal miscServiceFee;
-
-    @Schema(description = "其他费-ServiceFee（人民币）")
-    private BigDecimal miscServiceFeeCny;
-
-    @Schema(description = "其他费-其他（原币）- transaction_type非ServiceFee，保留原正负")
-    private BigDecimal otherFees;
-
-    @Schema(description = "其他费-其他（人民币）")
-    private BigDecimal otherFeesCny;
-
-    @Schema(description = "其他费笔数（ServiceFee+其他合计）")
-    private Integer miscFeesCount;
-
-    // ========== 其他费合计（ServiceFee + 其他，用于前端展示） ==========
-
-    @Schema(description = "其他费合计（原币）= miscServiceFee + otherFees")
-    private BigDecimal totalMiscFees;
+    @Schema(description = "其他费合计（原币）= 方式一(other) + 方式二(other)")
+    private BigDecimal totalOtherFee;
 
     @Schema(description = "其他费合计（人民币）")
-    private BigDecimal totalMiscFeesCny;
+    private BigDecimal totalOtherFeeCny;
 
     // ========== 广告费 ==========
 
@@ -146,11 +111,6 @@ public class TaxReportSummary implements Serializable {
 
     @Schema(description = "广告费（人民币）")
     private BigDecimal advertisingCostCny;
-
-    // ========== 成本汇总 ==========
-
-    @Schema(description = "总成本（人民币）= 佣金/服务费 + 其他费 + 广告费")
-    private BigDecimal totalCost;
 
     // ========== 平台支出与采购成本计算（按图片公式） ==========
 

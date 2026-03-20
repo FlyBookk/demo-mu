@@ -43,9 +43,9 @@ public class SalesData extends BaseEntityWithoutUpdateTime {
     private String storeName;
 
     /**
-     * 交易日期时间
+     * 结算日期时间
      */
-    @FieldMapping(label = "交易日期", description = "交易发生时间", required = true, order = 1)
+    @FieldMapping(label = "结算日期", description = "结算发生时间", required = true, order = 1)
     private LocalDateTime transactionDate;
 
     /**

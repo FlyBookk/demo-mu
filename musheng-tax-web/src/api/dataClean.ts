@@ -23,6 +23,8 @@ export function getCleanModules() {
 /**
  * 清理指定模块数据
  */
-export function cleanModule(moduleCode: string) {
-  return request.delete<number>(`${BASE_URL}/modules/${moduleCode}`)
+export function cleanModule(moduleCode: string, siteCode?: string) {
+  return request.delete<number>(`${BASE_URL}/modules/${moduleCode}`, {
+    params: siteCode ? { siteCode } : undefined
+  })
 }

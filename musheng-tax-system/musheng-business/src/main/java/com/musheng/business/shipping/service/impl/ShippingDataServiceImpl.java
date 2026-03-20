@@ -492,6 +492,26 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             }
         }
 
+        // 解析购买日期（亚马逊原始字段：purchase-date / 购买日期）
+        String purchaseDateStr = getFieldValue(rowData, "purchase-date", "purchase date", "purchasedate", "购买日期");
+        if (StringUtils.hasText(purchaseDateStr)) {
+            String parseSiteCode = siteCode != null ? siteCode : "US";
+            LocalDateTime purchaseDateTime = csvParseService.parseDate(purchaseDateStr, parseSiteCode);
+            if (purchaseDateTime != null) {
+                shippingData.setPurchaseDate(purchaseDateTime);
+            }
+        }
+
+        // 解析付款日期（亚马逊原始字段：payments-date / 付款日期）
+        String paymentsDateStr = getFieldValue(rowData, "payments-date", "payments date", "paymentsdate", "付款日期");
+        if (StringUtils.hasText(paymentsDateStr)) {
+            String parseSiteCode = siteCode != null ? siteCode : "US";
+            LocalDateTime paymentsDateTime = csvParseService.parseDate(paymentsDateStr, parseSiteCode);
+            if (paymentsDateTime != null) {
+                shippingData.setPaymentsDate(paymentsDateTime);
+            }
+        }
+
         // Parse tracking number (支持中文列名)
         shippingData.setTrackingNumber(getFieldValue(rowData, "tracking number", "tracking", "trackingnumber", "追踪编码"));
 

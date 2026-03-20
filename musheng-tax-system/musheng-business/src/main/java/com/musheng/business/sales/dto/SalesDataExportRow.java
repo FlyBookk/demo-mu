@@ -19,7 +19,7 @@ public class SalesDataExportRow {
     @ExcelProperty("店铺名称")
     private String storeName;
 
-    @ExcelProperty("交易日期")
+    @ExcelProperty("结算日期")
     private LocalDateTime transactionDate;
 
     @ExcelProperty("结算ID")

@@ -319,7 +319,7 @@
         </a-descriptions-item>
         <a-descriptions-item label="站点">{{ detailData.siteCode }}</a-descriptions-item>
         <a-descriptions-item label="Marketplace">{{ detailData.marketplace }}</a-descriptions-item>
-        <a-descriptions-item label="交易日期">{{ formatDate(detailData.transactionDate) }}</a-descriptions-item>
+        <a-descriptions-item label="结算日期">{{ formatDate(detailData.transactionDate) }}</a-descriptions-item>
         <a-descriptions-item label="结算编号">{{ detailData.settlementId || '-' }}</a-descriptions-item>
         <a-descriptions-item label="原始交易类型">{{ detailData.transactionType }}</a-descriptions-item>
         <a-descriptions-item label="交易分类">
@@ -540,7 +540,7 @@ const columns = [
     ellipsis: true
   },
   {
-    title: '交易日期',
+    title: '结算日期',
     dataIndex: 'transactionDate',
     key: 'transactionDate',
     width: 120

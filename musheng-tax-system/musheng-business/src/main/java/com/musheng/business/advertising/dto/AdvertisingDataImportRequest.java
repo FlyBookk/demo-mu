@@ -1,7 +1,6 @@
 package com.musheng.business.advertising.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -55,13 +54,11 @@ public class AdvertisingDataImportRequest {
     private String currency;
 
     @NotNull(message = "账单金额不能为空")
-    @DecimalMin(value = "0.01", message = "账单金额必须大于0")
-    @Schema(description = "账单金额（发票总金额）", example = "73.23", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "账单金额（发票总金额，允许负数用于抵冲）", example = "73.23", requiredMode = Schema.RequiredMode.REQUIRED)
     private BigDecimal invoiceAmount;
 
     @NotNull(message = "费用不能为空")
-    @DecimalMin(value = "0", message = "费用不能为负数")
-    @Schema(description = "费用（实际花费）", example = "45.4", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "费用（实际花费，允许负数用于正负抵冲）", example = "45.4", requiredMode = Schema.RequiredMode.REQUIRED)
     private BigDecimal cost;
 
     @Schema(description = "其他费分摊", example = "0")

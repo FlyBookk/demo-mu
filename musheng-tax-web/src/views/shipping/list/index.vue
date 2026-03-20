@@ -167,9 +167,12 @@
         <template #bodyCell="{ column, record }">
           <!-- 订单号 -->
           <template v-if="column.key === 'orderId'">
-            <a-typography-text copyable :content="record.orderId">
-              {{ record.orderId }}
-            </a-typography-text>
+            <div class="order-id-cell">
+              <span class="order-id-text" :title="record.orderId">{{ record.orderId }}</span>
+              <a-tooltip title="复制订单号">
+                <CopyOutlined class="copy-icon" @click="handleCopy(record.orderId)" />
+              </a-tooltip>
+            </div>
           </template>
 
           <!-- 站点 -->
@@ -224,6 +227,8 @@
         <a-descriptions-item label="Marketplace">{{ detailData.marketplace }}</a-descriptions-item>
         <a-descriptions-item label="发货日期">{{ detailData.shipDate }}</a-descriptions-item>
         <a-descriptions-item label="货币">{{ detailData.currencyCode }}</a-descriptions-item>
+        <a-descriptions-item label="购买日期">{{ detailData.purchaseDate || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="付款日期">{{ detailData.paymentsDate || '-' }}</a-descriptions-item>
         <a-descriptions-item label="SKU">{{ detailData.sku || '-' }}</a-descriptions-item>
         <a-descriptions-item label="数量">{{ detailData.quantity || 0 }}</a-descriptions-item>
         <a-descriptions-item label="商品价格">{{ formatAmountValue(detailData.productPrice) }}</a-descriptions-item>
@@ -261,7 +266,8 @@ import {
   CloudUploadOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  SendOutlined
+  SendOutlined,
+  CopyOutlined
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import {
@@ -430,6 +436,18 @@ const columns = [
     dataIndex: 'shipDate',
     key: 'shipDate',
     width: 120
+  },
+  {
+    title: '购买日期',
+    dataIndex: 'purchaseDate',
+    key: 'purchaseDate',
+    width: 160
+  },
+  {
+    title: '付款日期',
+    dataIndex: 'paymentsDate',
+    key: 'paymentsDate',
+    width: 160
   },
   {
     title: '汇率',
@@ -640,6 +658,14 @@ onMounted(() => {
   fetchData()
   fetchSummary()
 })
+
+function handleCopy(text: string) {
+  navigator.clipboard.writeText(text).then(() => {
+    message.success('已复制')
+  }).catch(() => {
+    message.error('复制失败')
+  })
+}
 </script>
 
 <style lang="scss" scoped>
@@ -769,6 +795,31 @@ onMounted(() => {
 
   .amount {
     font-weight: 500;
+  }
+
+  .order-id-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .order-id-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-icon {
+      flex-shrink: 0;
+      color: #bfbfbf;
+      cursor: pointer;
+      font-size: 12px;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #1890ff;
+      }
+    }
   }
 
   .highlight-amount {

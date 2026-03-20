@@ -89,24 +89,32 @@ public class DataCleanServiceImpl implements DataCleanService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int cleanModule(String moduleCode) {
+    public int cleanModule(String moduleCode, String siteCode) {
         Long shopId = ShopContext.requireShopId();
         ModuleDef def = MODULE_DEFS.get(moduleCode);
         if (def == null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "无效的模块编码: " + moduleCode);
         }
 
-        log.info("开始清理数据 - 店铺:{}, 模块:{}", shopId, def.name);
+        boolean hasSite = org.springframework.util.StringUtils.hasText(siteCode);
+        log.info("开始清理数据 - 店铺:{}, 模块:{}, 站点:{}", shopId, def.name, hasSite ? siteCode : "全部");
         int totalDeleted = 0;
 
         for (String table : def.tables) {
-            int deleted = jdbcTemplate.update(
-                    "DELETE FROM " + table + " WHERE shop_id = ?", shopId);
+            int deleted;
+            if (hasSite) {
+                deleted = jdbcTemplate.update(
+                        "DELETE FROM " + table + " WHERE shop_id = ? AND site_code = ?", shopId, siteCode);
+            } else {
+                deleted = jdbcTemplate.update(
+                        "DELETE FROM " + table + " WHERE shop_id = ?", shopId);
+            }
             log.info("清理表 {} - 删除 {} 条", table, deleted);
             totalDeleted += deleted;
         }
 
-        log.info("数据清理完成 - 店铺:{}, 模块:{}, 共删除 {} 条", shopId, def.name, totalDeleted);
+        log.info("数据清理完成 - 店铺:{}, 模块:{}, 站点:{}, 共删除 {} 条",
+                shopId, def.name, hasSite ? siteCode : "全部", totalDeleted);
         return totalDeleted;
     }
 

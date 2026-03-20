@@ -37,8 +37,9 @@ public class TaxReportController {
     public Result<List<TaxReportSummary>> getTaxSummary(
             @Parameter(description = "站点编码（不传则查询所有站点）") @RequestParam(required = false) String siteCode,
             @Parameter(description = "开始季度(格式:2024-Q1)", required = true) @RequestParam String startQuarter,
-            @Parameter(description = "结束季度(格式:2024-Q4)", required = true) @RequestParam String endQuarter) {
-        List<TaxReportSummary> summaries = taxReportService.getTaxSummary(siteCode, startQuarter, endQuarter);
+            @Parameter(description = "结束季度(格式:2024-Q4)", required = true) @RequestParam String endQuarter,
+            @Parameter(description = "退款时间维度：ship=配送日期（默认），settlement=结算日期") @RequestParam(required = false, defaultValue = "ship") String refundDateMode) {
+        List<TaxReportSummary> summaries = taxReportService.getTaxSummary(siteCode, startQuarter, endQuarter, refundDateMode);
         return Result.success(summaries);
     }
 
@@ -48,7 +49,8 @@ public class TaxReportController {
             @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
             @Parameter(description = "开始季度") @RequestParam String startQuarter,
             @Parameter(description = "结束季度") @RequestParam String endQuarter,
+            @Parameter(description = "退款时间维度：ship=配送日期（默认），settlement=结算日期") @RequestParam(required = false, defaultValue = "ship") String refundDateMode,
             HttpServletResponse response) {
-        taxReportService.exportTaxSummary(siteCode, startQuarter, endQuarter, response);
+        taxReportService.exportTaxSummary(siteCode, startQuarter, endQuarter, refundDateMode, response);
     }
 }

@@ -37,6 +37,15 @@
             </a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item label="退款时间维度">
+          <a-select
+            v-model:value="filterForm.refundDateMode"
+            style="width: 140px"
+          >
+            <a-select-option value="ship">配送日期</a-select-option>
+            <a-select-option value="settlement">结算日期</a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item>
           <a-space>
             <a-button type="primary" @click="handleQuery" :loading="loading">
@@ -69,10 +78,10 @@
           <a-card class="stat-card">
             <a-statistic
               title="退款金额②(b)"
-              :value="Math.abs(totalStats.refundBySettlementAmazonCny ?? 0)"
+              :value="Math.abs(totalStats.refundAmountCny ?? 0)"
               :precision="2"
-              :prefix="(totalStats.refundBySettlementAmazonCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.refundBySettlementAmazonCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+              :prefix="(totalStats.refundAmountCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.refundAmountCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
@@ -133,6 +142,16 @@
               :precision="2"
               :prefix="(totalStats.advertisingCostCny ?? 0) >= 0 ? '¥' : '-¥'"
               :value-style="{ color: (totalStats.advertisingCostCny ?? 0) >= 0 ? '#52c41a' : '#13c2c2' }"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="6">
+          <a-card class="stat-card">
+            <a-statistic
+              title="配送匹配订单数"
+              :value="totalStats.shippingMatchCount"
+              suffix="笔"
+              :value-style="{ color: '#1890ff' }"
             />
           </a-card>
         </a-col>
@@ -202,20 +221,20 @@
           <template v-else-if="column.key === 'totalRevenueCny'">
             <span :class="['amount', (record.totalRevenueCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalRevenueCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'refundBySettlementAmazonCny'">
-            <span :class="['amount', (record.refundBySettlementAmazonCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundBySettlementAmazonCny) }}</span>
-            <a-tag size="small" style="margin-left: 4px">{{ record.refundCountBySettlementAmazon }}笔</a-tag>
+          <template v-else-if="column.key === 'refundAmountCny'">
+            <span :class="['amount', (record.refundAmountCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.refundAmountCny) }}</span>
+            <a-tag size="small" style="margin-left: 4px">{{ record.refundCount }}笔</a-tag>
           </template>
           <template v-else-if="column.key === 'netRevenueCny'">
-            <span :class="['amount', ((record.totalRevenueCny ?? 0) - Math.abs(record.refundBySettlementAmazonCny ?? 0)) >= 0 ? 'positive' : 'negative']">
-              {{ formatAmountWithSign((record.totalRevenueCny ?? 0) - Math.abs(record.refundBySettlementAmazonCny ?? 0)) }}
+            <span :class="['amount', ((record.totalRevenueCny ?? 0) - Math.abs(record.refundAmountCny ?? 0)) >= 0 ? 'positive' : 'negative']">
+              {{ formatAmountWithSign((record.totalRevenueCny ?? 0) - Math.abs(record.refundAmountCny ?? 0)) }}
             </span>
           </template>
           <template v-else-if="column.key === 'totalCommissionFeeCny'">
             <span :class="['amount', (record.totalCommissionFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalCommissionFeeCny) }}</span>
           </template>
-          <template v-else-if="column.key === 'totalMiscFeesCny'">
-            <span :class="['amount', (record.totalMiscFeesCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalMiscFeesCny) }}</span>
+          <template v-else-if="column.key === 'totalOtherFeeCny'">
+            <span :class="['amount', (record.totalOtherFeeCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalOtherFeeCny) }}</span>
           </template>
           <template v-else-if="column.key === 'consumptionTaxCny'">
             <span :class="['amount', (record.consumptionTaxCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.consumptionTaxCny) }}</span>
@@ -261,7 +280,8 @@ import type { Marketplace } from '@/types/marketplace'
 // ============= 筛选条件 =============
 const filterForm = reactive({
   siteCode: undefined as string | undefined,
-  selectedQuarter: ''
+  selectedQuarter: '',
+  refundDateMode: 'ship' as string
 })
 
 const marketplaceOptions = ref<Marketplace[]>([])
@@ -277,17 +297,17 @@ const summaryData = ref<(TaxReportSummary & { key: string })[]>([])
 const totalStats = computed(() => {
   const data = summaryData.value
   const totalRevenueCny = data.reduce((sum, item) => sum + (item.totalRevenueCny || 0), 0)
-  const refundBySettlementAmazonCny = data.reduce((sum, item) => sum + (item.refundBySettlementAmazonCny || 0), 0)
-  const miscServiceFeeCny = data.reduce((sum, item) => sum + (item.miscServiceFeeCny || 0), 0)
-  const otherFeesCny = data.reduce((sum, item) => sum + (item.otherFeesCny || 0), 0)
-  const netRevenueCny = totalRevenueCny - Math.abs(refundBySettlementAmazonCny)
+  const refundAmountCny = data.reduce((sum, item) => sum + (item.refundAmountCny || 0), 0)
+  const totalOtherFeeCny = data.reduce((sum, item) => sum + (item.totalOtherFeeCny || 0), 0)
+  const shippingMatchCount = data.reduce((sum, item) => sum + (item.shippingMatchCount || 0), 0)
+  const netRevenueCny = totalRevenueCny - Math.abs(refundAmountCny)
   const consumptionTaxCny = data.reduce((sum, item) => sum + (item.consumptionTaxCny || 0), 0)
   const totalCommissionFeeCny = data.reduce((sum, item) => sum + (item.totalCommissionFeeCny || 0), 0)
   const advertisingCostCny = data.reduce((sum, item) => sum + (item.advertisingCostCny || 0), 0)
 
-  // 按图片公式计算
+  // 按公式计算
   // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费 + ⑦其他费用
-  const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny) + Math.abs(miscServiceFeeCny + otherFeesCny)
+  const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny) + Math.abs(totalOtherFeeCny)
   // ⑩4%利润 = ③收入净额 × 4%
   const profit4PercentCny = netRevenueCny * 0.04
   // ⑪采购成本 = ③ − ⑨ − ⑩
@@ -295,29 +315,29 @@ const totalStats = computed(() => {
 
   return {
     totalRevenueCny,
-    refundBySettlementAmazonCny,
+    refundAmountCny,
     netRevenueCny,
     consumptionTaxCny,
     totalCommissionFeeCny,
-    miscServiceFeeCny,
-    otherFeesCny,
-    otherFeesTotalCny: miscServiceFeeCny + otherFeesCny,
+    totalOtherFeeCny,
+    otherFeesTotalCny: totalOtherFeeCny,
     advertisingCostCny,
-    // 新增字段
     platformExpensesCny,
     profit4PercentCny,
-    procurementCostCny
+    procurementCostCny,
+    shippingMatchCount
   }
 })
 const summaryColumns = [
   { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 150, fixed: 'left' },
   { title: '季度', dataIndex: 'yearQuarter', key: 'yearQuarter', width: 100 },
   { title: '收入总额①', dataIndex: 'totalRevenueCny', key: 'totalRevenueCny', width: 140, align: 'right' },
-  { title: '退款金额②', dataIndex: 'refundBySettlementAmazonCny', key: 'refundBySettlementAmazonCny', width: 160, align: 'right' },
+  { title: '退款金额②', dataIndex: 'refundAmountCny', key: 'refundAmountCny', width: 160, align: 'right' },
+  { title: '配送匹配订单数', dataIndex: 'shippingMatchCount', key: 'shippingMatchCount', width: 130, align: 'right' },
   { title: '收入净额③=①-②', key: 'netRevenueCny', width: 160, align: 'right' },
   { title: '平台代扣税④', dataIndex: 'consumptionTaxCny', key: 'consumptionTaxCny', width: 130, align: 'right' },
   { title: '佣金服务费⑤', dataIndex: 'totalCommissionFeeCny', key: 'totalCommissionFeeCny', width: 150, align: 'right' },
-  { title: '其他费用', dataIndex: 'totalMiscFeesCny', key: 'totalMiscFeesCny', width: 130, align: 'right' },
+  { title: '其他费用⑦', dataIndex: 'totalOtherFeeCny', key: 'totalOtherFeeCny', width: 130, align: 'right' },
   { title: '广告费⑥', dataIndex: 'advertisingCostCny', key: 'advertisingCostCny', width: 130, align: 'right' },
   { title: '平台支出合计⑨=④+⑤+⑥+⑦', dataIndex: 'platformExpensesCny', key: 'platformExpensesCny', width: 200, align: 'right' },
   { title: '4%利润⑩=③×4%', dataIndex: 'profit4PercentCny', key: 'profit4PercentCny', width: 150, align: 'right' },
@@ -392,7 +412,8 @@ async function fetchSummary() {
     const res = await getTaxSummary({
       siteCode: filterForm.siteCode,
       startQuarter: filterForm.selectedQuarter,
-      endQuarter: filterForm.selectedQuarter
+      endQuarter: filterForm.selectedQuarter,
+      refundDateMode: filterForm.refundDateMode
     })
     summaryData.value = (res.data || []).map((item, index) => ({
       ...item,
@@ -421,7 +442,8 @@ async function handleExport() {
     await exportTaxSummary({
       siteCode: filterForm.siteCode,
       startQuarter: filterForm.selectedQuarter,
-      endQuarter: filterForm.selectedQuarter
+      endQuarter: filterForm.selectedQuarter,
+      refundDateMode: filterForm.refundDateMode
     })
     message.success('导出成功')
   } catch (error) {

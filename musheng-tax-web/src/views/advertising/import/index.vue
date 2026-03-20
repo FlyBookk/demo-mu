@@ -361,8 +361,8 @@ function validateImportRow(row: AdvertisingImportRequest, index: number): string
   if (!row.currency) return '付款币种不能为空'
   const validCurrencies = ['USD', 'CAD', 'GBP', 'EUR']
   if (!validCurrencies.includes(row.currency)) return `不支持的币种: ${row.currency}`
-  if (row.invoiceAmount == null || row.invoiceAmount < 0.01) return '账单金额必须大于0'
-  if (row.cost == null || row.cost < 0) return '费用不能为负数'
+  if (row.invoiceAmount == null) return '账单金额不能为空'
+  if (row.cost == null) return '费用不能为空'
   if (row.billingStartDate > row.billingEndDate) return '账单开始日期不能晚于结束日期'
   return null
 }
@@ -431,8 +431,8 @@ const convertRowToImportRequest = (row: any): AdvertisingImportRequest => {
 
   const costVal = parseFloat(row['费用'] ?? row['cost'] ?? '0') || 0
   const invoiceAmountVal = parseFloat(row['账单金额'] ?? row['invoiceAmount'] ?? '0') || 0
-  // 后端要求 invoiceAmount >= 0.01，空/0 时用 cost 或 0.01 兜底
-  const invoiceAmount = invoiceAmountVal >= 0.01 ? invoiceAmountVal : (costVal >= 0.01 ? costVal : 0.01)
+  // 允许负数（用于正负抵冲），invoiceAmount 为空时用 cost 兜底
+  const invoiceAmount = invoiceAmountVal !== 0 ? invoiceAmountVal : costVal
 
   const currencyRaw = String(row['付款币种'] ?? row['currency'] ?? 'USD').trim()
   const currency = CURRENCY_MAP[currencyRaw] || (CURRENCY_MAP[currencyRaw.toUpperCase()] ?? 'USD')

@@ -31,6 +31,9 @@ export interface ShippingData {
   quantity?: number
   carrier?: string
   trackingNumber?: string
+  // 购买/付款日期
+  purchaseDate?: string
+  paymentsDate?: string
   // 汇率信息
   exchangeRate?: number
   exchangeRateDate?: string
