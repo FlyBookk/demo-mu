@@ -1,1 +1,0 @@
-System.register(["./Col-legacy-Jcngtq9S.js","./index-legacy-UTCCPU0w.js"],function(e,t){"use strict";var s,r,c;return{setters:[e=>{s=e.C,r=e.A},e=>{c=e.y}],execute:function(){e("_",c(s)),e("a",c(r))}}});

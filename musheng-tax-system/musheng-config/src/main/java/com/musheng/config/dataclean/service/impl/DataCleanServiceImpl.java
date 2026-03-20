@@ -28,7 +28,7 @@ public class DataCleanServiceImpl implements DataCleanService {
 
     /**
      * 模块定义：moduleCode -> (moduleName, description, 关联表列表)
-     * 表的删除顺序：子表在前，主表在后
+     * 表的删除顺序：子表在前，主表在后，所有表均有 site_code 列
      */
     private static final LinkedHashMap<String, ModuleDef> MODULE_DEFS = new LinkedHashMap<>();
 
