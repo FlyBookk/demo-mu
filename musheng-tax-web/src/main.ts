@@ -1,12 +1,11 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import Antd from 'ant-design-vue'
 import VXETable from 'vxe-table'
 
 import App from './App.vue'
 import router from './router'
 
-// 样式导入
+// 样式导入（ant-design-vue 组件样式由 unplugin-vue-components 按需自动引入）
 import 'ant-design-vue/dist/reset.css'
 import 'vxe-table/lib/style.css'
 import '@/assets/styles/global.scss'
@@ -23,10 +22,7 @@ app.use(pinia)
 // 注册路由
 app.use(router)
 
-// 注册Ant Design Vue
-app.use(Antd)
-
-// 注册VXE Table
+// 注册VXE Table（vxe-table 暂保留全量注册，后续可按需优化）
 app.use(VXETable)
 
 // 注册自定义指令
