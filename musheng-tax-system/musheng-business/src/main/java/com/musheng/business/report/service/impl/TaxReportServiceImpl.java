@@ -874,9 +874,9 @@ public class TaxReportServiceImpl implements TaxReportService {
         summary.setTotalOtherFee(totalOtherFee.setScale(2, RoundingMode.HALF_UP));
         summary.setTotalOtherFeeCny(totalOtherFeeCny.setScale(2, RoundingMode.HALF_UP));
 
-        // 广告费
-        summary.setAdvertisingCost(advertisingCost.setScale(2, RoundingMode.HALF_UP));
-        summary.setAdvertisingCostCny(advertisingCostCny.setScale(2, RoundingMode.HALF_UP));
+        // 广告费（支出取反，与佣金服务费等保持一致，负数表示支出）
+        summary.setAdvertisingCost(advertisingCost.negate().setScale(2, RoundingMode.HALF_UP));
+        summary.setAdvertisingCostCny(advertisingCostCny.negate().setScale(2, RoundingMode.HALF_UP));
 
         // 平台支出与采购成本（按图片公式）
         summary.setPlatformExpenses(BigDecimal.ZERO);
