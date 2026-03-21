@@ -31,4 +31,12 @@ public class AggregationResult {
      * orderId → exchangeRate
      */
     private Map<String, BigDecimal> orderRateMap;
+
+    /**
+     * 供应商结差退款汇总：站点编码(siteCode) → (MSKU(sku) → 退款明细)
+     *
+     * <p>按供货协议第 3.1 条，记录结算周期内属于供应商供货范围的退款数量和金额，
+     * 用于供应商结差扣除计算。该字段为可选字段，不影响现有消费方。</p>
+     */
+    private Map<String, Map<String, SupplierRefundDetail>> supplierRefundMap;
 }

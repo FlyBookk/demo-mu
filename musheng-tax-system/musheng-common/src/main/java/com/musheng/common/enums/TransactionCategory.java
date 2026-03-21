@@ -14,6 +14,7 @@ public enum TransactionCategory {
     REFUND("refund", "退款"),
     FEE("fee", "费用"),
     ADJUSTMENT("adjustment", "调整"),
+    TRANSFER("transfer", "划转"),
     OTHER("other", "其他");
 
     private final String code;

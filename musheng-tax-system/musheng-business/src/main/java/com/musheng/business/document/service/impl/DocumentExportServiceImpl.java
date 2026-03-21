@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.musheng.business.document.entity.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentExportService;
+import com.musheng.common.service.SysConfigService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -53,6 +54,8 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     private DocumentInvMapper documentInvMapper;
     @Autowired
     private DocumentInvItemMapper documentInvItemMapper;
+    @Autowired
+    private SysConfigService sysConfigService;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy/M/d");
 
@@ -237,7 +240,9 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             createCell(totalRow, 3, "", csCenterBorder);
 
             // 嵌入公司Logo图片到A1:A3区域
-            addImage(wb, sheet, IMG_COMPANY_LOGO, 0, 76200, 0, 19050, 0, 1571625, 2, 457200);
+            if (isStampEnabled()) {
+                addImage(wb, sheet, IMG_COMPANY_LOGO, 0, 76200, 0, 19050, 0, 1571625, 2, 457200);
+            }
 
             // 自动调整列宽以适应内容
             autoFitColumns(sheet, 4);
@@ -509,17 +514,19 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 3));
 
             // 嵌入印章图片 - 慕声红章2.1×2.1cm（小章），香港蓝章4×4cm（大章）
-            int dnSignRow = rowIdx;  // 送貨單位行
-            // 慕声红章（收貨單位）：2.1×2.1cm = 756000 EMU
-            addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
-                    4, 742950, dnSignRow - 1, 123825,
-                    5, 742950, 3, 123825,
-                    756000, 756000);
-            // 香港蓝章（送貨單位）：4×4cm = 1440000 EMU
-            addImageOriginal(wb, sheet, IMG_STAMP_HK,
-                    3, 762000, dnSignRow - 2, 200000,
-                    4, 762000, 5, 200000,
-                    1440000, 1440000);
+            if (isStampEnabled()) {
+                int dnSignRow = rowIdx;  // 送貨單位行
+                // 慕声红章（收貨單位）：2.1×2.1cm = 756000 EMU
+                addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
+                        4, 742950, dnSignRow - 1, 123825,
+                        5, 742950, 3, 123825,
+                        756000, 756000);
+                // 香港蓝章（送貨單位）：4×4cm = 1440000 EMU
+                addImageOriginal(wb, sheet, IMG_STAMP_HK,
+                        3, 762000, dnSignRow - 2, 200000,
+                        4, 762000, 5, 200000,
+                        1440000, 1440000);
+            }
 
             // 自动调整列宽以适应内容
             autoFitColumns(sheet, 6);
@@ -792,21 +799,23 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             autoFitColumns(sheet, 6);
 
             // 嵌入图片 - 慕声红章2.1×2.1cm（小章），香港蓝章4×4cm（大章）
-            // 公司Logo: 标准样本 from(0,219075,0,19050) to(0,1543050,2,447675) ext(1333500,1343025)
-            addImageOriginal(wb, sheet, IMG_COMPANY_LOGO,
-                    0, 219075, 0, 19050,
-                    0, 1543050, 2, 447675,
-                    1333500, 1343025);
-            // 慕声红章（卖方确认区域）：2.1×2.1cm = 756000 EMU
-            addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
-                    1, 1685925, rowIdx, 28575,
-                    2, 1685925, 2, 28575,
-                    756000, 756000);
-            // 香港蓝章（买方确认区域）：4×4cm = 1440000 EMU
-            addImageOriginal(wb, sheet, IMG_STAMP_HK,
-                    4, 447675, rowIdx - 1, 171450,
-                    5, 447675, 3, 171450,
-                    1440000, 1440000);
+            if (isStampEnabled()) {
+                // 公司Logo: 标准样本 from(0,219075,0,19050) to(0,1543050,2,447675) ext(1333500,1343025)
+                addImageOriginal(wb, sheet, IMG_COMPANY_LOGO,
+                        0, 219075, 0, 19050,
+                        0, 1543050, 2, 447675,
+                        1333500, 1343025);
+                // 慕声红章（卖方确认区域）：2.1×2.1cm = 756000 EMU
+                addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
+                        1, 1685925, rowIdx, 28575,
+                        2, 1685925, 2, 28575,
+                        756000, 756000);
+                // 香港蓝章（买方确认区域）：4×4cm = 1440000 EMU
+                addImageOriginal(wb, sheet, IMG_STAMP_HK,
+                        4, 447675, rowIdx - 1, 171450,
+                        5, 447675, 3, 171450,
+                        1440000, 1440000);
+            }
 
             wb.write(os);
         }
@@ -1122,10 +1131,12 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             autoFitColumns(sheet, 8);
 
             // 嵌入印章图片 - 慕声红章2.1×2.1cm = 756000 EMU
-            addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
-                    5, 552450, rowIdx - 5, 285750,
-                    7, 552450, 3, 285750,
-                    756000, 756000);
+            if (isStampEnabled()) {
+                addImageOriginal(wb, sheet, IMG_STAMP_MUSHENG,
+                        5, 552450, rowIdx - 5, 285750,
+                        7, 552450, 3, 285750,
+                        756000, 756000);
+            }
 
             wb.write(os);
         }
@@ -1311,6 +1322,17 @@ public class DocumentExportServiceImpl implements DocumentExportService {
 
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 判断导出时是否嵌入签章和Logo
+     *
+     * @return 启用返回 true
+     * @author wanhua
+     * 21:35 2026年03月21日
+     */
+    private boolean isStampEnabled() {
+        return sysConfigService.getBoolean("export_stamp_enabled", true);
+    }
 
     /**
      * 设置Excel下载响应头

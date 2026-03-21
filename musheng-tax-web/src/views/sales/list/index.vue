@@ -89,11 +89,13 @@
                 style="width: 100%"
                 @change="handleSearch"
               >
-                <a-select-option value="income">收入</a-select-option>
-                <a-select-option value="refund">退款</a-select-option>
-                <a-select-option value="fee">费用</a-select-option>
-                <a-select-option value="adjustment">调整</a-select-option>
-                <a-select-option value="other">其他</a-select-option>
+                <a-select-option
+                  v-for="item in transactionCategoryOptions"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -397,31 +399,39 @@ import {
   exportSalesData
 } from '@/api/sales'
 import { getEnabledMarketplaces } from '@/api/marketplace'
-import { getTransactionTypeMappingList } from '@/api/transactionType'
+import { getTransactionTypeMappingList, getTransactionCategories } from '@/api/transactionType'
 import type { SalesData, SalesSummary } from '@/types/sales'
 import type { Marketplace } from '@/types/marketplace'
 import type { TransactionTypeMapping } from '@/types/transactionType'
 
 const router = useRouter()
 
-// ============= 交易分类配置 =============
-const transactionCategoryOptions = [
-  { value: 'income', label: '收入', color: 'green' },
-  { value: 'refund', label: '退款', color: 'red' },
-  { value: 'fee', label: '费用', color: 'orange' },
-  { value: 'adjustment', label: '调整', color: 'blue' },
-  { value: 'other', label: '其他', color: 'default' }
-]
+// ============= 交易分类配置（从后端动态获取） =============
+const CATEGORY_COLOR_MAP: Record<string, string> = {
+  income: 'green',
+  refund: 'red',
+  fee: 'orange',
+  adjustment: 'blue',
+  transfer: 'purple',
+  other: 'default'
+}
+
+interface CategoryOption {
+  value: string
+  label: string
+}
+
+const transactionCategoryOptions = ref<CategoryOption[]>([])
 
 // 交易类型映射缓存（originalType -> categoryDesc）
 const transactionTypeMappingCache = ref<Map<string, string>>(new Map())
 
 function getTransactionCategoryColor(category?: string): string {
-  return transactionCategoryOptions.find(t => t.value === category)?.color || 'default'
+  return CATEGORY_COLOR_MAP[category || ''] || 'default'
 }
 
 function getTransactionCategoryLabel(category?: string): string {
-  return transactionCategoryOptions.find(t => t.value === category)?.label || category || '-'
+  return transactionCategoryOptions.value.find(t => t.value === category)?.label || category || '-'
 }
 
 // 根据交易类型获取分类说明
@@ -646,6 +656,16 @@ async function fetchMarketplaces() {
   }
 }
 
+// 获取交易分类选项
+async function fetchCategories() {
+  try {
+    const res = await getTransactionCategories()
+    transactionCategoryOptions.value = res.data || []
+  } catch (error) {
+    console.error('获取交易分类失败:', error)
+  }
+}
+
 // 获取交易类型映射并缓存
 async function fetchTransactionTypeMappings() {
   try {
@@ -797,6 +817,7 @@ function handleBatchDelete() {
 // 初始化
 onMounted(() => {
   fetchMarketplaces()
+  fetchCategories()
   fetchTransactionTypeMappings()
   fetchData()
   fetchSummary()

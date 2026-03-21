@@ -13,10 +13,7 @@ import com.musheng.business.fbashipment.entity.FbaShipment;
 import com.musheng.business.fbashipment.entity.FbaShipmentItem;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
-import com.musheng.business.sales.entity.SalesData;
-import com.musheng.business.sales.mapper.SalesDataMapper;
-import com.musheng.business.shipping.entity.ShippingData;
-import com.musheng.business.shipping.mapper.ShippingDataMapper;
+
 import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -76,11 +73,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     @Autowired
     private SettlementImportDataMapper settlementImportDataMapper;
 
-    @Autowired
-    private SalesDataMapper salesDataMapper;
 
-    @Autowired
-    private ShippingDataMapper shippingDataMapper;
 
     @Autowired
     private DocumentPartyProperties documentPartyProperties;
@@ -415,240 +408,26 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     }
 
     /**
-     * 根据结算单生成请求，通过配送数据日期范围关联销售数据，构建 SettlementInput
+     * 根据结算周期从推导数据构建 SettlementInput
      *
-     * <p>新逻辑：
-     * 1. 根据货件ID查询配送数据（t_shipping_data），获取 ship_date 范围
-     * 2. 在该日期范围内查询销售数据（t_sales_data），通过 orderId 关联
-     * 3. 排除退款订单（transactionCategory = 'refund'），统计净销量
-     * 4. 从 t_settlement_import_data 查询对应 MSKU 的单价
-     * 5. 组合为 SettlementInput 传给生成器</p>
+     * <p>从 t_settlement_import_data 查询对应周期的推导数据，
+     * 映射为 SettlementInput 传给生成器。</p>
      *
-     * @param request 结算单生成请求（包含周期和货件ID列表）
+     * @param request 结算单生成请求（包含周期起止日期）
      * @return SettlementInput 结算数据输入
      * @author wanhua
-     * 10:30 2026年03月07日
+     * 16:58 2026年03月21日
      */
     private SettlementInput buildSettlementInput(SettlementGenerateRequest request) {
         Long shopId = ShopContext.requireShopId();
 
-        // 1. 根据货件ID查询配送数据，获取 orderId 集合和日期范围
-        List<ShippingData> shippingList = List.of();
-        if (!CollectionUtils.isEmpty(request.getShipmentIds())) {
-            // 查询货件对应的 FbaShipmentItem，获取 MSKU 列表
-            LambdaQueryWrapper<FbaShipmentItem> mskuWrapper = new LambdaQueryWrapper<>();
-            mskuWrapper.in(FbaShipmentItem::getShipmentId, request.getShipmentIds());
-            List<FbaShipmentItem> shipmentItems = fbaShipmentItemMapper.selectList(mskuWrapper);
-            List<String> shipmentMskus = shipmentItems.stream()
-                    .map(FbaShipmentItem::getMsku)
-                    .distinct()
-                    .collect(Collectors.toList());
-            log.info("选中货件涉及 {} 个MSKU", shipmentMskus.size());
-
-            // 查询配送数据（按周期范围）
-            LambdaQueryWrapper<ShippingData> shippingWrapper = new LambdaQueryWrapper<>();
-            shippingWrapper.eq(ShippingData::getShopId, shopId)
-                    .ge(ShippingData::getShipDate, request.getPeriodStart())
-                    .le(ShippingData::getShipDate, request.getPeriodEnd());
-            shippingList = shippingDataMapper.selectList(shippingWrapper);
-            log.info("查询到配送数据 {} 条，周期: {} ~ {}",
-                    shippingList.size(), request.getPeriodStart(), request.getPeriodEnd());
-
-            if (CollectionUtils.isEmpty(shippingList)) {
-                log.warn("周期内无配送数据，无法关联销售数据");
-                return SettlementInput.builder()
-                        .periodStart(request.getPeriodStart())
-                        .periodEnd(request.getPeriodEnd())
-                        .items(List.of())
-                        .build();
-            }
-
-            // 2. 收集 orderId，关联查询 income 销售数据（通过配送数据 orderId 关联）
-            Set<String> orderIds = shippingList.stream()
-                    .map(ShippingData::getOrderId)
-                    .filter(id -> id != null && !id.isEmpty())
-                    .collect(Collectors.toSet());
-
-            LambdaQueryWrapper<SalesData> salesWrapper = new LambdaQueryWrapper<>();
-            salesWrapper.eq(SalesData::getShopId, shopId)
-                    .in(SalesData::getOrderId, orderIds)
-                    .eq(SalesData::getTransactionCategory, "income");
-            List<SalesData> salesList = salesDataMapper.selectList(salesWrapper);
-            log.info("关联查询到 income 销售数据 {} 条", salesList.size());
-
-            // 2.1 独立查询 refund 退款数据（按 transaction_date 在结算周期内过滤，不走 shipping 关联）
-            LambdaQueryWrapper<SalesData> refundWrapper = new LambdaQueryWrapper<>();
-            refundWrapper.eq(SalesData::getShopId, shopId)
-                    .eq(SalesData::getTransactionCategory, "refund")
-                    .ge(SalesData::getTransactionDate, request.getPeriodStart().atStartOfDay())
-                    .le(SalesData::getTransactionDate, request.getPeriodEnd().atTime(23, 59, 59));
-            List<SalesData> refundSalesList = salesDataMapper.selectList(refundWrapper);
-            log.info("独立查询到 refund 退款数据 {} 条，周期: {} ~ {}",
-                    refundSalesList.size(), request.getPeriodStart(), request.getPeriodEnd());
-
-            // 3. 按月按 SKU 汇总 income 数量和 refund 数量，实现退款抵扣算法
-            // key: YearMonth → (SKU → 累计数量)
-            Map<YearMonth, Map<String, Integer>> monthlyIncomeMap = new HashMap<>();
-            Map<YearMonth, Map<String, Integer>> monthlyRefundMap = new HashMap<>();
-
-            // 汇总 income 数据（按月按 SKU）
-            for (SalesData sales : salesList) {
-                if (sales.getTransactionDate() == null || sales.getSku() == null) {
-                    continue;
-                }
-                YearMonth ym = YearMonth.from(sales.getTransactionDate());
-                String sku = sales.getSku();
-                int qty = sales.getQuantity() != null ? sales.getQuantity() : 0;
-                monthlyIncomeMap.computeIfAbsent(ym, k -> new HashMap<>())
-                        .merge(sku, qty, Integer::sum);
-            }
-
-            // 汇总 refund 数据（按月按 SKU，取绝对值）
-            for (SalesData refund : refundSalesList) {
-                if (refund.getTransactionDate() == null || refund.getSku() == null) {
-                    continue;
-                }
-                YearMonth ym = YearMonth.from(refund.getTransactionDate());
-                String sku = refund.getSku();
-                int qty = refund.getQuantity() != null ? Math.abs(refund.getQuantity()) : 0;
-                monthlyRefundMap.computeIfAbsent(ym, k -> new HashMap<>())
-                        .merge(sku, qty, Integer::sum);
-            }
-
-            // 收集所有涉及的月份并排序
-            Set<YearMonth> allMonths = new TreeSet<>();
-            allMonths.addAll(monthlyIncomeMap.keySet());
-            allMonths.addAll(monthlyRefundMap.keySet());
-
-            // 跨月顺延表：SKU → 待顺延负值
-            Map<String, Integer> carryOverMap = new HashMap<>();
-            // 抵扣后的净数量结果：YearMonth → (SKU → 净数量)，仅保留正值
-            Map<YearMonth, Map<String, Integer>> monthlyNetMap = new LinkedHashMap<>();
-
-            YearMonth previousMonth = null;
-            for (YearMonth month : allMonths) {
-                // 跨季度归零检查：季度 = (月份 - 1) / 3
-                if (previousMonth != null && getQuarter(month) != getQuarter(previousMonth)) {
-                    log.info("跨季度边界 {} → {}，清空顺延表（共 {} 个 SKU）",
-                            previousMonth, month, carryOverMap.size());
-                    carryOverMap.clear();
-                }
-
-                // 收集当月所有涉及的 SKU
-                Set<String> monthSkus = new HashSet<>();
-                if (monthlyIncomeMap.containsKey(month)) {
-                    monthSkus.addAll(monthlyIncomeMap.get(month).keySet());
-                }
-                if (monthlyRefundMap.containsKey(month)) {
-                    monthSkus.addAll(monthlyRefundMap.get(month).keySet());
-                }
-
-                Map<String, Integer> netMap = new HashMap<>();
-                for (String sku : monthSkus) {
-                    int incomeQty = monthlyIncomeMap.getOrDefault(month, Map.of())
-                            .getOrDefault(sku, 0);
-                    int refundQty = monthlyRefundMap.getOrDefault(month, Map.of())
-                            .getOrDefault(sku, 0);
-                    int netQty = incomeQty - refundQty;
-
-                    // 应用上月顺延（carryOver 是负值或零）
-                    int carryOver = carryOverMap.getOrDefault(sku, 0);
-                    netQty = netQty + carryOver;
-
-                    if (netQty <= 0) {
-                        // 净数量为零或负，记录顺延，不生成明细
-                        carryOverMap.put(sku, netQty);
-                        log.debug("SKU {} 在 {} 月净数量 {}，顺延到下月", sku, month, netQty);
-                    } else {
-                        // 净数量为正，清除顺延，记录净数量
-                        carryOverMap.remove(sku);
-                        netMap.put(sku, netQty);
-                    }
-                }
-
-                if (!netMap.isEmpty()) {
-                    monthlyNetMap.put(month, netMap);
-                }
-                previousMonth = month;
-            }
-
-            log.info("退款抵扣完成，共 {} 个月份有正净数量明细", monthlyNetMap.size());
-
-            // 4. 从 t_settlement_import_data 查询 MSKU 单价（按周期全量查询，不按货件MSKU过滤）
-            LambdaQueryWrapper<SettlementImportData> priceWrapper = new LambdaQueryWrapper<>();
-            priceWrapper.eq(SettlementImportData::getShopId, shopId)
-                    .eq(SettlementImportData::getDelFlag, 0)
-                    .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
-                    .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart());
-            List<SettlementImportData> priceList = settlementImportDataMapper.selectList(priceWrapper);
-
-            // 构建 MSKU → 单价映射（同一MSKU取第一条）
-            Map<String, SettlementImportData> mskuPriceMap = new LinkedHashMap<>();
-            for (SettlementImportData data : priceList) {
-                mskuPriceMap.putIfAbsent(data.getMsku(), data);
-            }
-            log.info("查询到结算导入数据 {} 条（用于单价）", priceList.size());
-
-            // 5. 构建 income 销售数据的站点和交易日期索引（用于明细字段映射）
-            // key: "SKU|YearMonth" → 该 SKU 在该月的第一条 income 记录（用于获取 siteCode、transactionDate 等）
-            Map<String, SalesData> skuMonthSalesIndex = new HashMap<>();
-            for (SalesData sales : salesList) {
-                if (sales.getTransactionDate() == null || sales.getSku() == null) {
-                    continue;
-                }
-                YearMonth ym = YearMonth.from(sales.getTransactionDate());
-                String key = sales.getSku() + "|" + ym;
-                skuMonthSalesIndex.putIfAbsent(key, sales);
-            }
-
-            // 6. 用抵扣后的净数量 + 推导单价构建 SettlementDataItem
-            List<SettlementInput.SettlementDataItem> items = new ArrayList<>();
-            for (Map.Entry<YearMonth, Map<String, Integer>> monthEntry : monthlyNetMap.entrySet()) {
-                YearMonth month = monthEntry.getKey();
-                for (Map.Entry<String, Integer> skuEntry : monthEntry.getValue().entrySet()) {
-                    String msku = skuEntry.getKey();
-                    int netQuantity = skuEntry.getValue();
-
-                    SettlementImportData priceData = mskuPriceMap.get(msku);
-                    if (priceData == null) {
-                        log.warn("MSKU {} 在结算导入数据中未找到单价，跳过", msku);
-                        continue;
-                    }
-
-                    // 从索引中获取该 SKU 在该月的 income 记录，用于字段映射
-                    String indexKey = msku + "|" + month;
-                    SalesData salesRef = skuMonthSalesIndex.get(indexKey);
-                    String siteCode = salesRef != null ? salesRef.getSiteCode() : null;
-                    LocalDate txDate = salesRef != null && salesRef.getTransactionDate() != null
-                            ? salesRef.getTransactionDate().toLocalDate() : month.atDay(1);
-
-                    items.add(SettlementInput.SettlementDataItem.builder()
-                            .siteCode(siteCode)
-                            .msku(msku)
-                            .currency(priceData.getCurrency())
-                            .unitPrice(priceData.getUnitPrice())
-                            .quantity(netQuantity)
-                            .transactionDate(txDate)
-                            .build());
-                }
-            }
-
-            log.info("构建 SettlementInput 完成，共 {} 条明细", items.size());
-            return SettlementInput.builder()
-                    .periodStart(request.getPeriodStart())
-                    .periodEnd(request.getPeriodEnd())
-                    .items(items)
-                    .build();
-        }
-
-        // 无货件ID时，回退到原有逻辑（按周期全量查询）
-        log.warn("未指定货件ID，回退到全量结算数据查询");
-        LambdaQueryWrapper<SettlementImportData> fallbackWrapper = new LambdaQueryWrapper<>();
-        fallbackWrapper.eq(SettlementImportData::getShopId, shopId)
+        LambdaQueryWrapper<SettlementImportData> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SettlementImportData::getShopId, shopId)
                 .eq(SettlementImportData::getDelFlag, 0)
                 .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
-                .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart());
-        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(fallbackWrapper);
+                .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart())
+                .in(SettlementImportData::getSiteCode, request.getSiteCodes());
+        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(wrapper);
 
         if (CollectionUtils.isEmpty(dataList)) {
             log.warn("未查询到结算导入数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
@@ -659,7 +438,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     .build();
         }
 
-        List<SettlementInput.SettlementDataItem> fallbackItems = dataList.stream()
+        List<SettlementInput.SettlementDataItem> items = dataList.stream()
                 .map(data -> SettlementInput.SettlementDataItem.builder()
                         .siteCode(data.getSiteCode())
                         .msku(data.getMsku())
@@ -669,10 +448,11 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                         .build())
                 .collect(Collectors.toList());
 
+        log.info("构建 SettlementInput 完成，共 {} 条明细", items.size());
         return SettlementInput.builder()
                 .periodStart(request.getPeriodStart())
                 .periodEnd(request.getPeriodEnd())
-                .items(fallbackItems)
+                .items(items)
                 .build();
     }
 
@@ -700,17 +480,5 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         return settlementResults.isEmpty() ? null : settlementResults.get(0).getSettlement().getId();
     }
 
-    /**
-     * 根据 YearMonth 计算所属季度编号
-     *
-     * <p>Q1: 1-3月, Q2: 4-6月, Q3: 7-9月, Q4: 10-12月</p>
-     *
-     * @param yearMonth 年月
-     * @return 季度编号（0=Q1, 1=Q2, 2=Q3, 3=Q4）
-     * @author wanhua
-     * 10:30 2026年01月29日
-     */
-    private int getQuarter(YearMonth yearMonth) {
-        return (yearMonth.getMonthValue() - 1) / 3;
-    }
+
 }

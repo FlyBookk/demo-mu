@@ -115,22 +115,22 @@
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="平台代扣税④"
-              :value="Math.abs(totalStats.consumptionTaxCny ?? 0)"
+              title="其他费用⑦"
+              :value="Math.abs(totalStats.otherFeesTotalCny ?? 0)"
               :precision="2"
-              :prefix="(totalStats.consumptionTaxCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.consumptionTaxCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
+              :prefix="(totalStats.otherFeesTotalCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.otherFeesTotalCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
             />
           </a-card>
         </a-col>
         <a-col :span="6">
           <a-card class="stat-card">
             <a-statistic
-              title="其他费用⑦"
-              :value="Math.abs(totalStats.otherFeesTotalCny ?? 0)"
+              title="平台代扣税④"
+              :value="Math.abs(totalStats.consumptionTaxCny ?? 0)"
               :precision="2"
-              :prefix="(totalStats.otherFeesTotalCny ?? 0) >= 0 ? '¥' : '-¥'"
-              :value-style="{ color: (totalStats.otherFeesTotalCny ?? 0) >= 0 ? '#52c41a' : '#ff4d4f' }"
+              :prefix="(totalStats.consumptionTaxCny ?? 0) >= 0 ? '¥' : '-¥'"
+              :value-style="{ color: (totalStats.consumptionTaxCny ?? 0) >= 0 ? '#52c41a' : '#722ed1' }"
             />
           </a-card>
         </a-col>
@@ -281,7 +281,7 @@ import type { Marketplace } from '@/types/marketplace'
 const filterForm = reactive({
   siteCode: undefined as string | undefined,
   selectedQuarter: '',
-  refundDateMode: 'ship' as string
+  refundDateMode: 'settlement' as string
 })
 
 const marketplaceOptions = ref<Marketplace[]>([])

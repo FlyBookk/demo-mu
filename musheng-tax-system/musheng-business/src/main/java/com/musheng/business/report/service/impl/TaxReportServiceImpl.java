@@ -714,8 +714,8 @@ public class TaxReportServiceImpl implements TaxReportService {
         BigDecimal miscConsumptionTaxCny = BigDecimal.ZERO;
 
         for (SalesData other : allOtherData) {
-            // 排除 Transfer 类型（资金划转，不属于费用）
-            if ("Transfer".equals(other.getTransactionType())) {
+            // 排除 transfer 类型（资金划转，不属于费用），使用转化后的 transactionCategory 字段
+            if ("transfer".equals(other.getTransactionCategory())) {
                 continue;
             }
 

@@ -607,6 +607,9 @@ public class ErpSettlementParser implements SalesDataParser {
             data.setTransactionCategory("income");
         } else if (sourceType.isRefund()) {
             data.setTransactionCategory("refund");
+        } else if (sourceType.isTransfer()) {
+            // 资金划转类型，不属于费用
+            data.setTransactionCategory("transfer");
         } else if (sourceType.isFee()) {
             data.setTransactionCategory("fee");
         } else if (sourceType.isAdjustment()) {

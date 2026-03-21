@@ -32,7 +32,7 @@ public class SettlementGenerateRequest {
     @Schema(description = "结算周期结束日")
     private LocalDate periodEnd;
 
-    @NotEmpty(message = "货件ID列表不能为空")
-    @Schema(description = "选中的FBA货件ID列表，用于限定结算单范围")
-    private List<Long> shipmentIds;
+    @NotEmpty(message = "站点列表不能为空")
+    @Schema(description = "选中的站点代码列表，如 [\"US\", \"UK\"]")
+    private List<String> siteCodes;
 }

@@ -71,17 +71,22 @@ public class DataCleanServiceImpl implements DataCleanService {
 
         for (Map.Entry<String, ModuleDef> entry : MODULE_DEFS.entrySet()) {
             ModuleDef def = entry.getValue();
-            // 统计主表数据量（取列表中最后一个表，即主表）
-            String mainTable = def.tables.get(def.tables.size() - 1);
-            Long count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM " + mainTable + " WHERE shop_id = ?",
-                    Long.class, shopId);
+            // 统计所有关联表的最大数据量
+            long maxCount = 0;
+            for (String table : def.tables) {
+                Long count = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM " + table + " WHERE shop_id = ?",
+                        Long.class, shopId);
+                if (count != null && count > maxCount) {
+                    maxCount = count;
+                }
+            }
 
             result.add(DataCleanModuleVO.builder()
                     .moduleCode(entry.getKey())
                     .moduleName(def.name)
                     .description(def.description)
-                    .dataCount(count != null ? count : 0L)
+                    .dataCount(maxCount)
                     .build());
         }
         return result;

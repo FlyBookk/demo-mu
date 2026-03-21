@@ -13,12 +13,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 方式二费用计算属性测试
- * 验证方式二排除规则的正确性：Transfer 类型排除 + 交易日期范围过滤
+ * 验证方式二排除规则的正确性：transaction_category = "transfer" 排除 + 交易日期范围过滤
  *
- * <p>属性 5：对于任意方式二数据集合，transactionType 为 "Transfer" 的记录和
+ * <p>属性 5：对于任意方式二数据集合，transactionCategory 为 "transfer" 的记录和
  * 交易日期不在 [startDate, endDate] 范围内的记录不参与任何费用计算。</p>
  *
- * <p><b>Validates: Requirements 5.4, 5.5</b></p>
+ * <p><b>Validates: Requirements 4.1, 4.2</b></p>
  *
  * @author wanhua
  * 10:30 2026年03月20日
@@ -36,7 +36,7 @@ class Method2FeePropertyTest {
 
     /**
      * 模拟源码中的方式二费用筛选逻辑
-     * 返回参与费用计算的记录列表（排除 Transfer 和超范围日期）
+     * 返回参与费用计算的记录列表（排除 transaction_category = "transfer" 和超范围日期）
      *
      * @param allOtherData 非 income/refund 类型的结算数据
      * @param startDate    季度开始日期
@@ -47,8 +47,8 @@ class Method2FeePropertyTest {
                                                   LocalDate startDate, LocalDate endDate) {
         List<SalesData> result = new ArrayList<>();
         for (SalesData other : allOtherData) {
-            // 排除 Transfer 类型
-            if ("Transfer".equals(other.getTransactionType())) {
+            // 排除 transfer 类型（通过 transaction_category 统一判断）
+            if ("transfer".equals(other.getTransactionCategory())) {
                 continue;
             }
             // 排除交易日期为 null 的记录
@@ -72,7 +72,8 @@ class Method2FeePropertyTest {
         BigDecimal miscConsumptionTax = BigDecimal.ZERO;
 
         for (SalesData other : allOtherData) {
-            if ("Transfer".equals(other.getTransactionType())) continue;
+            // 排除 transfer 类型（通过 transaction_category 统一判断）
+            if ("transfer".equals(other.getTransactionCategory())) continue;
             if (other.getTransactionDate() == null) continue;
             LocalDate transDate = other.getTransactionDate().toLocalDate();
             if (transDate.isBefore(startDate) || transDate.isAfter(endDate)) continue;
@@ -107,6 +108,14 @@ class Method2FeePropertyTest {
     Arbitrary<String> transactionTypes() {
         return Arbitraries.of("Transfer", "Service Fee", "Adjustment", "FBA Inventory Fee",
                 "Cost of Advertising", "Other");
+    }
+
+    /**
+     * 生成 transactionCategory 值（Transfer 类型对应 "transfer"，其他对应 "fee" 或 "other"）
+     */
+    @Provide
+    Arbitrary<String> transactionCategories() {
+        return Arbitraries.of("transfer", "fee", "other");
     }
 
     /**
@@ -159,24 +168,29 @@ class Method2FeePropertyTest {
     Arbitrary<SalesData> method2Record() {
         return Combinators.combine(
                 transactionTypes(),
+                transactionCategories(),
                 nullableTransactionDates(),
                 nullableAmounts(), // sellingFees
                 nullableAmounts(), // fbaFees
                 nullableAmounts(), // otherTransactionFees
                 nullableAmounts(), // other
-                nullableAmounts(), // marketplaceWithheldTax
-                exchangeRates()    // exchangeRate
-        ).as((txType, txDate, selling, fba, otherTrans, otherAmt, tax, rate) -> {
+                nullableAmounts()  // marketplaceWithheldTax
+        ).as((txType, category, txDate, selling, fba, otherTrans, otherAmt, tax) -> {
             SalesData data = new SalesData();
             data.setTransactionType(txType);
-            data.setTransactionCategory("fee");
+            // Transfer 类型对应 transactionCategory = "transfer"
+            if ("Transfer".equals(txType)) {
+                data.setTransactionCategory("transfer");
+            } else {
+                data.setTransactionCategory(category.equals("transfer") ? "fee" : category);
+            }
             data.setTransactionDate(txDate);
             data.setSellingFees(selling);
             data.setFbaFees(fba);
             data.setOtherTransactionFees(otherTrans);
             data.setOther(otherAmt);
             data.setMarketplaceWithheldTax(tax);
-            data.setExchangeRate(rate);
+            data.setExchangeRate(null);
             return data;
         });
     }
@@ -196,10 +210,10 @@ class Method2FeePropertyTest {
     private static final LocalDate END_DATE = LocalDate.of(2025, 9, 30);
 
     /**
-     * 属性 5.1：Transfer 类型记录不参与任何费用计算
-     * 对于任意方式二数据集合，筛选后的记录中不包含 Transfer 类型
+     * 属性 5.1：transaction_category 为 "transfer" 的记录不参与任何费用计算
+     * 对于任意方式二数据集合，筛选后的记录中不包含 transfer 类型
      *
-     * <p><b>Validates: Requirements 5.4</b></p>
+     * <p><b>Validates: Requirements 4.1</b></p>
      */
     @Property(tries = 200)
     void testMethod2Fee_TransferType_ShouldBeExcluded(
@@ -209,10 +223,10 @@ class Method2FeePropertyTest {
         // When - 执行方式二筛选
         List<SalesData> filtered = filterMethod2Records(allOtherData, START_DATE, END_DATE);
 
-        // Then - 筛选后不包含 Transfer 类型
+        // Then - 筛选后不包含 transactionCategory = "transfer" 的记录
         for (SalesData record : filtered) {
-            assertNotEquals("Transfer", record.getTransactionType(),
-                    "Transfer 类型记录不应参与方式二费用计算");
+            assertNotEquals("transfer", record.getTransactionCategory(),
+                    "transactionCategory 为 transfer 的记录不应参与方式二费用计算");
         }
     }
 
@@ -220,7 +234,7 @@ class Method2FeePropertyTest {
      * 属性 5.2：交易日期不在 [startDate, endDate] 范围内的记录不参与费用计算
      * 对于任意方式二数据集合，筛选后的记录交易日期都在季度范围内
      *
-     * <p><b>Validates: Requirements 5.5</b></p>
+     * <p><b>Validates: Requirements 4.2</b></p>
      */
     @Property(tries = 200)
     void testMethod2Fee_OutOfDateRange_ShouldBeExcluded(
@@ -242,10 +256,10 @@ class Method2FeePropertyTest {
     }
 
     /**
-     * 属性 5.3：非 Transfer 且日期在范围内的记录参与费用计算
+     * 属性 5.3：非 transfer 且日期在范围内的记录参与费用计算
      * 验证符合条件的记录不会被错误排除
      *
-     * <p><b>Validates: Requirements 5.4, 5.5</b></p>
+     * <p><b>Validates: Requirements 4.1, 4.2</b></p>
      */
     @Property(tries = 200)
     void testMethod2Fee_ValidRecord_ShouldBeIncluded(
@@ -255,9 +269,9 @@ class Method2FeePropertyTest {
         // When - 执行方式二筛选
         List<SalesData> filtered = filterMethod2Records(allOtherData, START_DATE, END_DATE);
 
-        // Then - 所有非 Transfer 且日期在范围内的记录都应在结果中
+        // Then - 所有非 transfer 且日期在范围内的记录都应在结果中
         List<SalesData> expectedIncluded = allOtherData.stream()
-                .filter(s -> !"Transfer".equals(s.getTransactionType()))
+                .filter(s -> !"transfer".equals(s.getTransactionCategory()))
                 .filter(s -> s.getTransactionDate() != null)
                 .filter(s -> {
                     LocalDate d = s.getTransactionDate().toLocalDate();
@@ -274,17 +288,17 @@ class Method2FeePropertyTest {
     // ========== 示例测试 ==========
 
     /**
-     * 示例测试：混合数据中正确排除 Transfer 和超范围日期
+     * 示例测试：混合数据中正确排除 transfer 类型和超范围日期
      *
-     * <p><b>Validates: Requirements 5.4, 5.5</b></p>
+     * <p><b>Validates: Requirements 4.1, 4.2</b></p>
      */
     @Example
     void testMethod2Fee_MixedData_ShouldExcludeTransferAndOutOfRange() {
         // Given - 构造混合数据
-        // 记录1：Transfer 类型，日期在范围内 → 应排除
+        // 记录1：Transfer 类型，transactionCategory = "transfer"，日期在范围内 → 应排除
         SalesData transfer = new SalesData();
         transfer.setTransactionType("Transfer");
-        transfer.setTransactionCategory("fee");
+        transfer.setTransactionCategory("transfer");
         transfer.setTransactionDate(LocalDateTime.of(2025, 8, 15, 10, 0));
         transfer.setSellingFees(new BigDecimal("-5.00"));
         transfer.setFbaFees(new BigDecimal("-3.00"));

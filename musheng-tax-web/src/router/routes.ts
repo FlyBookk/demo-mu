@@ -130,6 +130,15 @@ export const routes: RouteRecordRaw[] = [
               title: '数据清理',
               permission: 'config:dataClean'
             }
+          },
+          {
+            path: 'export-setting',
+            name: 'ExportSetting',
+            component: () => import('@/views/config/exportSetting/index.vue'),
+            meta: {
+              title: '导出设置',
+              permission: 'config:exportSetting'
+            }
           }
         ]
       },
@@ -261,7 +270,16 @@ export const routes: RouteRecordRaw[] = [
             name: 'DocumentGenerate',
             component: () => import('@/views/document/generate/index.vue'),
             meta: {
-              title: '单据生成',
+              title: 'PO/DN生成',
+              permission: 'document:generate'
+            }
+          },
+          {
+            path: 'settlement-generate',
+            name: 'SettlementGenerate',
+            component: () => import('@/views/document/settlement-generate/index.vue'),
+            meta: {
+              title: '结算单/INV生成',
               permission: 'document:generate'
             }
           },

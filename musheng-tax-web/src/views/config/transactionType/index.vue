@@ -224,27 +224,50 @@ import {
   createTransactionTypeMapping,
   updateTransactionTypeMapping,
   deleteTransactionTypeMapping,
-  batchDeleteTransactionTypeMapping
+  batchDeleteTransactionTypeMapping,
+  getTransactionCategories
 } from '@/api/transactionType'
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import type { TransactionTypeMapping, TransactionTypeMappingForm } from '@/types/transactionType'
 import type { Marketplace } from '@/types/marketplace'
 
-// ============= 标准分类选项 =============
-const standardCategoryOptions = [
-  { value: 'income', label: '收入', color: 'green' },
-  { value: 'refund', label: '退款', color: 'red' },
-  { value: 'fee', label: '费用', color: 'orange' },
-  { value: 'adjustment', label: '调整', color: 'blue' },
-  { value: 'other', label: '其他', color: 'default' }
-]
+// ============= 标准分类选项（从后端动态获取） =============
+interface CategoryOption {
+  value: string
+  label: string
+  color?: string
+}
+
+// 颜色映射（客户端维护）
+const CATEGORY_COLOR_MAP: Record<string, string> = {
+  income: 'green',
+  refund: 'red',
+  fee: 'orange',
+  adjustment: 'blue',
+  transfer: 'purple',
+  other: 'default'
+}
+
+const standardCategoryOptions = ref<CategoryOption[]>([])
+
+async function fetchCategories() {
+  try {
+    const res = await getTransactionCategories()
+    standardCategoryOptions.value = (res.data || []).map(item => ({
+      ...item,
+      color: CATEGORY_COLOR_MAP[item.value] || 'default'
+    }))
+  } catch (error) {
+    console.error('获取标准分类失败:', error)
+  }
+}
 
 function getStandardCategoryColor(category: string): string {
-  return standardCategoryOptions.find(c => c.value === category)?.color || 'default'
+  return CATEGORY_COLOR_MAP[category] || 'default'
 }
 
 function getStandardCategoryLabel(category: string): string {
-  return standardCategoryOptions.find(c => c.value === category)?.label || category
+  return standardCategoryOptions.value.find(c => c.value === category)?.label || category
 }
 
 // ============= 搜索相关 =============
@@ -527,6 +550,7 @@ function resetForm() {
 
 // 初始化
 onMounted(() => {
+  fetchCategories()
   fetchData()
   fetchMarketplaceOptions()
 })

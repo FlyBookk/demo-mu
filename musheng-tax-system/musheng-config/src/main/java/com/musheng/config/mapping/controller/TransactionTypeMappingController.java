@@ -2,6 +2,7 @@ package com.musheng.config.mapping.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.musheng.common.annotation.OperationLog;
+import com.musheng.common.enums.TransactionCategory;
 import com.musheng.common.result.PageResult;
 import com.musheng.common.result.Result;
 import com.musheng.config.mapping.dto.TransactionTypeMappingQueryRequest;
@@ -14,6 +15,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 交易类型映射控制器
@@ -57,6 +63,20 @@ public class TransactionTypeMappingController {
     public Result<TransactionTypeMapping> getById(@Parameter(description = "映射ID") @PathVariable Long id) {
         TransactionTypeMapping data = transactionTypeMappingService.getById(id);
         return Result.success(data);
+    }
+
+    @Operation(summary = "标准分类枚举", description = "获取所有标准分类枚举值")
+    @GetMapping("/categories")
+    public Result<List<Map<String, String>>> getCategories() {
+        List<Map<String, String>> categories = Arrays.stream(TransactionCategory.values())
+                .map(c -> {
+                    Map<String, String> item = new java.util.HashMap<>();
+                    item.put("value", c.getCode());
+                    item.put("label", c.getDescription());
+                    return item;
+                })
+                .collect(Collectors.toList());
+        return Result.success(categories);
     }
 
     @Operation(summary = "映射列表", description = "分页查询交易类型映射")

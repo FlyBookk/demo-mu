@@ -94,6 +94,11 @@ public enum ErpSourceType {
     REMOVAL_SHIPMENT_ADJUSTMENT("RemovalShipmentAdjustment", "REMOVAL_ADJUSTMENT", "移除调整", "移除相关税费调整"),
 
     /**
+     * 资金划转 - 亚马逊账户资金划转，不属于费用
+     */
+    TRANSFER("Transfer", "TRANSFER", "资金划转", "亚马逊账户资金划转，不属于费用"),
+
+    /**
      * 未知/其他来源
      */
     OTHER("Other", "OTHER", "其他", "未分类结算");
@@ -176,6 +181,13 @@ public enum ErpSourceType {
         return this == REFUND || this == CHARGEBACK;
     }
     
+    /**
+     * 判断是否为资金划转类型
+     */
+    public boolean isTransfer() {
+        return this == TRANSFER;
+    }
+
     /**
      * 判断是否为费用类型
      */

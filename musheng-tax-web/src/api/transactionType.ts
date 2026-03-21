@@ -52,6 +52,13 @@ export function batchDeleteTransactionTypeMapping(ids: number[]) {
 }
 
 /**
+ * 获取标准分类枚举列表（从后端动态获取）
+ */
+export function getTransactionCategories() {
+  return request.get<{ value: string; label: string }[]>(`${BASE_URL}/categories`)
+}
+
+/**
  * 获取所有目标交易类型（下拉选项用）
  */
 export function getTargetTransactionTypes() {

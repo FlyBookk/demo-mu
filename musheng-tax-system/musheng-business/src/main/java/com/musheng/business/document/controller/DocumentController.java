@@ -98,7 +98,7 @@ public class DocumentController {
     @PostMapping("/settlement/generate")
     public Result<List<DocumentSettlement>> generateSettlements(
             @Valid @RequestBody SettlementGenerateRequest request) {
-        log.info("生成结算单，周期: {} ~ {}，货件数: {}", request.getPeriodStart(), request.getPeriodEnd(), request.getShipmentIds().size());
+        log.info("生成结算单，周期: {} ~ {}，站点: {}", request.getPeriodStart(), request.getPeriodEnd(), request.getSiteCodes());
         List<DocumentSettlement> settlements = documentGenerateService.generateSettlements(request);
         return Result.success(settlements);
     }

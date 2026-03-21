@@ -141,7 +141,7 @@ export interface DnGenerateRequest {
 export interface SettlementGenerateRequest {
   periodStart: string
   periodEnd: string
-  shipmentIds: number[]
+  siteCodes: string[]
 }
 
 /** 结算数据导入明细项 */

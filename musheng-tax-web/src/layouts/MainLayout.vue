@@ -213,7 +213,8 @@ const menuItems = computed<ItemType[]>(() => {
         { key: 'TransactionType', label: '交易类型映射' },
         { key: 'FieldMapping', label: '字段映射模板' },
         { key: 'ImportRecord', label: '导入记录' },
-        { key: 'DataClean', label: '数据清理' }
+        { key: 'DataClean', label: '数据清理' },
+        { key: 'ExportSetting', label: '导出设置' }
       ]
     },
     {
@@ -259,7 +260,8 @@ const menuItems = computed<ItemType[]>(() => {
       children: [
         { key: 'SettlementDerivation', label: '结算推导' },
         { key: 'DocumentList', label: '单据列表' },
-        { key: 'DocumentGenerate', label: '单据生成' },
+        { key: 'DocumentGenerate', label: 'PO/DN生成' },
+        { key: 'SettlementGenerate', label: '结算单/INV生成' },
         { key: 'MskuList', label: 'MSKU列表' }
       ]
     },

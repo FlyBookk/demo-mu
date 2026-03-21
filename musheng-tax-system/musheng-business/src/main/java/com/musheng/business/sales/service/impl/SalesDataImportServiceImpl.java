@@ -218,17 +218,20 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
                     // Step 2: 批量检查重复（单次查询）
                     Set<String> existingKeys = batchCheckDuplicatesSimple(parsedRecords);
                     List<SalesData> toInsert = new ArrayList<>();
+                    // 同时维护文件内去重 Set，防止同一批次内重复行被重复插入
+                    Set<String> inBatchKeys = new HashSet<>();
                     int duplicateCount = 0;
 
                     for (SalesData data : parsedRecords) {
                         String uniqueKey = buildUnifiedUniqueKey(data);
-                        if (existingKeys.contains(uniqueKey)) {
+                        if (existingKeys.contains(uniqueKey) || inBatchKeys.contains(uniqueKey)) {
                             duplicateCount++;
                             if (errors.size() < 10) {
                                 errors.add(String.format("Duplicate: order=%s, site=%s, category=%s, sku=%s",
                                         data.getOrderId(), data.getSiteCode(), data.getTransactionCategory(), data.getSku()));
                             }
                         } else {
+                            inBatchKeys.add(uniqueKey);
                             toInsert.add(data);
                         }
                     }

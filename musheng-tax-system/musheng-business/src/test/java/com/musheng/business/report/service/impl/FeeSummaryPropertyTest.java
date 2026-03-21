@@ -67,7 +67,8 @@ class FeeSummaryPropertyTest {
     }
 
     /**
-     * 模拟方式二（其他类型，排除 Transfer）费用累加
+     * 模拟方式二（其他类型，排除 transfer 分类）费用累加
+     * 通过 transactionCategory 统一判断，替代原有的 transactionType 硬编码
      * 返回 [佣金3项合计, 其他费合计, 税合计]
      */
     private BigDecimal[] calculateMethod2Fees(List<SalesData> otherDataList,
@@ -77,7 +78,8 @@ class FeeSummaryPropertyTest {
         BigDecimal tax = BigDecimal.ZERO;
 
         for (SalesData data : otherDataList) {
-            if ("Transfer".equals(data.getTransactionType())) continue;
+            // 排除 transfer 类型（通过 transactionCategory 统一判断）
+            if ("transfer".equals(data.getTransactionCategory())) continue;
             if (data.getTransactionDate() == null) continue;
             LocalDate transDate = data.getTransactionDate().toLocalDate();
             if (transDate.isBefore(startDate) || transDate.isAfter(endDate)) continue;
@@ -197,6 +199,7 @@ class FeeSummaryPropertyTest {
 
     /**
      * 生成单条方式二 SalesData 记录
+     * Transfer 类型对应 transactionCategory = "transfer"，其他类型对应 "fee" 或 "other"
      */
     @Provide
     Arbitrary<SalesData> method2Record() {
@@ -211,7 +214,12 @@ class FeeSummaryPropertyTest {
         ).as((txType, txDate, selling, fba, otherTrans, otherAmt, tax) -> {
             SalesData data = new SalesData();
             data.setTransactionType(txType);
-            data.setTransactionCategory("fee");
+            // Transfer 类型对应 transactionCategory = "transfer"，其他类型对应 "fee"
+            if ("Transfer".equals(txType)) {
+                data.setTransactionCategory("transfer");
+            } else {
+                data.setTransactionCategory("fee");
+            }
             data.setTransactionDate(txDate);
             data.setSellingFees(selling);
             data.setFbaFees(fba);
@@ -268,9 +276,9 @@ class FeeSummaryPropertyTest {
                     .add(nullToZero(data.getOtherTransactionFees()));
         }
 
-        // 方式二记录
+        // 方式二记录（排除 transfer 分类）
         for (SalesData data : method2Data) {
-            if ("Transfer".equals(data.getTransactionType())) continue;
+            if ("transfer".equals(data.getTransactionCategory())) continue;
             if (data.getTransactionDate() == null) continue;
             LocalDate transDate = data.getTransactionDate().toLocalDate();
             if (transDate.isBefore(START_DATE) || transDate.isAfter(END_DATE)) continue;
@@ -315,9 +323,9 @@ class FeeSummaryPropertyTest {
             expectedOther = expectedOther.add(nullToZero(data.getOther()));
         }
 
-        // 方式二记录
+        // 方式二记录（排除 transfer 分类）
         for (SalesData data : method2Data) {
-            if ("Transfer".equals(data.getTransactionType())) continue;
+            if ("transfer".equals(data.getTransactionCategory())) continue;
             if (data.getTransactionDate() == null) continue;
             LocalDate transDate = data.getTransactionDate().toLocalDate();
             if (transDate.isBefore(START_DATE) || transDate.isAfter(END_DATE)) continue;
@@ -364,7 +372,8 @@ class FeeSummaryPropertyTest {
         }
 
         for (SalesData data : method2Data) {
-            if ("Transfer".equals(data.getTransactionType())) continue;
+            // 排除 transfer 分类
+            if ("transfer".equals(data.getTransactionCategory())) continue;
             if (data.getTransactionDate() == null) continue;
             LocalDate transDate = data.getTransactionDate().toLocalDate();
             if (transDate.isBefore(START_DATE) || transDate.isAfter(END_DATE)) continue;
@@ -386,7 +395,7 @@ class FeeSummaryPropertyTest {
     /**
      * 属性 4：税合计 = 方式一(marketplaceWithheldTax) + 方式二(marketplaceWithheldTax)
      * 对于任意结算数据集合，consumptionTax 恰好等于方式一（income + refund 类型）的
-     * marketplaceWithheldTax 累计值加上方式二（其他类型，排除 Transfer）的 marketplaceWithheldTax 累计值
+     * marketplaceWithheldTax 累计值加上方式二（其他类型，排除 transfer 分类）的 marketplaceWithheldTax 累计值
      *
      * <p><b>Validates: Requirements 6.1, 6.2, 7.3</b></p>
      */
@@ -415,9 +424,9 @@ class FeeSummaryPropertyTest {
             expectedTax = expectedTax.add(nullToZero(data.getMarketplaceWithheldTax()));
         }
 
-        // 方式二：其他类型（排除 Transfer）的 marketplaceWithheldTax
+        // 方式二：其他类型（排除 transfer 分类）的 marketplaceWithheldTax
         for (SalesData data : method2Data) {
-            if ("Transfer".equals(data.getTransactionType())) continue;
+            if ("transfer".equals(data.getTransactionCategory())) continue;
             if (data.getTransactionDate() == null) continue;
             LocalDate transDate = data.getTransactionDate().toLocalDate();
             if (transDate.isBefore(START_DATE) || transDate.isAfter(END_DATE)) continue;
@@ -591,10 +600,10 @@ class FeeSummaryPropertyTest {
         serviceFee.setOther(new BigDecimal("-0.50"));
         serviceFee.setMarketplaceWithheldTax(new BigDecimal("-0.60"));
 
-        // 方式二 Transfer 记录（应排除）
+        // 方式二 Transfer 记录（应排除，transactionCategory = "transfer"）
         SalesData transfer = new SalesData();
         transfer.setTransactionType("Transfer");
-        transfer.setTransactionCategory("fee");
+        transfer.setTransactionCategory("transfer");
         transfer.setTransactionDate(LocalDateTime.of(2025, 8, 20, 10, 0));
         transfer.setSellingFees(new BigDecimal("-100.00"));
         transfer.setOther(new BigDecimal("-50.00"));
