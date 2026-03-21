@@ -100,6 +100,12 @@ export function exportInv(id: number) {
   return request.downloadAndSave(`${BASE_URL}/export/inv/${id}`, filename)
 }
 
+/** 批量导出结算单为ZIP */
+export function batchExportSettlementZip(settlementIds: number[]) {
+  const filename = `结算单_${settlementIds.length}份.zip`
+  return request.downloadAndSavePost(`${BASE_URL}/export/settlement/batch`, filename, settlementIds)
+}
+
 /** 批量导出INV为ZIP */
 export function batchExportInvZip(invIds: number[]) {
   const filename = `INV发票_${invIds.length}份.zip`

@@ -55,7 +55,7 @@
         <a-result
           status="success"
           :title="`结算单生成成功，共 ${settlementResult.filter(s => s.totalQuantity > 0).length} 份有数据`"
-          sub-title="Excel文件已自动下载（仅下载有数据的站点）"
+          sub-title="已打包为ZIP文件下载（仅包含有数据的站点）"
         >
           <template #extra>
             <a-space wrap>
@@ -92,7 +92,7 @@
         </div>
 
         <div v-if="invResult.length > 0" style="margin-top: 16px">
-          <a-result status="success" :title="`INV生成成功，共 ${invResult.length} 份`" sub-title="Excel文件已自动下载">
+          <a-result status="success" :title="`INV生成成功，共 ${invResult.length} 份`" sub-title="已打包为ZIP文件下载">
             <template #extra>
               <a-space wrap>
                 <a-button
@@ -120,7 +120,9 @@ import {
   generateSettlements,
   generateInvoices,
   exportSettlement,
-  exportInv
+  exportInv,
+  batchExportSettlementZip,
+  batchExportInvZip
 } from '@/api/document'
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import type { Marketplace } from '@/types/marketplace'
@@ -191,12 +193,12 @@ async function handleGenerateSettlements() {
       siteCodes: selectedSiteCodes.value
     })
     settlementResult.value = res.data || []
-    for (const s of settlementResult.value) {
-      if (s.totalQuantity > 0 && s.id) {
-        await exportSettlement(s.id)
-      }
+    // 过滤有数据的结算单，打包为ZIP下载
+    const validIds = settlementResult.value.filter(s => s.totalQuantity > 0).map(s => s.id)
+    if (validIds.length > 0) {
+      await batchExportSettlementZip(validIds)
     }
-    message.success('结算单生成成功')
+    message.success('结算单生成成功，已打包下载')
   } catch (error: any) {
     message.error(error?.message || '结算单生成失败')
   } finally {
@@ -222,10 +224,12 @@ async function handleGenerateInvoices() {
   try {
     const res = await generateInvoices(ids)
     invResult.value = res.data || []
-    for (const inv of invResult.value) {
-      if (inv.id) await exportInv(inv.id)
+    // 打包为ZIP下载
+    const invIds = invResult.value.map(inv => inv.id).filter(Boolean)
+    if (invIds.length > 0) {
+      await batchExportInvZip(invIds)
     }
-    message.success('INV生成成功')
+    message.success('INV生成成功，已打包下载')
   } catch (error: any) {
     message.error(error?.message || 'INV生成失败')
   } finally {

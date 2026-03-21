@@ -1214,6 +1214,51 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     // ==================== 文件名生成 ====================
 
     /**
+     * 批量导出结算单为ZIP文件
+     *
+     * @param settlementIds 结算单主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
+    @Override
+    public void batchExportSettlement(List<Long> settlementIds, HttpServletResponse response) {
+        log.info("批量导出结算单, 数量={}", settlementIds.size());
+        if (CollectionUtils.isEmpty(settlementIds)) {
+            throw new RuntimeException("结算单ID列表不能为空");
+        }
+
+        List<DocumentSettlement> settlementList = documentSettlementMapper.selectBatchIds(settlementIds);
+        if (CollectionUtils.isEmpty(settlementList)) {
+            throw new RuntimeException("未找到对应的结算单数据");
+        }
+
+        String zipFileName = "结算单_" + settlementList.size() + "份.zip";
+        try {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment;filename=" +
+                    URLEncoder.encode(zipFileName, StandardCharsets.UTF_8));
+
+            try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
+                for (DocumentSettlement s : settlementList) {
+                    List<DocumentSettlementItem> items = documentSettlementItemMapper.selectList(
+                            new LambdaQueryWrapper<DocumentSettlementItem>()
+                                    .eq(DocumentSettlementItem::getSettlementId, s.getId())
+                                    .orderByAsc(DocumentSettlementItem::getMsku));
+                    String fileName = generateSettlementFileName(s.getDocumentNo(), s.getBuyerName(), s.getSellerName());
+                    zos.putNextEntry(new ZipEntry(fileName));
+                    writeSettlementExcel(zos, s, items);
+                    zos.closeEntry();
+                }
+            }
+        } catch (IOException e) {
+            log.error("批量导出结算单失败, 数量={}", settlementIds.size(), e);
+            throw new RuntimeException("批量导出结算单失败", e);
+        }
+    }
+
+
+    /**
      * 批量导出INV为ZIP文件
      *
      * @param invIds INV主键ID列表
@@ -1258,7 +1303,7 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     }
 
 
-    // ==================== 文件名生成（原始位置） ====================
+    // ==================== 文件名生成 ====================
 
     /**
      * 生成PO导出文件名

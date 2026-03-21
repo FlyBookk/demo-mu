@@ -93,8 +93,27 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     private final MarketplaceService marketplaceService;
     private final ShippingDataMapper shippingDataMapper;
     
-    /** 亚马逊标准订单号正则，不符合的为非标订单，幂等键需包含 transactionType */
+    /** 亚马逊标准订单号正则：XXX-XXXXXXX-XXXXXXX，如 205-0344885-9757952 */
     private static final Pattern ORDER_ID_PATTERN_LOOSE = Pattern.compile("[A-Z0-9]{3}-\\d{7}-\\d{7}");
+    
+    /**
+     * UUID 格式订单号正则（Service Fee 类型）
+     * 同一 UUID 代表同一服务协议，每天产生一条费用，需要加日期区分
+     */
+    private static final Pattern UUID_ORDER_PATTERN = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    
+    /**
+     * 纯数字订单号正则（Liquidations/FBA Inventory Fee 类型）
+     * 同一数字 id 代表同一清算批次，批次内有多个 SKU，不同批次可能复用同一 id
+     */
+    private static final Pattern NUMERIC_ORDER_PATTERN = Pattern.compile("\\d+");
+    
+    /**
+     * 其他非标格式（如 FBA Inventory Fee 的 250522D37A 格式）
+     * 同一 id 下 SKU 为空，需要加日期区分
+     */
+    private static final Pattern OTHER_NON_STANDARD_PATTERN = Pattern.compile("[A-Z0-9]{6,}");
     
     // 文件缓存（临时存储上传的文件信息）
     private final Map<String, UploadedFileCache> uploadedFileCache = new ConcurrentHashMap<>();
@@ -1085,39 +1104,78 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     }
 
     /**
-     * 构建统一唯一键：标识+站点+交易分类(transaction_category)+SKU
-     * 有标准订单号：order_id|siteCode|transactionCategory|sku
-     * 非标订单号（不合并，单条存储）：order_id|siteCode|transactionType|sku 幂等
-     * 无订单号（同一结算编号下）：erp_settlement_id|transactionType|transactionDate|total 幂等控制，防重复导入
+     * 构建统一唯一键，根据亚马逊 CustomTransaction 报告中各类 order id 的业务特征分类处理：
+     *
+     * <pre>
+     * 1. 标准订单号（XXX-XXXXXXX-XXXXXXX，如 205-0344885-9757952）
+     *    同一订单可有多条不同 transactionCategory（Order/Refund/Fee 等），
+     *    以 order_id|siteCode|transactionCategory|sku 区分，允许同订单多条。
+     *
+     * 2. UUID 格式（Service Fee）
+     *    同一 UUID 代表同一服务协议，每天产生一条费用，SKU 为空，
+     *    必须加 transactionDate（精确到天）才能区分不同日期的费用。
+     *    键：order_id|siteCode|transactionType|date
+     *
+     * 3. 纯数字格式（Liquidations / Liquidations Adjustments）
+     *    同一数字 id 是一个清算批次，批次内有多个 SKU（同时间戳），
+     *    不同批次可能复用同一 id（不同日期），
+     *    以 order_id|siteCode|transactionType|sku|date 区分。
+     *
+     * 4. 其他非标格式（FBA Inventory Fee，如 250522D37A）
+     *    SKU 通常为空，同一 id 可在不同日期出现，
+     *    以 order_id|siteCode|transactionType|sku|date 区分。
+     *
+     * 5. 无订单号（ERP 数据）
+     *    以 erp_settlement_id|transactionType|transactionDate|total 幂等控制。
+     * </pre>
+     *
+     * @param data 销售数据实体
+     * @return 唯一键字符串
+     * @author wanhua
+     * 10:30 2026年03月21日
      */
     private String buildUnifiedUniqueKey(SalesData data) {
         boolean useErpId = data.getErpSettlementId() != null && !data.getErpSettlementId().isEmpty();
         boolean hasOrderId = data.getOrderId() != null && !data.getOrderId().isEmpty();
-        String identifier = useErpId && !hasOrderId
-                ? data.getErpSettlementId()
-                : (data.getOrderId() != null ? data.getOrderId() : "");
+
+        // 无订单号（ERP 数据）：用结算编号+类型+日期+金额
         if (useErpId && !hasOrderId) {
-            // 订单号为空：同一结算编号下，交易类型+结算时间+金额 幂等
             return String.format("%s|%s|%s|%s",
-                    identifier,
+                    data.getErpSettlementId(),
                     data.getTransactionType() != null ? data.getTransactionType() : "",
                     data.getTransactionDate() != null ? data.getTransactionDate().toString() : "",
                     data.getTotal() != null ? data.getTotal().toPlainString() : "");
         }
-        // 非标订单：不合并，每条记录独立，幂等键需包含 transactionType
-        boolean isNonStandardOrder = hasOrderId && !ORDER_ID_PATTERN_LOOSE.matcher(data.getOrderId()).matches();
-        if (isNonStandardOrder) {
-            return String.format("%s|%s|%s|%s",
-                    identifier,
-                    data.getSiteCode() != null ? data.getSiteCode() : "",
-                    data.getTransactionType() != null ? data.getTransactionType() : "",
-                    data.getSku() != null ? data.getSku() : "");
+
+        String orderId    = data.getOrderId() != null ? data.getOrderId() : "";
+        String siteCode   = data.getSiteCode() != null ? data.getSiteCode() : "";
+        String txType     = data.getTransactionType() != null ? data.getTransactionType() : "";
+        String txCategory = data.getTransactionCategory() != null ? data.getTransactionCategory() : "";
+        String sku        = data.getSku() != null ? data.getSku() : "";
+        // 日期精确到天，同一天内同类费用视为同一条（防止重复导入）
+        String date = data.getTransactionDate() != null
+                ? data.getTransactionDate().toLocalDate().toString() : "";
+
+        String total = data.getTotal() != null ? data.getTotal().toPlainString() : "";
+        // 完整时间戳（精确到秒），用于区分同一天内不同时刻的同类费用
+        String datetime = data.getTransactionDate() != null
+                ? data.getTransactionDate().toString() : "";
+
+        // 标准订单号：XXX-XXXXXXX-XXXXXXX
+        // 同一订单+SKU 下可能有多行不同金额（product_sales/selling_fees 等费用分项），加 total 区分；
+        // 同一订单+SKU+total 相同但时间不同（如 FBA Customer Return Fee 跨天），加完整时间戳区分。
+        if (ORDER_ID_PATTERN_LOOSE.matcher(orderId).matches()) {
+            return String.format("%s|%s|%s|%s|%s|%s", orderId, siteCode, txCategory, sku, total, datetime);
         }
-        return String.format("%s|%s|%s|%s",
-                identifier,
-                data.getSiteCode() != null ? data.getSiteCode() : "",
-                data.getTransactionCategory() != null ? data.getTransactionCategory() : "",
-                data.getSku() != null ? data.getSku() : "");
+
+        // UUID 格式（Service Fee）：同一协议每天一条，SKU 为空，加日期+金额区分
+        if (UUID_ORDER_PATTERN.matcher(orderId).matches()) {
+            return String.format("%s|%s|%s|%s|%s", orderId, siteCode, txType, date, total);
+        }
+
+        // 纯数字格式（Liquidations）及其他非标格式（FBA Inventory Fee 等）：加 SKU+日期+金额
+        // 完全相同的行（同时间戳+同金额）视为 CSV 文件内真实重复，正常去重
+        return String.format("%s|%s|%s|%s|%s|%s", orderId, siteCode, txType, sku, date, total);
     }
 
     /**

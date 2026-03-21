@@ -397,6 +397,23 @@ public class DocumentController {
     }
 
     /**
+     * 批量导出结算单为ZIP
+     *
+     * @param settlementIds 结算单主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
+    @Operation(summary = "批量导出结算单为ZIP", description = "将多份结算单打包为ZIP文件下载")
+    @PostMapping("/export/settlement/batch")
+    public void batchExportSettlement(
+            @RequestBody List<Long> settlementIds,
+            HttpServletResponse response) {
+        log.info("批量导出结算单，数量: {}", settlementIds.size());
+        documentExportService.batchExportSettlement(settlementIds, response);
+    }
+
+    /**
      * 批量导出INV为ZIP
      *
      * @param invIds INV主键ID列表

@@ -69,6 +69,16 @@ public interface DocumentExportService {
     void batchExportByPeriod(LocalDate periodStart, LocalDate periodEnd, HttpServletResponse response);
 
     /**
+     * 批量导出结算单为ZIP
+     *
+     * @param settlementIds 结算单主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
+    void batchExportSettlement(List<Long> settlementIds, HttpServletResponse response);
+
+    /**
      * 批量导出INV为ZIP
      *
      * @param invIds INV主键ID列表
