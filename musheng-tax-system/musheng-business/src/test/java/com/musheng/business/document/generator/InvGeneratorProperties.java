@@ -1,6 +1,6 @@
 package com.musheng.business.document.generator;
 
-import com.musheng.business.common.config.DocumentPartyProperties;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentInv;
 import com.musheng.business.document.entity.DocumentInvItem;
 import com.musheng.business.document.entity.DocumentSettlement;
@@ -341,8 +341,8 @@ class InvGeneratorProperties {
         }
     }
 
-    private DocumentPartyProperties createTestParty() {
-        DocumentPartyProperties party = new DocumentPartyProperties();
+    private DocumentPartyConfig createTestParty() {
+        DocumentPartyConfig party = new DocumentPartyConfig();
         party.setSellerName("Hong Kong Andeo Group Limited");
         party.setSellerAddress("Hong Kong");
         party.setSellerPhone("00852-54682464");

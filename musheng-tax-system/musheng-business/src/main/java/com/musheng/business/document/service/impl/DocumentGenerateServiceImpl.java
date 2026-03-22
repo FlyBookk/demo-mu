@@ -1,7 +1,8 @@
 package com.musheng.business.document.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.musheng.business.common.config.DocumentPartyProperties;
+import com.musheng.business.document.entity.DocumentPartyConfig;
+import com.musheng.business.document.service.DocumentPartyConfigService;
 import com.musheng.business.document.dto.DnGenerateRequest;
 import com.musheng.business.document.dto.PoGenerateRequest;
 import com.musheng.business.document.dto.SettlementGenerateRequest;
@@ -76,7 +77,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
 
     @Autowired
-    private DocumentPartyProperties documentPartyProperties;
+    private DocumentPartyConfigService documentPartyConfigService;
 
     /**
      * 根据选定的FBA货件生成PO采购订单
@@ -97,8 +98,12 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建货件输入数据（后续可对接 FbaShipmentService 查询真实数据）
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
+        // 从第一个货件获取站点代码，查询交易方配置
+        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+
         // 调用生成器
-        List<PoGenerateResult> results = PoGenerator.generate(shipmentInputs, 1);
+        List<PoGenerateResult> results = PoGenerator.generate(shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("PO生成结果为空，无数据可持久化");
             return null;
@@ -111,6 +116,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         PoGenerateResult result = results.get(0);
         DocumentPo po = result.getPo();
         po.setShopId(shopId);
+        po.setSiteCode(siteCode);
 
         // 持久化PO主表（幂等：重复单据号时返回已有记录）
         try {
@@ -153,6 +159,10 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建货件输入数据
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
+        // 从货件获取站点代码，查询交易方配置
+        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+
         // 校验锚点日期不能早于所有货件的最晚PO日期
         // PO日期 = 货件创建时间所在周的下一个周二（或当天若为周二），非工作日顺延
         if (!CollectionUtils.isEmpty(shipmentInputs)) {
@@ -168,7 +178,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 调用生成器
         List<DnGenerateResult> results = DnGenerator.generate(
-                request.getAnchorDate(), shipmentInputs, 1);
+                request.getAnchorDate(), shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("DN生成结果为空，无数据可持久化");
             return null;
@@ -181,6 +191,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
         dn.setShopId(shopId);
+        dn.setSiteCode(siteCode);
 
         // 持久化DN主表（幂等：重复单据号时返回已有记录）
         try {
@@ -222,8 +233,14 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建结算数据输入（后续可对接 SettlementImportDataMapper 查询真实数据）
         SettlementInput input = buildSettlementInput(request);
 
+        // 从请求的站点列表取第一个站点查询交易方配置（结算单按站点拆分，配置在生成器内部按站点使用）
+        // 注意：SettlementGenerator 内部会为每个站点生成一份结算单，party 用于填充买卖方信息
+        String siteCode = CollectionUtils.isEmpty(request.getSiteCodes())
+                ? "US" : request.getSiteCodes().get(0);
+        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+
         // 调用生成器
-        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1);
+        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1, party);
         if (CollectionUtils.isEmpty(allResults)) {
             log.info("结算单生成结果为空，无数据可持久化");
             return List.of();
@@ -319,7 +336,15 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         }
 
         // 调用INV生成器
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, documentPartyProperties);
+        // 从第一份结算单获取货币代码，转换为站点代码后查询交易方配置
+        // 注意：DocumentSettlement.siteCode 存储的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
+        String currencyCode = settlementResults.isEmpty() ? "USD"
+                : settlementResults.get(0).getSettlement().getSiteCode();
+        com.musheng.business.document.enums.SiteCode siteEnum =
+                com.musheng.business.document.enums.SiteCode.fromCurrency(currencyCode);
+        String siteCode = siteEnum != null ? siteEnum.name() : currencyCode;
+        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, party);
 
         // 持久化所有INV
         Long shopId = ShopContext.requireShopId();
@@ -353,6 +378,28 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         log.info("INV生成完成，共 {} 份", invoices.size());
 
         return invoices;
+    }
+
+    /**
+     * 从货件ID列表解析站点代码
+     *
+     * <p>查询第一个货件的 siteCode 字段，用于获取交易方配置。
+     * 若货件无 siteCode 则默认返回 "US"。</p>
+     *
+     * @param shipmentIds 货件ID列表
+     * @return 站点代码
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
+    private String resolveSiteCodeFromShipments(List<Long> shipmentIds) {
+        if (CollectionUtils.isEmpty(shipmentIds)) {
+            return "US";
+        }
+        FbaShipment shipment = fbaShipmentMapper.selectById(shipmentIds.get(0));
+        if (shipment == null || !org.springframework.util.StringUtils.hasText(shipment.getSiteCode())) {
+            return "US";
+        }
+        return shipment.getSiteCode();
     }
 
     /**

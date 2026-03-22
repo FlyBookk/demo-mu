@@ -262,7 +262,8 @@ const menuItems = computed<ItemType[]>(() => {
         { key: 'DocumentList', label: '单据列表' },
         { key: 'DocumentGenerate', label: 'PO/DN生成' },
         { key: 'SettlementGenerate', label: '结算单/INV生成' },
-        { key: 'MskuList', label: 'MSKU列表' }
+        { key: 'MskuList', label: 'MSKU列表' },
+        { key: 'DocumentPartyConfig', label: '交易方配置' }
       ]
     },
     {

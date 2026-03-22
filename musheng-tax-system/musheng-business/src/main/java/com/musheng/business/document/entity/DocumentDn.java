@@ -26,6 +26,9 @@ public class DocumentDn extends BaseEntity {
     @Schema(description = "单据编号")
     private String documentNo;
 
+    @Schema(description = "站点代码（US/CA/UK/EU）")
+    private String siteCode;
+
     @Schema(description = "送货日期")
     private LocalDate dnDate;
 

@@ -1,7 +1,7 @@
 package com.musheng.business.document.generator;
 
-import com.musheng.business.common.config.DocumentPartyProperties;
 import com.musheng.business.document.entity.DocumentInv;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentInvItem;
 import com.musheng.business.document.entity.DocumentSettlement;
 import com.musheng.business.document.entity.DocumentSettlementItem;
@@ -43,17 +43,20 @@ public final class InvGenerator {
      *
      * @param settlementResults 结算单生成结果列表，不能为 null
      * @param startSequence 起始编号序号
-     * @param party 交易方信息配置（卖方/买方/银行）
+     * @param party 交易方配置（卖方/买方/银行），不能为 null
      * @return INV生成结果列表
-     * @throws IllegalArgumentException 如果 settlementResults 为 null
+     * @throws IllegalArgumentException 如果 settlementResults 或 party 为 null
      * @author wanhua
      * 10:30 2026年01月29日
      */
     public static List<InvGenerateResult> generate(List<SettlementGenerateResult> settlementResults,
                                                     int startSequence,
-                                                    DocumentPartyProperties party) {
+                                                    DocumentPartyConfig party) {
         if (settlementResults == null) {
             throw new IllegalArgumentException("结算单结果列表不能为 null");
+        }
+        if (party == null) {
+            throw new IllegalArgumentException("交易方配置不能为 null");
         }
         if (settlementResults.isEmpty()) {
             return List.of();
@@ -76,14 +79,14 @@ public final class InvGenerator {
      *
      * @param settlementResult 结算单生成结果
      * @param sequence 编号序号
-     * @param party 交易方信息配置
+     * @param party 交易方配置
      * @return INV生成结果
      * @author wanhua
      * 10:30 2026年01月29日
      */
     private static InvGenerateResult buildInv(SettlementGenerateResult settlementResult,
                                                int sequence,
-                                               DocumentPartyProperties party) {
+                                               DocumentPartyConfig party) {
         DocumentSettlement settlement = settlementResult.getSettlement();
 
         // 计算INV日期：结算日之后第3个工作日（符合协议约定的"确认后3个工作日内"）

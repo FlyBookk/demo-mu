@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.musheng.business.document.entity.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentExportService;
+import com.musheng.business.document.service.DocumentPartyConfigService;
 import com.musheng.common.service.SysConfigService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,8 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     private DocumentInvItemMapper documentInvItemMapper;
     @Autowired
     private SysConfigService sysConfigService;
+    @Autowired
+    private DocumentPartyConfigService documentPartyConfigService;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy/M/d");
 
@@ -89,6 +92,17 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentPo po = documentPoMapper.selectById(poId);
         if (po == null) {
             throw new RuntimeException("PO不存在, poId=" + poId);
+        }
+        // 实时用最新配置覆盖交易方字段
+        if (org.springframework.util.StringUtils.hasText(po.getSiteCode())) {
+            try {
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(po.getSiteCode());
+                po.setBuyerName(party.getBuyerName());
+                po.setBuyerAddress(party.getBuyerAddress());
+                po.setSellerName(party.getSellerName());
+            } catch (Exception e) {
+                log.warn("PO导出：获取交易方配置失败，使用单据原始值，siteCode={}", po.getSiteCode());
+            }
         }
         List<DocumentPoItem> items = documentPoItemMapper.selectList(
                 new LambdaQueryWrapper<DocumentPoItem>()
@@ -301,6 +315,16 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentDn dn = documentDnMapper.selectById(dnId);
         if (dn == null) {
             throw new RuntimeException("DN不存在, dnId=" + dnId);
+        }
+        // 实时用最新配置覆盖交易方字段
+        if (org.springframework.util.StringUtils.hasText(dn.getSiteCode())) {
+            try {
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(dn.getSiteCode());
+                dn.setSupplierName(party.getSupplierName());
+                dn.setCustomerName(party.getCustomerNameTc());
+            } catch (Exception e) {
+                log.warn("DN导出：获取交易方配置失败，使用单据原始值，siteCode={}", dn.getSiteCode());
+            }
         }
         List<DocumentDnItem> items = documentDnItemMapper.selectList(
                 new LambdaQueryWrapper<DocumentDnItem>()
@@ -552,6 +576,21 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentSettlement settlement = documentSettlementMapper.selectById(settlementId);
         if (settlement == null) {
             throw new RuntimeException("结算单不存在, settlementId=" + settlementId);
+        }
+        // 实时用最新配置覆盖交易方字段
+        // 注意：结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
+        if (org.springframework.util.StringUtils.hasText(settlement.getSiteCode())) {
+            try {
+                com.musheng.business.document.enums.SiteCode siteEnum =
+                        com.musheng.business.document.enums.SiteCode.fromCurrency(settlement.getSiteCode());
+                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : settlement.getSiteCode();
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
+                settlement.setBuyerName(party.getBuyerName());
+                settlement.setBuyerAddress(party.getBuyerAddress());
+                settlement.setSellerName(party.getSellerName());
+            } catch (Exception e) {
+                log.warn("结算单导出：获取交易方配置失败，使用单据原始值，siteCode={}", settlement.getSiteCode());
+            }
         }
         List<DocumentSettlementItem> items = documentSettlementItemMapper.selectList(
                 new LambdaQueryWrapper<DocumentSettlementItem>()
@@ -838,6 +877,29 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentInv inv = documentInvMapper.selectById(invId);
         if (inv == null) {
             throw new RuntimeException("INV不存在, invId=" + invId);
+        }
+        // 实时用最新配置覆盖交易方及银行字段
+        // 注意：INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码
+        if (org.springframework.util.StringUtils.hasText(inv.getSiteCode())) {
+            try {
+                com.musheng.business.document.enums.SiteCode siteEnum =
+                        com.musheng.business.document.enums.SiteCode.fromCurrency(inv.getSiteCode());
+                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : inv.getSiteCode();
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
+                inv.setSellerName(party.getSellerName());
+                inv.setSellerAddress(party.getSellerAddress());
+                inv.setSellerPhone(party.getSellerPhone());
+                inv.setBuyerName(party.getBuyerNameEn());
+                inv.setBuyerAddress(party.getBuyerAddress());
+                inv.setBuyerPhone(party.getBuyerPhone());
+                inv.setBankAccountName(party.getBankAccountName());
+                inv.setBankAccountNumber(party.getBankAccountNumber());
+                inv.setBankName(party.getBankName());
+                inv.setBankAddress(party.getBankAddress());
+                inv.setSwiftCode(party.getSwiftCode());
+            } catch (Exception e) {
+                log.warn("INV导出：获取交易方配置失败，使用单据原始值，siteCode={}", inv.getSiteCode());
+            }
         }
         List<DocumentInvItem> items = documentInvItemMapper.selectList(
                 new LambdaQueryWrapper<DocumentInvItem>()
@@ -1466,10 +1528,8 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 continue;
             }
             int autoWidth = sheet.getColumnWidth(i);
-            // 取autoSize和原始宽度的较大值，再加20%的padding
+            // 取autoSize和原始宽度的较大值，再加20%的padding，确保文本完整展示
             int finalWidth = Math.max(originalWidth, (int) (autoWidth * 1.2));
-            // 上限：75个字符宽度，避免过宽
-            finalWidth = Math.min(finalWidth, 75 * 256);
             sheet.setColumnWidth(i, finalWidth);
         }
     }

@@ -301,6 +301,15 @@ export const routes: RouteRecordRaw[] = [
               title: 'MSKU列表',
               permission: 'document:msku'
             }
+          },
+          {
+            path: 'party-config',
+            name: 'DocumentPartyConfig',
+            component: () => import('@/views/document/party-config/index.vue'),
+            meta: {
+              title: '交易方配置',
+              permission: 'document:partyConfig'
+            }
           }
         ]
       },

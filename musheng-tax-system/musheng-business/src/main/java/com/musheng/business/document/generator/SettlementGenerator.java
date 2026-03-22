@@ -1,5 +1,6 @@
 package com.musheng.business.document.generator;
 
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentSettlement;
 import com.musheng.business.document.entity.DocumentSettlementItem;
 import com.musheng.business.document.enums.SiteCode;
@@ -28,15 +29,6 @@ import java.util.stream.Collectors;
  */
 public final class SettlementGenerator {
 
-    /** 买方名称 */
-    private static final String BUYER_NAME = "东莞市慕声商贸有限公司";
-
-    /** 买方地址 */
-    private static final String BUYER_ADDRESS = "广东省东莞市虎门镇连升路82号虎门万达广场2栋606房";
-
-    /** 卖方名称 */
-    private static final String SELLER_NAME = "Hong Kong Andeo Group Limited";
-
     /** 金额精度（小数位数） */
     private static final int AMOUNT_SCALE = 4;
 
@@ -62,14 +54,47 @@ public final class SettlementGenerator {
      *
      * @param input 结算数据输入，不能为 null
      * @param startSequence 起始编号序号
+     * @param party 交易方配置（买方/卖方信息），不能为 null
      * @return 结算单生成结果列表，按月份和站点排列
-     * @throws IllegalArgumentException 如果 input 为 null
+     * @throws IllegalArgumentException 如果 input 或 party 为 null
      * @author wanhua
      * 10:30 2026年03月07日
      */
+    /**
+     * 根据结算数据生成结算单（使用默认交易方配置，仅用于测试）
+     *
+     * @param input 结算数据输入，不能为 null
+     * @param startSequence 起始编号序号
+     * @return 结算单生成结果列表
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
     public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence) {
+        DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+        defaultParty.setBuyerName("东莞市慕声商贸有限公司");
+        defaultParty.setBuyerAddress("广东省东莞市");
+        defaultParty.setSellerName("Hong Kong Andeo Group Limited");
+        return generate(input, startSequence, defaultParty);
+    }
+
+    /**
+     * 根据结算数据生成结算单（按自然月拆分，每月按站点生成多份）
+     *
+     * @param input 结算数据输入，不能为 null
+     * @param startSequence 起始编号序号
+     * @param party 交易方配置（买方/卖方信息），不能为 null
+     * @return 结算单生成结果列表，按月份和站点排列
+     * @throws IllegalArgumentException 如果 input 或 party 为 null
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence,
+                                                           DocumentPartyConfig party) {
         if (input == null) {
             throw new IllegalArgumentException("结算数据输入不能为 null");
+        }
+        if (party == null) {
+            throw new IllegalArgumentException("交易方配置不能为 null");
         }
         if (input.getItems() == null || input.getItems().isEmpty()) {
             return List.of();
@@ -111,7 +136,7 @@ public final class SettlementGenerator {
             for (SiteCode site : SiteCode.values()) {
                 List<SettlementInput.SettlementDataItem> siteItems = siteGroups.get(site);
                 SettlementGenerateResult result = buildSettlement(
-                        subStart, subEnd, settlementDate, site, siteItems, sequence);
+                        subStart, subEnd, settlementDate, site, siteItems, sequence, party);
                 allResults.add(result);
                 sequence++;
             }
@@ -171,6 +196,7 @@ public final class SettlementGenerator {
      * @param site 站点
      * @param siteItems 该站点的结算数据（可能为空列表）
      * @param sequence 编号序号
+     * @param party 交易方配置
      * @return 结算单生成结果
      * @author wanhua
      * 10:30 2026年01月29日
@@ -181,7 +207,8 @@ public final class SettlementGenerator {
             LocalDate settlementDate,
             SiteCode site,
             List<SettlementInput.SettlementDataItem> siteItems,
-            int sequence) {
+            int sequence,
+            DocumentPartyConfig party) {
 
         // 生成编号
         String documentNo = DocumentNumberCalculator.generate(settlementDate, sequence);
@@ -219,9 +246,9 @@ public final class SettlementGenerator {
         settlement.setPeriodEnd(periodEnd);
         settlement.setSiteCode(site.getCurrency());
         settlement.setSiteSequence(site.getSequence());
-        settlement.setBuyerName(BUYER_NAME);
-        settlement.setBuyerAddress(BUYER_ADDRESS);
-        settlement.setSellerName(SELLER_NAME);
+        settlement.setBuyerName(party.getBuyerName());
+        settlement.setBuyerAddress(party.getBuyerAddress());
+        settlement.setSellerName(party.getSellerName());
         settlement.setTotalQuantity(totalQuantity);
         settlement.setTotalAmount(totalAmount);
 

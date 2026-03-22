@@ -1,6 +1,6 @@
 package com.musheng.business.document.generator;
 
-import com.musheng.business.common.config.DocumentPartyProperties;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentSettlement;
 import com.musheng.business.document.entity.DocumentSettlementItem;
 import com.musheng.business.document.utils.WorkingDayCalculator;
@@ -139,7 +139,7 @@ class SettlementBugExplorationTest {
                     createSettlementResult(settlementDate, "001", "USD")
             );
 
-            DocumentPartyProperties party = createTestParty();
+            DocumentPartyConfig party = createTestParty();
 
             // When - 生成 INV
             List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, party);
@@ -201,8 +201,8 @@ class SettlementBugExplorationTest {
      * @author wanhua
      * 10:30 2026年07月14日
      */
-    private DocumentPartyProperties createTestParty() {
-        DocumentPartyProperties party = new DocumentPartyProperties();
+    private DocumentPartyConfig createTestParty() {
+        DocumentPartyConfig party = new DocumentPartyConfig();
         party.setSellerName("Hong Kong Andeo Group Limited");
         party.setSellerAddress("Hong Kong");
         party.setSellerPhone("00852-54682464");

@@ -1,6 +1,6 @@
 package com.musheng.business.document.generator;
 
-import com.musheng.business.common.config.DocumentPartyProperties;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentInv;
 import com.musheng.business.document.entity.DocumentSettlement;
 import com.musheng.business.document.entity.DocumentSettlementItem;
@@ -358,7 +358,7 @@ class SettlementPreservationTest {
                     .items(List.of(item))
                     .build();
 
-            DocumentPartyProperties party = createTestParty();
+            DocumentPartyConfig party = createTestParty();
 
             // When - 生成 INV
             List<InvGenerateResult> invResults = InvGenerator.generate(
@@ -418,7 +418,7 @@ class SettlementPreservationTest {
                     .items(List.of())
                     .build();
 
-            DocumentPartyProperties party = createTestParty();
+            DocumentPartyConfig party = createTestParty();
 
             // When
             List<InvGenerateResult> invResults = InvGenerator.generate(
@@ -449,8 +449,8 @@ class SettlementPreservationTest {
      * @author wanhua
      * 10:30 2026年07月14日
      */
-    private DocumentPartyProperties createTestParty() {
-        DocumentPartyProperties party = new DocumentPartyProperties();
+    private DocumentPartyConfig createTestParty() {
+        DocumentPartyConfig party = new DocumentPartyConfig();
         party.setSellerName("Hong Kong Andeo Group Limited");
         party.setSellerAddress("Hong Kong");
         party.setSellerPhone("00852-54682464");

@@ -1,1 +1,0 @@
-System.register(["./Col-legacy-VC7ubU7q.js","./index-legacy-BGVkS0jp.js"],function(e,t){"use strict";var s,r,c;return{setters:[e=>{s=e.C,r=e.A},e=>{c=e.y}],execute:function(){e("_",c(s)),e("a",c(r))}}});

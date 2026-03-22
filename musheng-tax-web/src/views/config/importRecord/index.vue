@@ -65,13 +65,6 @@
           </a-space>
         </a-col>
         <a-col :span="5" style="text-align: right">
-          <a-button
-            danger
-            :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchDelete"
-          >
-            <DeleteOutlined /> 批量删除
-          </a-button>
         </a-col>
       </a-row>
     </a-card>

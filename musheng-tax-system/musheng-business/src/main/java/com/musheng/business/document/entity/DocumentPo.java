@@ -26,6 +26,9 @@ public class DocumentPo extends BaseEntity {
     @Schema(description = "单据编号（如20250902001）")
     private String documentNo;
 
+    @Schema(description = "站点代码（US/CA/UK/EU）")
+    private String siteCode;
+
     @Schema(description = "PO日期")
     private LocalDate poDate;
 

@@ -2,9 +2,9 @@ package com.musheng.business.document.generator;
 
 import com.musheng.business.document.entity.DocumentDn;
 import com.musheng.business.document.entity.DocumentDnItem;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.utils.DnPeriodCalculator;
 import com.musheng.business.document.utils.DocumentNumberCalculator;
-import com.musheng.business.document.utils.WorkingDayCalculator;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,12 +27,6 @@ import java.util.stream.Collectors;
  */
 public final class DnGenerator {
 
-    /** 供应商名称 */
-    private static final String SUPPLIER_NAME = "Hong Kong Andeo Group Limited";
-
-    /** 客户名称（繁体中文） */
-    private static final String CUSTOMER_NAME = "東莞市慕聲商貿有限公司";
-
     /** DN周期间隔天数 */
     private static final int DN_PERIOD_DAYS = 21;
 
@@ -54,18 +48,52 @@ public final class DnGenerator {
      * @param anchor 锚点日期，不能为 null
      * @param shipments 货件输入数据列表，不能为 null
      * @param startSequence 起始编号序号
+     * @param party 交易方配置（供应商/客户信息），不能为 null
      * @return DN生成结果列表，按DN日期升序排列
-     * @throws IllegalArgumentException 如果 anchor 或 shipments 为 null
+     * @throws IllegalArgumentException 如果 anchor、shipments 或 party 为 null
+     * @author wanhua
+     * 10:30 2026年01月29日
+     */
+    /**
+     * 根据锚点日期和货件数据生成DN送货单（使用默认交易方配置，仅用于测试）
+     *
+     * @param anchor 锚点日期，不能为 null
+     * @param shipments 货件输入数据列表，不能为 null
+     * @param startSequence 起始编号序号
+     * @return DN生成结果列表
+     * @author wanhua
+     * 10:30 2026年03月22日
+     */
+    public static List<DnGenerateResult> generate(LocalDate anchor, List<ShipmentInput> shipments,
+                                                   int startSequence) {
+        DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+        defaultParty.setSupplierName("东莞市慕声商贸有限公司");
+        defaultParty.setCustomerNameTc("香港安迪奧集團有限公司");
+        return generate(anchor, shipments, startSequence, defaultParty);
+    }
+
+    /**
+     * 根据锚点日期和货件数据生成DN送货单
+     *
+     * @param anchor 锚点日期，不能为 null
+     * @param shipments 货件输入数据列表，不能为 null
+     * @param startSequence 起始编号序号
+     * @param party 交易方配置（供应商/客户信息），不能为 null
+     * @return DN生成结果列表，按DN日期升序排列
+     * @throws IllegalArgumentException 如果 anchor、shipments 或 party 为 null
      * @author wanhua
      * 10:30 2026年01月29日
      */
     public static List<DnGenerateResult> generate(LocalDate anchor, List<ShipmentInput> shipments,
-                                                   int startSequence) {
+                                                   int startSequence, DocumentPartyConfig party) {
         if (anchor == null) {
             throw new IllegalArgumentException("锚点日期不能为 null");
         }
         if (shipments == null) {
             throw new IllegalArgumentException("货件列表不能为 null");
+        }
+        if (party == null) {
+            throw new IllegalArgumentException("交易方配置不能为 null");
         }
         if (shipments.isEmpty()) {
             return List.of();
@@ -87,7 +115,7 @@ public final class DnGenerator {
             LocalDate dnDate = entry.getKey();
             List<ShipmentInput> periodShipments = entry.getValue();
 
-            DnGenerateResult result = buildDn(dnDate, periodShipments, sequence, groupedByDnDate, anchor);
+            DnGenerateResult result = buildDn(dnDate, periodShipments, sequence, groupedByDnDate, anchor, party);
             results.add(result);
             sequence++;
         }
@@ -179,6 +207,7 @@ public final class DnGenerator {
      * @param sequence 编号序号
      * @param allGroups 所有DN分组（用于计算周期起止日）
      * @param anchor 锚点日期
+     * @param party 交易方配置
      * @return DN生成结果
      * @author wanhua
      * 10:30 2026年01月29日
@@ -186,7 +215,7 @@ public final class DnGenerator {
     private static DnGenerateResult buildDn(LocalDate dnDate, List<ShipmentInput> shipments,
                                              int sequence,
                                              Map<LocalDate, List<ShipmentInput>> allGroups,
-                                             LocalDate anchor) {
+                                             LocalDate anchor, DocumentPartyConfig party) {
         // 生成编号
         String documentNo = DocumentNumberCalculator.generate(dnDate, sequence);
 
@@ -218,8 +247,8 @@ public final class DnGenerator {
         DocumentDn dn = new DocumentDn();
         dn.setDocumentNo(documentNo);
         dn.setDnDate(dnDate);
-        dn.setSupplierName(SUPPLIER_NAME);
-        dn.setCustomerName(CUSTOMER_NAME);
+        dn.setSupplierName(party.getSupplierName());
+        dn.setCustomerName(party.getCustomerNameTc());
         dn.setTotalQuantity(totalQuantity);
         dn.setPeriodStart(periodStart);
         dn.setPeriodEnd(periodEnd);

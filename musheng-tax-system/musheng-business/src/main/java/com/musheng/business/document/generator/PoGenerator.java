@@ -1,5 +1,6 @@
 package com.musheng.business.document.generator;
 
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentPo;
 import com.musheng.business.document.entity.DocumentPoItem;
 import com.musheng.business.document.utils.DocumentNumberCalculator;
@@ -27,15 +28,6 @@ import java.util.stream.Collectors;
  */
 public final class PoGenerator {
 
-    /** 买方名称 */
-    private static final String BUYER_NAME = "东莞市慕声商贸有限公司";
-
-    /** 买方地址 */
-    private static final String BUYER_ADDRESS = "广东省东莞市虎门镇连升路82号虎门万达广场2栋606房";
-
-    /** 卖方名称 */
-    private static final String SELLER_NAME = "Hong Kong Andeo Group Limited";
-
     private PoGenerator() {
         // 工具类，禁止实例化
     }
@@ -53,14 +45,30 @@ public final class PoGenerator {
      *
      * @param shipments 货件输入数据列表，不能为 null
      * @param startSequence 起始编号序号（用于同一天多份PO的序号递增）
+     * @param party 交易方配置（买方/卖方信息），不能为 null
      * @return PO生成结果列表，按PO日期升序排列
-     * @throws IllegalArgumentException 如果 shipments 为 null
+     * @throws IllegalArgumentException 如果 shipments 或 party 为 null
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    public static List<PoGenerateResult> generate(List<ShipmentInput> shipments, int startSequence) {
+    /**
+     * 根据货件数据生成PO采购订单
+     *
+     * @param shipments 货件输入数据列表，不能为 null
+     * @param startSequence 起始编号序号（用于同一天多份PO的序号递增）
+     * @param party 交易方配置（买方/卖方信息），不能为 null
+     * @return PO生成结果列表，按PO日期升序排列
+     * @throws IllegalArgumentException 如果 shipments 或 party 为 null
+     * @author wanhua
+     * 10:30 2026年01月29日
+     */
+    public static List<PoGenerateResult> generate(List<ShipmentInput> shipments, int startSequence,
+                                                   DocumentPartyConfig party) {
         if (shipments == null) {
             throw new IllegalArgumentException("货件列表不能为 null");
+        }
+        if (party == null) {
+            throw new IllegalArgumentException("交易方配置不能为 null");
         }
         if (shipments.isEmpty()) {
             return List.of();
@@ -86,7 +94,7 @@ public final class PoGenerator {
             LocalDate poDate = entry.getKey();
             List<ShipmentInput> groupShipments = entry.getValue();
 
-            PoGenerateResult result = buildPo(poDate, groupShipments, sequence);
+            PoGenerateResult result = buildPo(poDate, groupShipments, sequence, party);
             results.add(result);
             sequence++;
         }
@@ -134,11 +142,13 @@ public final class PoGenerator {
      * @param poDate PO日期
      * @param shipments 该PO日期下的货件列表（已按创建时间排序）
      * @param sequence 编号序号
+     * @param party 交易方配置
      * @return PO生成结果
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    private static PoGenerateResult buildPo(LocalDate poDate, List<ShipmentInput> shipments, int sequence) {
+    private static PoGenerateResult buildPo(LocalDate poDate, List<ShipmentInput> shipments,
+                                             int sequence, DocumentPartyConfig party) {
         // 生成编号
         String documentNo = DocumentNumberCalculator.generate(poDate, sequence);
 
@@ -160,7 +170,7 @@ public final class PoGenerator {
                     poItem.setFbaAddress(shipment.getFullAddress());
                     isFirstItem = false;
                 } else {
-                    poItem.setFbaAddress("");
+                    poItem.setFbaAddress(null);
                 }
 
                 items.add(poItem);
@@ -175,9 +185,9 @@ public final class PoGenerator {
         DocumentPo po = new DocumentPo();
         po.setDocumentNo(documentNo);
         po.setPoDate(poDate);
-        po.setBuyerName(BUYER_NAME);
-        po.setBuyerAddress(BUYER_ADDRESS);
-        po.setSellerName(SELLER_NAME);
+        po.setBuyerName(party.getBuyerName());
+        po.setBuyerAddress(party.getBuyerAddress());
+        po.setSellerName(party.getSellerName());
         po.setTotalQuantity(totalQuantity);
         po.setShipmentCount(shipments.size());
 
