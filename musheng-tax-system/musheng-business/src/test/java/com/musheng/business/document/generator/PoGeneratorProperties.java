@@ -1,5 +1,6 @@
 package com.musheng.business.document.generator;
 
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentPo;
 import com.musheng.business.document.entity.DocumentPoItem;
 import net.jqwik.api.*;
@@ -25,6 +26,23 @@ import static org.junit.jupiter.api.Assertions.*;
  * 10:30 2026年01月29日
  */
 class PoGeneratorProperties {
+
+    // ==================== 测试辅助方法 ====================
+
+    /**
+     * 构建测试用交易方配置
+     *
+     * @return 测试用 DocumentPartyConfig
+     * @author wanhua
+     * 10:30 2026年01月29日
+     */
+    private DocumentPartyConfig buildTestPartyConfig() {
+        DocumentPartyConfig party = new DocumentPartyConfig();
+        party.setBuyerName("东莞市慕声商贸有限公司");
+        party.setBuyerAddress("广东省东莞市");
+        party.setSellerName("Hong Kong Andeo Group Limited");
+        return party;
+    }
 
     // ==================== 自定义 Arbitrary 生成器 ====================
 
@@ -157,7 +175,7 @@ class PoGeneratorProperties {
     void poItemsShouldMatchInputShipmentData(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When
-        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
 
         // Then - 收集所有PO明细，按货件编号分组
         List<DocumentPoItem> allItems = results.stream()
@@ -213,7 +231,7 @@ class PoGeneratorProperties {
     void firstItemOfEachShipmentShouldHaveAddress(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When
-        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
 
         // Then - 按货件编号分组检查地址
         List<DocumentPoItem> allItems = results.stream()
@@ -262,7 +280,7 @@ class PoGeneratorProperties {
     void poHeaderShouldContainRequiredFields(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When
-        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
 
         // Then
         for (PoGenerateResult result : results) {
@@ -302,8 +320,8 @@ class PoGeneratorProperties {
     void sameInputShouldProduceIdenticalOutput(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When - 调用两次
-        List<PoGenerateResult> results1 = PoGenerator.generate(shipments, 1);
-        List<PoGenerateResult> results2 = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> results1 = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
+        List<PoGenerateResult> results2 = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
 
         // Then - 输出应完全一致
         assertEquals(results1.size(), results2.size(),
@@ -367,7 +385,7 @@ class PoGeneratorProperties {
     void totalQuantityShouldEqualSumOfItemQuantities(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When
-        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> results = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
 
         // Then
         for (PoGenerateResult result : results) {

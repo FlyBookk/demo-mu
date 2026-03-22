@@ -2,6 +2,7 @@ package com.musheng.business.document.generator;
 
 import com.musheng.business.document.entity.DocumentDn;
 import com.musheng.business.document.entity.DocumentDnItem;
+import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentPoItem;
 import net.jqwik.api.*;
 
@@ -28,6 +29,23 @@ class DnGeneratorProperties {
 
     /** 固定锚点日期 */
     private static final LocalDate ANCHOR = LocalDate.of(2025, 5, 22);
+
+    // ==================== 测试辅助方法 ====================
+
+    /**
+     * 构建测试用交易方配置
+     *
+     * @return 测试用 DocumentPartyConfig
+     * @author wanhua
+     * 10:30 2026年01月29日
+     */
+    private DocumentPartyConfig buildTestPartyConfig() {
+        DocumentPartyConfig party = new DocumentPartyConfig();
+        party.setBuyerName("东莞市慕声商贸有限公司");
+        party.setBuyerAddress("广东省东莞市");
+        party.setSellerName("Hong Kong Andeo Group Limited");
+        return party;
+    }
 
     // ==================== 自定义 Arbitrary 生成器 ====================
 
@@ -164,7 +182,7 @@ class DnGeneratorProperties {
     void poAndDnShouldContainSameShipmentIds(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When - 分别生成PO和DN
-        List<PoGenerateResult> poResults = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> poResults = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
         List<DnGenerateResult> dnResults = DnGenerator.generate(ANCHOR, shipments, 1);
 
         // Then - 收集PO中所有货件编号
@@ -202,7 +220,7 @@ class DnGeneratorProperties {
     void poAndDnShouldHaveConsistentMskuDataPerShipment(
             @ForAll("shipmentLists") List<ShipmentInput> shipments) {
         // When - 分别生成PO和DN
-        List<PoGenerateResult> poResults = PoGenerator.generate(shipments, 1);
+        List<PoGenerateResult> poResults = PoGenerator.generate(shipments, 1, buildTestPartyConfig());
         List<DnGenerateResult> dnResults = DnGenerator.generate(ANCHOR, shipments, 1);
 
         // Then - 按货件编号分组PO明细：shipmentNo → (msku → quantity)

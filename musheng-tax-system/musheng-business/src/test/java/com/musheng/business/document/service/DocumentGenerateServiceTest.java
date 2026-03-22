@@ -9,6 +9,7 @@ import com.musheng.business.document.generator.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
+import com.musheng.business.document.service.DocumentPartyConfigService;
 import com.musheng.business.document.service.impl.DocumentGenerateServiceImpl;
 import com.musheng.common.context.ShopContext;
 import org.junit.jupiter.api.AfterEach;
@@ -68,6 +69,8 @@ class DocumentGenerateServiceTest {
     private FbaShipmentItemMapper fbaShipmentItemMapper;
     @Mock
     private SettlementImportDataMapper settlementImportDataMapper;
+    @Mock
+    private DocumentPartyConfigService documentPartyConfigService;
 
     /**
      * 设置 ShopContext，所有测试方法需要店铺上下文
@@ -78,6 +81,14 @@ class DocumentGenerateServiceTest {
     @BeforeEach
     void setUp() {
         ShopContext.setShopId(1L);
+        // 配置 documentPartyConfigService 默认返回测试用交易方配置
+        DocumentPartyConfig testParty = new DocumentPartyConfig();
+        testParty.setBuyerName("东莞市慕声商贸有限公司");
+        testParty.setBuyerAddress("广东省东莞市");
+        testParty.setSellerName("Hong Kong Andeo Group Limited");
+        testParty.setSupplierName("Hong Kong Andeo Group Limited");
+        testParty.setCustomerNameTc("東莞市慕聲商貿有限公司");
+        lenient().when(documentPartyConfigService.getBySiteCode(any())).thenReturn(testParty);
     }
 
     /**
@@ -130,7 +141,7 @@ class DocumentGenerateServiceTest {
 
         // When - 使用 MockedStatic 模拟 PoGenerator
         try (MockedStatic<PoGenerator> mockedPoGen = mockStatic(PoGenerator.class)) {
-            mockedPoGen.when(() -> PoGenerator.generate(anyList(), anyInt()))
+            mockedPoGen.when(() -> PoGenerator.generate(anyList(), anyInt(), any(DocumentPartyConfig.class)))
                     .thenReturn(List.of(mockResult));
 
             DocumentPo result = documentGenerateService.generatePo(request);
@@ -160,7 +171,7 @@ class DocumentGenerateServiceTest {
 
         // When - 使用 MockedStatic 模拟 PoGenerator
         try (MockedStatic<PoGenerator> mockedPoGen = mockStatic(PoGenerator.class)) {
-            mockedPoGen.when(() -> PoGenerator.generate(anyList(), anyInt()))
+            mockedPoGen.when(() -> PoGenerator.generate(anyList(), anyInt(), any(DocumentPartyConfig.class)))
                     .thenReturn(List.of());
 
             DocumentPo result = documentGenerateService.generatePo(request);
@@ -206,7 +217,7 @@ class DocumentGenerateServiceTest {
 
         // When
         try (MockedStatic<DnGenerator> mockedDnGen = mockStatic(DnGenerator.class)) {
-            mockedDnGen.when(() -> DnGenerator.generate(any(LocalDate.class), anyList(), anyInt()))
+            mockedDnGen.when(() -> DnGenerator.generate(any(LocalDate.class), anyList(), anyInt(), any(DocumentPartyConfig.class)))
                     .thenReturn(List.of(mockResult));
 
             DocumentDn result = documentGenerateService.generateDn(request);
@@ -260,7 +271,7 @@ class DocumentGenerateServiceTest {
 
         // When
         try (MockedStatic<SettlementGenerator> mockedSettGen = mockStatic(SettlementGenerator.class)) {
-            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt()))
+            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt(), any(DocumentPartyConfig.class)))
                     .thenReturn(mockResults);
 
             List<DocumentSettlement> results = documentGenerateService.generateSettlements(request);
@@ -447,7 +458,7 @@ class DocumentGenerateServiceTest {
 
         // When
         try (MockedStatic<SettlementGenerator> mockedSettGen = mockStatic(SettlementGenerator.class)) {
-            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt()))
+            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt(), any(DocumentPartyConfig.class)))
                     .thenAnswer(invocation -> {
                         // 验证传入的 SettlementInput 仅包含活跃记录
                         SettlementInput input = invocation.getArgument(0);
@@ -494,7 +505,7 @@ class DocumentGenerateServiceTest {
 
         // When
         try (MockedStatic<SettlementGenerator> mockedSettGen = mockStatic(SettlementGenerator.class)) {
-            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt()))
+            mockedSettGen.when(() -> SettlementGenerator.generate(any(SettlementInput.class), anyInt(), any(DocumentPartyConfig.class)))
                     .thenReturn(List.of());
 
             List<DocumentSettlement> results = documentGenerateService.generateSettlements(request);
