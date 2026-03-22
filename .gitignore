@@ -13,3 +13,4 @@ deploy-package/
 .kiro/
 .serena/
 .cursor/
+logs/
