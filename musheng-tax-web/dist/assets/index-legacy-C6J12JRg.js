@@ -1,0 +1,1 @@
+System.register(["./Col-legacy-WUd1ckeo.js","./index-legacy-BKCm3dI5.js"],function(e,t){"use strict";var s,r,c;return{setters:[e=>{s=e.C,r=e.A},e=>{c=e.z}],execute:function(){e("_",c(s)),e("a",c(r))}}});
