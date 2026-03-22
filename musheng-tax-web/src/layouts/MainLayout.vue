@@ -12,7 +12,7 @@
       <!-- Logo -->
       <div class="logo">
         <img src="@/assets/images/logo.svg" alt="Logo" class="logo-img" />
-        <span v-show="!collapsed" class="logo-text">慕声报税系统</span>
+        <span v-show="!collapsed" class="logo-text">远洋税务</span>
       </div>
 
       <!-- 菜单 -->

@@ -3,7 +3,7 @@
     <div class="login-container">
       <div class="login-header">
         <img src="@/assets/images/logo.svg" alt="Logo" class="logo" />
-        <h1 class="title">慕声报税管理系统</h1>
+        <h1 class="title">远洋税务管理系统</h1>
       </div>
 
       <a-form
@@ -60,7 +60,7 @@
       </a-form>
 
       <div class="login-footer">
-        Copyright 2026 慕声公司
+        Copyright 2026 远洋公司
       </div>
     </div>
   </div>

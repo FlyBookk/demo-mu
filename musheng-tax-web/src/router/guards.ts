@@ -37,7 +37,7 @@ export function setupRouterGuards(router: Router) {
     appStore.setPageLoading(true)
 
     // 设置页面标题
-    const title = to.meta.title ? `${to.meta.title} - 慕声报税系统` : '慕声报税系统'
+    const title = to.meta.title ? `${to.meta.title} - 远洋税务` : '远洋税务'
     document.title = title
 
     // 不需要认证的页面直接通过
