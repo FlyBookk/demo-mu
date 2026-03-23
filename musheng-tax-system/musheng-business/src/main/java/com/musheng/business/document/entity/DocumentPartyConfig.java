@@ -27,6 +27,9 @@ public class DocumentPartyConfig {
     @Schema(description = "主键")
     private Long id;
 
+    @Schema(description = "店铺ID（数据隔离）")
+    private Long shopId;
+
     @Schema(description = "站点代码（US/CA/UK/EU），唯一")
     private String siteCode;
 
