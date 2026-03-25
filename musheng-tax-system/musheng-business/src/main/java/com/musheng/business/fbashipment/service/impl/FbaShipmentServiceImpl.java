@@ -206,6 +206,12 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         FbaShipment shipment = fbaShipmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
 
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(shipment.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
+
         // 查询关联的SKU明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
         itemWrapper.eq(FbaShipmentItem::getShipmentId, id);
@@ -222,6 +228,12 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         // 使用 Repository 查询
         FbaShipment shipment = fbaShipmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
+
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(shipment.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         // 删除明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();

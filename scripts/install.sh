@@ -1,34 +1,32 @@
 #!/bin/bash
 # ============================================================
 # 慕声报税系统 — 服务器一键安装脚本
-# 适用系统：Alibaba Cloud Linux 3（alinux3）
+# 适用系统：腾讯云轻量服务器 Ubuntu 20.04 / 22.04
 # 执行身份：root
-# 使用方式：bash install.sh [db_password]
+# 使用方式：bash install.sh（可重复执行，幂等安全）
 # ============================================================
-
-set -e
 
 # ── 颜色输出 ──────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+error() { echo -e "${RED}[ERROR]${NC} $*"; }
+die()   { echo -e "${RED}[FATAL]${NC} $*"; exit 1; }
 
-# ── 参数 ──────────────────────────────────────────────────
-DB_PASSWORD="${1:-YourDbPassword}"
+# ── 固定配置 ──────────────────────────────────────────────
+DB_PASSWORD="root"
 
 # ── 检查 root ─────────────────────────────────────────────
-[[ $EUID -ne 0 ]] && error "请以 root 身份执行此脚本"
+[[ $EUID -ne 0 ]] && die "请以 root 身份执行此脚本"
 
 # ── 检测系统 ──────────────────────────────────────────────
 info "检测操作系统..."
 source /etc/os-release
 echo "  ID=${ID}  VERSION_ID=${VERSION_ID}"
-[[ "$ID" != "alinux" ]] && warn "当前系统非 alinux，脚本针对 Alibaba Cloud Linux 3 优化，继续执行..."
+[[ "$ID" != "ubuntu" ]] && warn "当前系统 ${ID} 未经测试，脚本针对 Ubuntu 优化，继续执行..."
 
-PKG_MGR="dnf"
-command -v dnf &>/dev/null || PKG_MGR="yum"
-info "包管理器：${PKG_MGR}"
+info "更新 apt 软件包索引..."
+apt-get update -y
 
 # ============================================================
 # 第一步：创建系统用户 musheng
@@ -42,23 +40,19 @@ else
     info "用户 musheng 创建完成"
 fi
 
-if [[ ! -f /etc/sudoers.d/musheng ]]; then
-    cat > /etc/sudoers.d/musheng << 'EOF'
-musheng ALL=(ALL) NOPASSWD: \
-    /usr/bin/systemctl start musheng, \
-    /usr/bin/systemctl stop musheng, \
-    /usr/bin/systemctl restart musheng, \
-    /usr/bin/systemctl status musheng, \
-    /usr/bin/systemctl reload nginx, \
-    /usr/bin/systemctl restart nginx, \
-    /usr/bin/journalctl -u musheng *
+# 每次覆盖写入，保证配置最新
+cat > /etc/sudoers.d/musheng << 'EOF'
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl start musheng
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop musheng
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart musheng
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl status musheng
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nginx
+musheng ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nginx
+musheng ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u musheng *
 EOF
-    chmod 440 /etc/sudoers.d/musheng
-    info "sudoers 配置完成"
-else
-    warn "sudoers 配置已存在，跳过"
-fi
-id musheng
+chmod 440 /etc/sudoers.d/musheng
+# 验证 sudoers 语法
+visudo -c -f /etc/sudoers.d/musheng && info "sudoers 配置完成" || die "sudoers 配置语法错误"
 
 # ============================================================
 # 第二步：安装 Java 17
@@ -67,59 +61,85 @@ info "第二步：安装 Java 17..."
 if java -version 2>&1 | grep -q '"17'; then
     warn "Java 17 已安装，跳过"
 else
-    $PKG_MGR install -y java-17-openjdk java-17-openjdk-devel
+    apt-get install -y openjdk-17-jdk || die "Java 17 安装失败"
 fi
 java -version 2>&1 | head -1
 
 # ============================================================
-# 第三步：安装 MySQL 8
+# 第三步：安装并初始化 MySQL 8
 # ============================================================
 info "第三步：安装 MySQL 8..."
-if command -v mysqld &>/dev/null || rpm -q mysql-server &>/dev/null 2>&1; then
-    warn "MySQL 已安装，跳过安装"
+if ! dpkg -l mysql-server 2>/dev/null | grep -q '^ii'; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server || die "MySQL 安装失败"
 else
-    # alinux3 官方源包含 mysql-server（MySQL 8）
-    $PKG_MGR install -y mysql-server
+    warn "MySQL 已安装，跳过安装"
 fi
-# 确保服务启动并开机自启（无论是否刚安装）
-if ! systemctl is-active mysqld &>/dev/null; then
-    systemctl start mysqld
-fi
-systemctl enable mysqld &>/dev/null
-systemctl status mysqld --no-pager || true
 
-# 初始化数据库
-info "初始化 MySQL 数据库..."
+# 确保 MySQL 运行
+systemctl start mysql 2>/dev/null || true
+sleep 2
+systemctl enable mysql &>/dev/null || true
+systemctl is-active mysql || die "MySQL 启动失败"
 
-# alinux3 首次安装后 root@localhost 默认无密码，直接登录
-# 只做两件事：设置密码 + 允许远程连接（Navicat 等工具需要）
-mysql -u root << 'EOSQL'
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';
-UPDATE mysql.user SET host='%' WHERE user='root' AND host='localhost';
+# ── MySQL 初始化 ─────────────────────────────────────────
+# 策略：先尝试 auth_socket 无密码登录（首次安装），失败则用已有密码登录（重复执行）
+info "初始化 MySQL root 密码及权限..."
+
+mysql_init() {
+    mysql -u root "$@" 2>/dev/null << EOF
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';
+CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${DB_PASSWORD}';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+CREATE DATABASE IF NOT EXISTS musheng_tax CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 FLUSH PRIVILEGES;
-EOSQL
+EOF
+}
 
-# 创建业务数据库
-mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS musheng_tax CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+# 首次：auth_socket 无密码登录
+if mysql_init; then
+    info "MySQL root 密码已设置为：${DB_PASSWORD}"
+else
+    # 重复执行：已切换为密码认证，用密码登录
+    warn "auth_socket 登录失败，尝试用密码登录..."
+    if mysql_init "-p${DB_PASSWORD}"; then
+        info "MySQL 初始化完成（密码登录）"
+    else
+        die "MySQL 初始化失败，请手动检查"
+    fi
+fi
 
-info "MySQL 初始化完成（root/root，支持外部访问）"
-mysql -u root -proot -e "SHOW DATABASES;" 2>/dev/null | grep -q musheng_tax \
-    && info "数据库验证通过" || warn "数据库验证失败，请检查"
+# ── 开放 MySQL 远程端口 ──────────────────────────────────
+MYCNF="/etc/mysql/mysql.conf.d/mysqld.cnf"
+if [[ -f "$MYCNF" ]]; then
+    # 替换已有的 bind-address，不存在则追加
+    if grep -q "^bind-address" "$MYCNF"; then
+        sed -i 's/^bind-address[ ]*=.*/bind-address = 0.0.0.0/' "$MYCNF"
+    else
+        echo "bind-address = 0.0.0.0" >> "$MYCNF"
+    fi
+    info "MySQL bind-address 已设置为 0.0.0.0"
+fi
+systemctl restart mysql
+sleep 2
+
+# 验证
+if mysql -u root -p"${DB_PASSWORD}" -e "SHOW DATABASES;" 2>/dev/null | grep -q musheng_tax; then
+    info "数据库 musheng_tax 验证通过"
+else
+    error "数据库验证失败，请手动检查"
+fi
 
 # ============================================================
 # 第四步：安装 Nginx
 # ============================================================
 info "第四步：安装 Nginx..."
-if command -v nginx &>/dev/null || rpm -q nginx &>/dev/null 2>&1; then
-    warn "Nginx 已安装，跳过安装"
+if ! command -v nginx &>/dev/null; then
+    apt-get install -y nginx || die "Nginx 安装失败"
 else
-    $PKG_MGR install -y nginx
+    warn "Nginx 已安装，跳过安装"
 fi
-# 确保服务启动并开机自启
-if ! systemctl is-active nginx &>/dev/null; then
-    systemctl start nginx
-fi
-systemctl enable nginx &>/dev/null
+systemctl start nginx 2>/dev/null || true
+systemctl enable nginx &>/dev/null || true
 systemctl is-active nginx
 
 # ============================================================
@@ -132,13 +152,14 @@ chmod -R 755 /opt/musheng
 ls -la /opt/musheng/
 
 # ============================================================
-# 第六步：配置 Nginx
+# 第六步：配置 Nginx（每次覆盖写入，保证配置最新）
 # ============================================================
 info "第六步：配置 Nginx..."
-if [[ -f /etc/nginx/conf.d/musheng.conf ]]; then
-    warn "Nginx 配置已存在，跳过写入"
-else
-cat > /etc/nginx/conf.d/musheng.conf << 'EOF'
+
+# 禁用 Ubuntu 默认站点
+rm -f /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/sites-available/musheng << 'EOF'
 server {
     listen 80;
     server_name _;
@@ -146,8 +167,27 @@ server {
     root /opt/musheng/frontend;
     index index.html;
 
+    # 开启 gzip，JS/CSS 压缩率约 70%，1.5MB → 400KB
+    gzip on;
+    gzip_static on;
+    gzip_types text/plain text/css application/javascript application/json application/xml;
+    gzip_min_length 1k;
+    gzip_comp_level 6;
+    gzip_vary on;
+
     location / {
         try_files $uri $uri/ /index.html;
+    }
+
+    # index.html 不缓存，避免新旧版本错配
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+    }
+
+    # JS/CSS/图片等静态资源强缓存（文件名已带 hash，适合长期缓存）
+    location ~* \.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|woff|ttf|eot)$ {
+        expires 365d;
+        add_header Cache-Control "public, immutable";
     }
 
     location /api/ {
@@ -164,28 +204,24 @@ server {
     client_max_body_size 100M;
 }
 EOF
-fi
 
-# 禁用默认配置：移除 default.d 下的默认站点，不改动 nginx.conf 主配置
-if [[ -f /etc/nginx/default.d/default.conf ]]; then
-    mv /etc/nginx/default.d/default.conf /etc/nginx/default.d/default.conf.bak
-    info "已备份默认站点配置"
-fi
+ln -sf /etc/nginx/sites-available/musheng /etc/nginx/sites-enabled/musheng
 
-nginx -t && systemctl reload nginx
-info "Nginx 配置完成"
+if nginx -t 2>&1; then
+    systemctl reload nginx
+    info "Nginx 配置完成"
+else
+    die "Nginx 配置测试失败，请检查"
+fi
 
 # ============================================================
-# 第七步：配置 systemd 服务
+# 第七步：配置 systemd 服务（每次覆盖写入）
 # ============================================================
 info "第七步：配置 systemd 服务..."
-if [[ -f /etc/systemd/system/musheng.service ]]; then
-    warn "systemd 服务文件已存在，跳过写入"
-else
 cat > /etc/systemd/system/musheng.service << 'EOF'
 [Unit]
 Description=Musheng Tax System
-After=network.target mysqld.service
+After=network.target mysql.service
 
 [Service]
 Type=simple
@@ -203,41 +239,33 @@ StandardError=null
 [Install]
 WantedBy=multi-user.target
 EOF
-fi
 
 systemctl daemon-reload
-systemctl enable musheng || true
+systemctl enable musheng 2>/dev/null || true
 info "systemd 服务注册完成（等上传 JAR 后再启动）"
 
-# 配置日志定期清理（每天凌晨2点，保留30天）
+# 配置日志定期清理（幂等）
 CRON_JOB="0 2 * * * find /opt/musheng/logs -name '*.log' -mtime +30 -delete"
 if ! crontab -u musheng -l 2>/dev/null | grep -qF "musheng/logs"; then
     (crontab -u musheng -l 2>/dev/null; echo "$CRON_JOB") | crontab -u musheng -
-    info "日志清理 cron 已配置（保留30天，每天凌晨2点执行）"
+    info "日志清理 cron 已配置"
 else
     warn "日志清理 cron 已存在，跳过"
 fi
 
 # ============================================================
-# 第八步：开放防火墙
+# 第八步：配置防火墙（Ubuntu 用 ufw）
 # ============================================================
 info "第八步：配置防火墙..."
-if systemctl is-active firewalld &>/dev/null; then
-    # 已添加过则跳过，避免重复 reload
-    if ! firewall-cmd --query-service=http &>/dev/null; then
-        firewall-cmd --permanent --add-service=http
-        firewall-cmd --permanent --add-service=ssh
-        firewall-cmd --permanent --add-port=3306/tcp
-        firewall-cmd --reload
-        info "防火墙规则已添加"
-    else
-        # 补充 3306 端口（可能之前没加）
-        firewall-cmd --permanent --add-port=3306/tcp &>/dev/null || true
-        warn "防火墙规则已存在，跳过（已确保 3306 开放）"
-    fi
-    firewall-cmd --list-all
+if command -v ufw &>/dev/null; then
+    ufw allow 22/tcp   2>/dev/null || true
+    ufw allow 80/tcp   2>/dev/null || true
+    ufw allow 3306/tcp 2>/dev/null || true
+    ufw --force enable 2>/dev/null || true
+    info "ufw 防火墙规则已更新"
+    ufw status
 else
-    warn "firewalld 未运行，跳过防火墙配置（请在阿里云安全组开放 80/22 端口）"
+    warn "ufw 未安装，跳过（请在腾讯云安全组开放 TCP 80/3306/22 端口）"
 fi
 
 # ============================================================
@@ -246,29 +274,24 @@ fi
 echo ""
 info "========== 全量验证 =========="
 echo -n "  Java 版本：";    java -version 2>&1 | head -1
-echo -n "  MySQL 状态：";   systemctl is-active mysqld
+echo -n "  MySQL 状态：";   systemctl is-active mysql
 echo -n "  Nginx 状态：";   systemctl is-active nginx
 echo -n "  目录权限：";     stat -c "%U" /opt/musheng
-echo -n "  端口监听：";     ss -tlnp | grep -E ':80|:8888' | awk '{print $4}' | tr '\n' ' '; echo
+echo -n "  端口监听：";     ss -tlnp | grep -E ':80|:3306|:8888' | awk '{print $4}' | tr '\n' ' '; echo
 echo -n "  HTTP 响应：";    curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost/ || echo "（前端未部署）"
 
 echo ""
 info "========== 安装完成 =========="
 echo "  后续步骤："
-echo "  1. 上传 JAR：scp musheng-web-1.0.0-SNAPSHOT.jar musheng@<IP>:/opt/musheng/backend/"
-echo "  2. 上传前端：scp -r dist/* musheng@<IP>:/opt/musheng/frontend/"
-echo "  3. 导入数据库：mysql -u root -proot musheng_tax < musheng_tax.sql"
-echo "  4. 启动服务：systemctl start musheng"
-echo "  5. 查看日志：journalctl -u musheng -f"
+echo "  1. 上传 JAR：    scp musheng-web-1.0.0-SNAPSHOT.jar root@<IP>:/opt/musheng/backend/"
+echo "  2. 上传前端：    scp -r dist/* root@<IP>:/opt/musheng/frontend/"
+echo "  3. 导入数据库：  mysql -u root -p${DB_PASSWORD} musheng_tax < musheng_tax.sql"
+echo "  4. 启动服务：    systemctl start musheng"
+echo "  5. 查看日志：    journalctl -u musheng -f"
 echo ""
-warn "  阿里云安全组记得开放 TCP 80 和 22 端口！"
+warn "  腾讯云安全组记得开放 TCP 80 / 3306 / 22 端口！"
 echo ""
-info "========== 切换到 musheng 用户 =========="
-echo "  后续操作请在 musheng 用户下进行："
-echo "  上传文件、启动服务、查看日志等均使用此用户"
-echo "  切换命令：su - musheng"
-echo ""
-# 仅在交互式终端下切换用户，远程 ssh 执行时跳过
+
 if [[ -t 0 ]]; then
     exec su - musheng
 fi

@@ -12,6 +12,8 @@ import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentQueryService;
 import com.musheng.business.document.vo.*;
 import com.musheng.common.context.ShopContext;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import com.musheng.common.result.PageResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,6 +106,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("PO不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(po.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         PoVO vo = BeanUtil.toBean(po, PoVO.class);
 
@@ -137,6 +144,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("DN不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(dn.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         DnVO vo = BeanUtil.toBean(dn, DnVO.class);
 
@@ -169,6 +181,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("结算单不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         SettlementVO vo = BeanUtil.toBean(settlement, SettlementVO.class);
 
@@ -200,6 +217,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
         if (inv == null) {
             log.warn("INV不存在, id={}", id);
             return null;
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(inv.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
 
         InvVO vo = BeanUtil.toBean(inv, InvVO.class);
@@ -427,9 +449,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      */
     private PageResult<DocumentListVO> queryAllTypesList(DocumentQueryRequest request) {
         List<DocumentListVO> allRecords = new ArrayList<>();
+        Long shopId = ShopContext.requireShopId();
 
         // 查询PO
         LambdaQueryWrapper<DocumentPo> poQuery = new LambdaQueryWrapper<DocumentPo>()
+                .eq(DocumentPo::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentPo::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -453,6 +477,7 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
 
         // 查询DN
         LambdaQueryWrapper<DocumentDn> dnQuery = new LambdaQueryWrapper<DocumentDn>()
+                .eq(DocumentDn::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentDn::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -476,6 +501,7 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
 
         // 查询结算单
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentSettlement::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -499,6 +525,7 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
 
         // 查询INV
         LambdaQueryWrapper<DocumentInv> invQuery = new LambdaQueryWrapper<DocumentInv>()
+                .eq(DocumentInv::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentInv::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -549,8 +576,10 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryPoList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentPo> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentPo> query = new LambdaQueryWrapper<DocumentPo>()
+                .eq(DocumentPo::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentPo::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -585,8 +614,10 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryDnList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentDn> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentDn> query = new LambdaQueryWrapper<DocumentDn>()
+                .eq(DocumentDn::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentDn::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -621,8 +652,10 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> querySettlementList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentSettlement> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentSettlement> query = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentSettlement::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,
@@ -657,8 +690,10 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryInvList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentInv> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentInv> query = new LambdaQueryWrapper<DocumentInv>()
+                .eq(DocumentInv::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentInv::getDocumentNo, request.getDocumentNo())
                 .ge(request.getStartDate() != null,

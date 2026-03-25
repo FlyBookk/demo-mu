@@ -6,12 +6,14 @@ import com.musheng.business.document.enums.SiteCode;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentValidationService;
 import com.musheng.business.document.utils.WorkingDayCalculator;
+import com.musheng.common.context.ShopContext;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -51,6 +53,39 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
     @Override
     public List<String> validateSettlementInvConsistency(Long settlementId, Long invId) {
         log.info("校验结算单与INV一致性, settlementId={}, invId={}", settlementId, invId);
+        List<String> errors = new ArrayList<>();
+
+        // 校验结算单归属当前店铺，防止越权访问
+        Long shopId = ShopContext.requireShopId();
+        DocumentSettlement settlement = documentSettlementMapper.selectById(settlementId);
+        if (settlement == null) {
+            errors.add("结算单不存在, settlementId=" + settlementId);
+            return errors;
+        }
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
+        // 校验INV归属当前店铺
+        DocumentInv invEntity = documentInvMapper.selectById(invId);
+        if (invEntity == null) {
+            errors.add("INV不存在, invId=" + invId);
+            return errors;
+        }
+        if (!shopId.equals(invEntity.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
+
+        return doValidateConsistency(settlementId, invId);
+    }
+
+    /**
+     * 执行结算单与INV一致性校验的核心逻辑（不含 shopId 校验，供内部复用）
+     *
+     * @param settlementId 结算单ID
+     * @param invId INV发票ID
+     * @return 差异描述列表
+     */
+    private List<String> doValidateConsistency(Long settlementId, Long invId) {
         List<String> errors = new ArrayList<>();
 
         // 查询结算单明细
@@ -133,7 +168,22 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
             log.warn("INV不存在, invId={}", invId);
             return false;
         }
+        // 校验INV归属当前店铺，防止越权访问
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(inv.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
+        return doValidateInvDate(inv);
+    }
+
+    /**
+     * 执行INV日期校验的核心逻辑（不含 shopId 校验，供内部复用）
+     *
+     * @param inv 已查询的INV实体
+     * @return 日期校验通过返回 true
+     */
+    private boolean doValidateInvDate(DocumentInv inv) {
         DocumentSettlement settlement = documentSettlementMapper.selectById(inv.getSettlementId());
         if (settlement == null) {
             log.warn("关联结算单不存在, settlementId={}", inv.getSettlementId());
@@ -144,9 +194,9 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
         boolean valid = expectedInvDate.equals(inv.getInvDate());
 
         if (valid) {
-            log.info("INV日期校验通过, invId={}, 期望={}, 实际={}", invId, expectedInvDate, inv.getInvDate());
+            log.info("INV日期校验通过, invId={}, 期望={}, 实际={}", inv.getId(), expectedInvDate, inv.getInvDate());
         } else {
-            log.warn("INV日期校验失败, invId={}, 期望={}, 实际={}", invId, expectedInvDate, inv.getInvDate());
+            log.warn("INV日期校验失败, invId={}, 期望={}, 实际={}", inv.getId(), expectedInvDate, inv.getInvDate());
         }
 
         return valid;
@@ -171,7 +221,22 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
             log.warn("结算单不存在, settlementId={}", settlementId);
             return false;
         }
+        // 校验结算单归属当前店铺，防止越权访问
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
+        return doValidateSiteMapping(settlement);
+    }
+
+    /**
+     * 执行站点映射校验的核心逻辑（不含 shopId 校验，供内部复用）
+     *
+     * @param settlement 已查询的结算单实体
+     * @return 映射校验通过返回 true
+     */
+    private boolean doValidateSiteMapping(DocumentSettlement settlement) {
         String siteSequence = settlement.getSiteSequence();
         String siteCode = settlement.getSiteCode();
 
@@ -184,10 +249,10 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
         boolean valid = expectedSite.getCurrency().equals(siteCode);
 
         if (valid) {
-            log.info("站点映射校验通过, settlementId={}, {}→{}", settlementId, siteSequence, siteCode);
+            log.info("站点映射校验通过, settlementId={}, {}→{}", settlement.getId(), siteSequence, siteCode);
         } else {
             log.warn("站点映射校验失败, settlementId={}, 序号={}, 期望货币={}, 实际货币={}",
-                    settlementId, siteSequence, expectedSite.getCurrency(), siteCode);
+                    settlement.getId(), siteSequence, expectedSite.getCurrency(), siteCode);
         }
 
         return valid;
@@ -214,8 +279,10 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
         result.put("invDate", new ArrayList<>());
         result.put("siteMapping", new ArrayList<>());
 
-        // 查询结算周期内的所有结算单
+        // 查询结算周期内当前店铺的所有结算单（shopId 过滤保证数据隔离）
+        Long shopId = ShopContext.requireShopId();
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .eq(DocumentSettlement::getPeriodStart, periodStart)
                 .eq(DocumentSettlement::getPeriodEnd, periodEnd);
         List<DocumentSettlement> settlements = documentSettlementMapper.selectList(settlementQuery);
@@ -240,8 +307,8 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
         for (DocumentSettlement settlement : settlements) {
             String docNo = settlement.getDocumentNo();
 
-            // 站点映射校验
-            if (!validateSettlementSiteMapping(settlement.getId())) {
+            // 站点映射校验（直接调用私有方法，避免重复查库和重复 shopId 校验）
+            if (!doValidateSiteMapping(settlement)) {
                 result.get("siteMapping").add("结算单 " + docNo + " 站点映射校验失败");
             }
 
@@ -253,16 +320,16 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
                 continue;
             }
 
-            // 一致性校验
-            List<String> consistencyErrors = validateSettlementInvConsistency(settlement.getId(), inv.getId());
+            // 一致性校验（直接调用私有方法，避免重复查库和重复 shopId 校验）
+            List<String> consistencyErrors = doValidateConsistency(settlement.getId(), inv.getId());
             if (!CollectionUtils.isEmpty(consistencyErrors)) {
                 for (String error : consistencyErrors) {
                     result.get("consistency").add("结算单 " + docNo + ": " + error);
                 }
             }
 
-            // INV日期校验
-            if (!validateInvDate(inv.getId())) {
+            // INV日期校验（直接调用私有方法，避免重复查库和重复 shopId 校验）
+            if (!doValidateInvDate(inv)) {
                 result.get("invDate").add("结算单 " + docNo + " 关联的INV日期校验失败");
             }
         }

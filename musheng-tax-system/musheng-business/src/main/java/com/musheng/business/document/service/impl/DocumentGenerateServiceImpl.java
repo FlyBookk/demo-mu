@@ -28,6 +28,8 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.musheng.common.result.ErrorCode.FORBIDDEN;
+
 /**
  * 单据生成服务实现类
  *
@@ -133,7 +135,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         } catch (DuplicateKeyException e) {
             log.info("PO单据号已存在，返回已有记录，编号: {}", po.getDocumentNo());
             LambdaQueryWrapper<DocumentPo> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo());
+            wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo())
+                   .eq(DocumentPo::getShopId, shopId);
             po = documentPoMapper.selectOne(wrapper);
         }
 
@@ -208,7 +211,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         } catch (DuplicateKeyException e) {
             log.info("DN单据号已存在，返回已有记录，编号: {}", dn.getDocumentNo());
             LambdaQueryWrapper<DocumentDn> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo());
+            wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo())
+                   .eq(DocumentDn::getShopId, shopId);
             dn = documentDnMapper.selectOne(wrapper);
         }
 
@@ -279,7 +283,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             } catch (DuplicateKeyException e) {
                 log.info("结算单单据号已存在，使用已有记录，编号: {}", settlement.getDocumentNo());
                 LambdaQueryWrapper<DocumentSettlement> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(DocumentSettlement::getDocumentNo, settlement.getDocumentNo());
+                wrapper.eq(DocumentSettlement::getDocumentNo, settlement.getDocumentNo())
+                       .eq(DocumentSettlement::getShopId, shopId);
                 settlement = documentSettlementMapper.selectOne(wrapper);
             }
 
@@ -317,6 +322,14 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             if (settlement == null) {
                 log.warn("结算单不存在，ID: {}", settlementId);
                 continue;
+            }
+            // 校验结算单归属当前店铺，防止越权访问
+            Long currentShopId = ShopContext.requireShopId();
+            log.info("[generateInvoices] settlementId={}, 请求shopId={}, 数据库shopId={}", settlementId, currentShopId, settlement.getShopId());
+            if (!currentShopId.equals(settlement.getShopId())) {
+                log.warn("[generateInvoices] 权限校验失败: 请求shopId={} != 数据库shopId={}, settlementId={}", currentShopId, settlement.getShopId(), settlementId);
+                throw new com.musheng.common.exception.BusinessException(
+                        FORBIDDEN, "无权访问该数据");
             }
 
             // 查询结算单明细
@@ -369,7 +382,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             } catch (DuplicateKeyException e) {
                 log.info("INV单据号已存在，使用已有记录，编号: {}", inv.getDocumentNo());
                 LambdaQueryWrapper<DocumentInv> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(DocumentInv::getDocumentNo, inv.getDocumentNo());
+                wrapper.eq(DocumentInv::getDocumentNo, inv.getDocumentNo())
+                       .eq(DocumentInv::getShopId, shopId);
                 inv = documentInvMapper.selectOne(wrapper);
             }
 

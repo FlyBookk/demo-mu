@@ -30,10 +30,12 @@ public class ShopContextInterceptor implements HandlerInterceptor {
             try {
                 Long shopId = Long.parseLong(shopIdStr);
                 ShopContext.setShopId(shopId);
-                log.debug("设置店铺上下文: shopId={}", shopId);
+                log.info("[ShopContext] 请求路径={}, shopId={}", request.getRequestURI(), shopId);
             } catch (NumberFormatException e) {
                 log.warn("无效的店铺ID: {}", shopIdStr);
             }
+        } else {
+            log.warn("[ShopContext] 请求路径={}, 未携带 X-Shop-Id header", request.getRequestURI());
         }
         
         return true;

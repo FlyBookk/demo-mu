@@ -6,6 +6,7 @@ import com.musheng.business.document.dto.SettlementImportRequest.SettlementImpor
 import com.musheng.business.document.entity.SettlementImportData;
 import com.musheng.business.document.mapper.SettlementImportDataMapper;
 import com.musheng.business.document.service.SettlementImportService;
+import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -78,7 +79,7 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     }
 
     /**
-     * 根据结算周期查询导入数据
+     * 根据结算周期查询导入数据（仅返回当前店铺数据）
      *
      * @param periodStart 周期起始日
      * @param periodEnd 周期结束日
@@ -88,10 +89,12 @@ public class SettlementImportServiceImpl implements SettlementImportService {
      */
     @Override
     public List<SettlementImportData> queryByPeriod(LocalDate periodStart, LocalDate periodEnd) {
-        log.info("查询结算导入数据，周期: {} ~ {}", periodStart, periodEnd);
+        Long shopId = ShopContext.requireShopId();
+        log.info("查询结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
 
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SettlementImportData::getPeriodStart, periodStart)
+        queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getPeriodStart, periodStart)
                 .eq(SettlementImportData::getPeriodEnd, periodEnd);
 
         List<SettlementImportData> result = settlementImportDataMapper.selectList(queryWrapper);
@@ -100,7 +103,7 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     }
 
     /**
-     * 删除指定周期的导入数据（用于重新导入）
+     * 删除指定周期的导入数据（仅删除当前店铺数据，用于重新导入）
      *
      * @param periodStart 周期起始日
      * @param periodEnd 周期结束日
@@ -111,10 +114,12 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int deleteByPeriod(LocalDate periodStart, LocalDate periodEnd) {
-        log.info("删除结算导入数据，周期: {} ~ {}", periodStart, periodEnd);
+        Long shopId = ShopContext.requireShopId();
+        log.info("删除结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
 
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SettlementImportData::getPeriodStart, periodStart)
+        queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getPeriodStart, periodStart)
                 .eq(SettlementImportData::getPeriodEnd, periodEnd);
 
         int deleted = settlementImportDataMapper.delete(queryWrapper);

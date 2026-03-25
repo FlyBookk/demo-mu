@@ -5,6 +5,9 @@ import com.musheng.business.document.entity.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentExportService;
 import com.musheng.business.document.service.DocumentPartyConfigService;
+import com.musheng.common.context.ShopContext;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import com.musheng.common.service.SysConfigService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -92,6 +95,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentPo po = documentPoMapper.selectById(poId);
         if (po == null) {
             throw new RuntimeException("PO不存在, poId=" + poId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(po.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
         if (org.springframework.util.StringUtils.hasText(po.getSiteCode())) {
@@ -315,6 +323,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentDn dn = documentDnMapper.selectById(dnId);
         if (dn == null) {
             throw new RuntimeException("DN不存在, dnId=" + dnId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        log.info("[exportDn] dnId={}, 请求shopId={}, 数据库shopId={}", dnId, shopId, dn.getShopId());
+        if (!shopId.equals(dn.getShopId())) {
+            log.warn("[exportDn] 权限校验失败: 请求shopId={} != 数据库shopId={}, dnId={}", shopId, dn.getShopId(), dnId);
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
         if (org.springframework.util.StringUtils.hasText(dn.getSiteCode())) {
@@ -576,6 +591,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentSettlement settlement = documentSettlementMapper.selectById(settlementId);
         if (settlement == null) {
             throw new RuntimeException("结算单不存在, settlementId=" + settlementId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
         // 注意：结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
@@ -877,6 +897,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentInv inv = documentInvMapper.selectById(invId);
         if (inv == null) {
             throw new RuntimeException("INV不存在, invId=" + invId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(inv.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方及银行字段
         // 注意：INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码
@@ -1220,20 +1245,24 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     public void batchExportByPeriod(LocalDate periodStart, LocalDate periodEnd, HttpServletResponse response) {
         log.info("批量导出结算周期文件, periodStart={}, periodEnd={}", periodStart, periodEnd);
 
-        // 查询该周期的结算单
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 查询该周期的结算单（限当前店铺）
         List<DocumentSettlement> settlements = documentSettlementMapper.selectList(
                 new LambdaQueryWrapper<DocumentSettlement>()
+                        .eq(DocumentSettlement::getShopId, shopId)
                         .eq(DocumentSettlement::getPeriodStart, periodStart)
                         .eq(DocumentSettlement::getPeriodEnd, periodEnd));
         if (CollectionUtils.isEmpty(settlements)) {
             throw new RuntimeException("该结算周期无结算单数据");
         }
 
-        // 查询关联的INV
+        // 查询关联的INV（限当前店铺）
         List<Long> settlementIds = settlements.stream()
                 .map(DocumentSettlement::getId).collect(Collectors.toList());
         List<DocumentInv> invList = documentInvMapper.selectList(
                 new LambdaQueryWrapper<DocumentInv>()
+                        .eq(DocumentInv::getShopId, shopId)
                         .in(DocumentInv::getSettlementId, settlementIds));
 
         String zipFileName = formatPeriod(periodStart, periodEnd) + "-结算文件.zip";
@@ -1290,7 +1319,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new RuntimeException("结算单ID列表不能为空");
         }
 
-        List<DocumentSettlement> settlementList = documentSettlementMapper.selectBatchIds(settlementIds);
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 限当前店铺，防止越权下载
+        List<DocumentSettlement> settlementList = documentSettlementMapper.selectList(
+                new LambdaQueryWrapper<DocumentSettlement>()
+                        .eq(DocumentSettlement::getShopId, shopId)
+                        .in(DocumentSettlement::getId, settlementIds));
         if (CollectionUtils.isEmpty(settlementList)) {
             throw new RuntimeException("未找到对应的结算单数据");
         }
@@ -1335,7 +1370,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new RuntimeException("INV ID列表不能为空");
         }
 
-        List<DocumentInv> invList = documentInvMapper.selectBatchIds(invIds);
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 限当前店铺，防止越权下载
+        List<DocumentInv> invList = documentInvMapper.selectList(
+                new LambdaQueryWrapper<DocumentInv>()
+                        .eq(DocumentInv::getShopId, shopId)
+                        .in(DocumentInv::getId, invIds));
         if (CollectionUtils.isEmpty(invList)) {
             throw new RuntimeException("未找到对应的INV数据");
         }
