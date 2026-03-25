@@ -52,11 +52,9 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
      */
     @Override
     public List<String> validateSettlementInvConsistency(Long settlementId, Long invId) {
-        log.info("校验结算单与INV一致性, settlementId={}, invId={}", settlementId, invId);
-        List<String> errors = new ArrayList<>();
-
-        // 校验结算单归属当前店铺，防止越权访问
         Long shopId = ShopContext.requireShopId();
+        log.info("[ValidateConsistency] 当前店铺: shopId={}, settlementId={}, invId={}", shopId, settlementId, invId);
+        List<String> errors = new ArrayList<>();
         DocumentSettlement settlement = documentSettlementMapper.selectById(settlementId);
         if (settlement == null) {
             errors.add("结算单不存在, settlementId=" + settlementId);
@@ -161,15 +159,13 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
      */
     @Override
     public boolean validateInvDate(Long invId) {
-        log.info("校验INV日期, invId={}", invId);
-
+        Long shopId = ShopContext.requireShopId();
+        log.info("[ValidateInvDate] 当前店铺: shopId={}, invId={}", shopId, invId);
         DocumentInv inv = documentInvMapper.selectById(invId);
         if (inv == null) {
             log.warn("INV不存在, invId={}", invId);
             return false;
         }
-        // 校验INV归属当前店铺，防止越权访问
-        Long shopId = ShopContext.requireShopId();
         if (!shopId.equals(inv.getShopId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
@@ -214,15 +210,13 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
      */
     @Override
     public boolean validateSettlementSiteMapping(Long settlementId) {
-        log.info("校验结算单站点映射, settlementId={}", settlementId);
-
+        Long shopId = ShopContext.requireShopId();
+        log.info("[ValidateSiteMapping] 当前店铺: shopId={}, settlementId={}", shopId, settlementId);
         DocumentSettlement settlement = documentSettlementMapper.selectById(settlementId);
         if (settlement == null) {
             log.warn("结算单不存在, settlementId={}", settlementId);
             return false;
         }
-        // 校验结算单归属当前店铺，防止越权访问
-        Long shopId = ShopContext.requireShopId();
         if (!shopId.equals(settlement.getShopId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
@@ -272,15 +266,14 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
      */
     @Override
     public Map<String, List<String>> validateAll(LocalDate periodStart, LocalDate periodEnd) {
-        log.info("执行全量校验, periodStart={}, periodEnd={}", periodStart, periodEnd);
+        Long shopId = ShopContext.requireShopId();
+        log.info("[ValidateAll] 当前店铺: shopId={}, periodStart={}, periodEnd={}", shopId, periodStart, periodEnd);
 
         Map<String, List<String>> result = new LinkedHashMap<>();
         result.put("consistency", new ArrayList<>());
         result.put("invDate", new ArrayList<>());
         result.put("siteMapping", new ArrayList<>());
 
-        // 查询结算周期内当前店铺的所有结算单（shopId 过滤保证数据隔离）
-        Long shopId = ShopContext.requireShopId();
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
                 .eq(DocumentSettlement::getShopId, shopId)
                 .eq(DocumentSettlement::getPeriodStart, periodStart)

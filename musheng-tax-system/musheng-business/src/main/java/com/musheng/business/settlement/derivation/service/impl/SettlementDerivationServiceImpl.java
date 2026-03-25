@@ -51,7 +51,7 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
     @Transactional(rollbackFor = Exception.class)
     public DerivationResultVO derive(DerivationRequest request) {
         Long shopId = ShopContext.requireShopId();
-        log.info("开始推导计算，店铺ID: {}, 季度: {} ~ {}", shopId, request.getStartQuarter(), request.getEndQuarter());
+        log.info("[Derive] 当前店铺: shopId={}, 季度: {} ~ {}", shopId, request.getStartQuarter(), request.getEndQuarter());
 
         LocalDate[] dateRange = parseQuarterRange(request.getStartQuarter(), request.getEndQuarter());
         LocalDate periodStart = dateRange[0];
@@ -112,7 +112,7 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                 insertedCount++;
             }
         }
-        log.info("推导完成: 删除{}条旧数据, 写入{}条新数据, 批次={}", deletedCount, insertedCount, batchId);
+        log.info("[Derive] shopId={} 推导完成: 删除{}条旧数据, 写入{}条新数据, 批次={}", shopId, deletedCount, insertedCount, batchId);
 
         return DerivationResultVO.builder()
                 .startQuarter(request.getStartQuarter()).endQuarter(request.getEndQuarter())
@@ -124,6 +124,9 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
     @Transactional(rollbackFor = Exception.class)
     public DerivationConfirmResultVO confirm(DerivationConfirmRequest request) {
         Long shopId = ShopContext.requireShopId();
+        log.info("[Confirm] 当前店铺: shopId={}, 季度: {} ~ {}, overwrite: {}, 站点数: {}",
+                shopId, request.getStartQuarter(), request.getEndQuarter(),
+                request.isOverwrite(), request.getSiteDataList().size());
         LocalDate[] dateRange = parseQuarterRange(request.getStartQuarter(), request.getEndQuarter());
         String batchId = UUID.randomUUID().toString();
         int deletedCount = 0;
@@ -153,13 +156,16 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                 recordCount++;
             }
         }
+        log.info("[Confirm] shopId={} 确认完成: batchId={}, 写入{}条, 删除{}条旧数据",
+                shopId, batchId, recordCount, deletedCount);
         return DerivationConfirmResultVO.builder()
                 .settlementBatchId(batchId).recordCount(recordCount).deletedCount(deletedCount).build();
     }
 
     @Override
     public boolean checkExistingData(String startQuarter, String endQuarter) {
-        ShopContext.requireShopId();
+        Long shopId = ShopContext.requireShopId();
+        log.info("[CheckExisting] 当前店铺: shopId={}, 季度: {} ~ {}", shopId, startQuarter, endQuarter);
         LocalDate[] dateRange = parseQuarterRange(startQuarter, endQuarter);
         for (String siteCode : SITE_CURRENCY_MAP.keySet()) {
             List<SettlementImportData> existing =

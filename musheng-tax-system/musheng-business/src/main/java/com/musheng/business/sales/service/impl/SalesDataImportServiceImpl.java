@@ -159,8 +159,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
 
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
-        
-        // Create import record
+        log.info("[SalesImport] 当前店铺: shopId={}, 文件: {}, 站点: {}", shopId, file.getOriginalFilename(), siteCode);
         ImportRecord importRecord = new ImportRecord();
         importRecord.setShopId(shopId);
         importRecord.setBatchNo(generateBatchNo());
@@ -311,7 +310,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
         result.put("errors", errors.size() > 10 ? errors.subList(0, 10) : errors);
         result.put("batchNo", importRecord.getBatchNo());
 
-        log.info("Sales data import completed: total={}, success={}, fail={}", totalCount, successCount, failCount);
+        log.info("[SalesImport] shopId={} 导入完成: total={}, success={}, fail={}", shopId, totalCount, successCount, failCount);
 
         return result;
     }
@@ -572,8 +571,8 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
         
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
-        
-        // 生成批次号
+        log.info("[SalesExecuteImport] 当前店铺: shopId={}, 文件: {}, 站点: {}, sourceType: {}",
+                shopId, fileCache.fileName, request.getSiteCode(), request.getSourceType());
         String batchNo = generateBatchNo();
         
         // 创建导入记录
@@ -754,8 +753,8 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             result.setErrors(errors.subList(0, Math.min(10, errors.size())));
         }
         
-        log.info("导入完成: batchNo={}, total={}, success={}, fail={}, skip={}", 
-                batchNo, totalCount, successCount, failCount, skipCount);
+        log.info("[SalesExecuteImport] shopId={} 导入完成: batchNo={}, total={}, success={}, fail={}, skip={}", 
+                shopId, batchNo, totalCount, successCount, failCount, skipCount);
 
         // 同步：将配送数据中 is_own_site=0 的订单对应的销售数据标记为非本站
         syncIsOwnSiteFromShipping(shopId);

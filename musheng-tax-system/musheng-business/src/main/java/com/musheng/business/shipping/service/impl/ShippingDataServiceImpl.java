@@ -113,8 +113,10 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> importData(MultipartFile file) {
-        log.info("Importing shipping data: fileName={}, size={} bytes",
-                file.getOriginalFilename(), file.getSize());
+        // 获取当前店铺ID
+        Long shopId = ShopContext.requireShopId();
+        log.info("[ShippingImport] 当前店铺: shopId={}, 文件: {}, 大小: {}bytes",
+                shopId, file.getOriginalFilename(), file.getSize());
 
         Map<String, Object> result = new HashMap<>();
         List<String> errors = new ArrayList<>();
@@ -122,11 +124,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         int successCount = 0;
         int failCount = 0;
         int duplicateCount = 0;
-        int skipCount = 0;  // 空行等静默跳过的行数
+        int skipCount = 0;
 
-        // 获取当前店铺ID
-        Long shopId = ShopContext.requireShopId();
-        
         // Create import record
         ImportRecord importRecord = new ImportRecord();
         importRecord.setShopId(shopId);  // 设置店铺ID
@@ -297,8 +296,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         result.put("errors", errors);
         result.put("batchNo", importRecord.getBatchNo());
 
-        log.info("Shipping data import completed: total={}, success={}, fail={}, duplicate={}, skip={}",
-                totalCount, successCount, failCount, duplicateCount, skipCount);
+        log.info("[ShippingImport] shopId={} 导入完成: total={}, success={}, fail={}, duplicate={}, skip={}",
+                shopId, totalCount, successCount, failCount, duplicateCount, skipCount);
 
         // 同步：将本次导入中 is_own_site=0 的配送订单对应的销售数据也标记为非本站
         syncSalesDataIsOwnSite(shopId);

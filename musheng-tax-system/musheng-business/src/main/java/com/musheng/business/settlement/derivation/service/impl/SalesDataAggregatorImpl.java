@@ -51,7 +51,7 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
 
     @Override
     public AggregationResult aggregateNetSales(Long shopId, LocalDate periodStart, LocalDate periodEnd) {
-        log.info("开始汇总净销售数量（双路径），店铺: {}, 周期: {} ~ {}", shopId, periodStart, periodEnd);
+        log.info("[Aggregator] 开始汇总净销售数量（双路径），shopId={}, 周期: {} ~ {}", shopId, periodStart, periodEnd);
 
         // === Income 路径：按配送日期匹配周期 ===
         IncomePathResult incomeResult = processIncomePath(shopId, periodStart, periodEnd);

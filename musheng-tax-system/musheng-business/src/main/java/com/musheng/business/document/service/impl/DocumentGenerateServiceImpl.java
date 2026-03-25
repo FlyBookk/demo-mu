@@ -113,8 +113,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
-
-        // 取第一份PO结果进行持久化（一次请求通常生成一份PO）
+        log.info("[GeneratePO] 当前店铺: shopId={}, 货件数量: {}, 站点: {}", shopId, request.getShipmentIds().size(), siteCode);
         PoGenerateResult result = results.get(0);
         DocumentPo po = result.getPo();
         po.setShopId(shopId);
@@ -193,7 +192,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
-        dn.setShopId(shopId);
+        log.info("[GenerateDN] 当前店铺: shopId={}, 锚点日期: {}, 货件数量: {}, 站点: {}",
+                shopId, request.getAnchorDate(), request.getShipmentIds().size(), siteCode);
         dn.setSiteCode(siteCode);
 
         // 持久化DN主表（幂等：重复单据号时返回已有记录）
@@ -263,6 +263,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 持久化所有结算单
         Long shopId = ShopContext.requireShopId();
+        log.info("[GenerateSettlement] 当前店铺: shopId={}, 周期: {} ~ {}, 有效结算单: {}份",
+                shopId, request.getPeriodStart(), request.getPeriodEnd(), results.size());
         List<DocumentSettlement> settlements = new ArrayList<>();
         for (SettlementGenerateResult result : results) {
             DocumentSettlement settlement = result.getSettlement();
@@ -361,6 +363,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 持久化所有INV
         Long shopId = ShopContext.requireShopId();
+        log.info("[GenerateINV] 当前店铺: shopId={}, 结算单数量: {}, 生成INV数量: {}",
+                shopId, settlementIds.size(), invResults.size());
         List<DocumentInv> invoices = new ArrayList<>();
         for (InvGenerateResult invResult : invResults) {
             DocumentInv inv = invResult.getInv();
@@ -481,6 +485,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     private SettlementInput buildSettlementInput(SettlementGenerateRequest request) {
         Long shopId = ShopContext.requireShopId();
+        log.info("[BuildSettlementInput] 当前店铺: shopId={}, 周期: {} ~ {}, 站点: {}",
+                shopId, request.getPeriodStart(), request.getPeriodEnd(), request.getSiteCodes());
 
         LambdaQueryWrapper<SettlementImportData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SettlementImportData::getShopId, shopId)
