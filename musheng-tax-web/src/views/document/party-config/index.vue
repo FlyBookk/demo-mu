@@ -90,10 +90,22 @@ import {
   copyPartyConfig
 } from '@/api/documentPartyConfig'
 import type { DocumentPartyConfig } from '@/api/documentPartyConfig'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 import PartyConfigForm from './PartyConfigForm.vue'
 
-// 支持的站点列表
-const SITE_CODES = ['US', 'CA', 'UK', 'EU', 'JP', 'AU', 'MX', 'IN', 'SG', 'AE']
+// 从 t_marketplace 动态获取站点列表
+const allSiteCodes = ref<string[]>([])
+
+async function fetchAllSiteCodes() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    allSiteCodes.value = list.map(m => m.siteCode)
+  } catch {
+    allSiteCodes.value = []
+  }
+}
 
 const list = ref<DocumentPartyConfig[]>([])
 const loading = ref(false)
@@ -114,9 +126,9 @@ const copySource = ref<DocumentPartyConfig | null>(null)
 const copyTargetSiteCode = ref<string>('')
 const copying = ref(false)
 
-/** 复制目标站点选项（排除来源站点） */
+/** 复制目标站点选项（排除来源站点，从 t_marketplace 动态获取） */
 const copyTargetOptions = computed(() =>
-  SITE_CODES
+  allSiteCodes.value
     .filter(code => code !== copySource.value?.siteCode)
     .map(code => ({ label: code, value: code }))
 )
@@ -195,7 +207,10 @@ async function confirmCopy() {
   }
 }
 
-onMounted(fetchList)
+onMounted(() => {
+  fetchList()
+  fetchAllSiteCodes()
+})
 </script>
 
 <style lang="scss" scoped>

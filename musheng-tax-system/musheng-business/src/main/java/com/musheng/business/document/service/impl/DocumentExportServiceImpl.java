@@ -5,6 +5,8 @@ import com.musheng.business.document.entity.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentExportService;
 import com.musheng.business.document.service.DocumentPartyConfigService;
+import com.musheng.config.marketplace.entity.Marketplace;
+import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 import com.musheng.common.context.ShopContext;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
@@ -62,6 +64,26 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     private SysConfigService sysConfigService;
     @Autowired
     private DocumentPartyConfigService documentPartyConfigService;
+    @Autowired
+    private MarketplaceMapper marketplaceMapper;
+
+    /**
+     * 根据货币代码动态查询对应的站点代码（从 t_marketplace 获取，不依赖枚举）
+     *
+     * @param currencyCode 货币代码（如 USD/GBP/CAD/EUR）
+     * @return 站点代码（如 US/UK/CA/EU），未找到时返回原值
+     */
+    private String resolveSiteCodeByCurrency(String currencyCode) {
+        if (!org.springframework.util.StringUtils.hasText(currencyCode)) {
+            return currencyCode;
+        }
+        Marketplace marketplace = marketplaceMapper.selectOne(
+                new LambdaQueryWrapper<Marketplace>()
+                        .eq(Marketplace::getCurrencyCode, currencyCode)
+                        .eq(Marketplace::getStatus, 1)
+                        .last("LIMIT 1"));
+        return marketplace != null ? marketplace.getSiteCode() : currencyCode;
+    }
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy/M/d");
 
@@ -598,12 +620,10 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
-        // 注意：结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
+        // 结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），通过 t_marketplace 动态转换为站点代码
         if (org.springframework.util.StringUtils.hasText(settlement.getSiteCode())) {
             try {
-                com.musheng.business.document.enums.SiteCode siteEnum =
-                        com.musheng.business.document.enums.SiteCode.fromCurrency(settlement.getSiteCode());
-                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : settlement.getSiteCode();
+                String resolvedSiteCode = resolveSiteCodeByCurrency(settlement.getSiteCode());
                 DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
                 settlement.setBuyerName(party.getBuyerName());
                 settlement.setBuyerAddress(party.getBuyerAddress());
@@ -904,12 +924,10 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方及银行字段
-        // 注意：INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码
+        // INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），通过 t_marketplace 动态转换为站点代码
         if (org.springframework.util.StringUtils.hasText(inv.getSiteCode())) {
             try {
-                com.musheng.business.document.enums.SiteCode siteEnum =
-                        com.musheng.business.document.enums.SiteCode.fromCurrency(inv.getSiteCode());
-                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : inv.getSiteCode();
+                String resolvedSiteCode = resolveSiteCodeByCurrency(inv.getSiteCode());
                 DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
                 inv.setSellerName(party.getSellerName());
                 inv.setSellerAddress(party.getSellerAddress());

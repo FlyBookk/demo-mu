@@ -2,10 +2,11 @@ package com.musheng.business.document.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.musheng.business.document.entity.*;
-import com.musheng.business.document.enums.SiteCode;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentValidationService;
 import com.musheng.business.document.utils.WorkingDayCalculator;
+import com.musheng.config.marketplace.entity.Marketplace;
+import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 import com.musheng.common.context.ShopContext;
 import com.musheng.common.exception.BusinessException;
 import com.musheng.common.result.ErrorCode;
@@ -38,6 +39,26 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
     private DocumentInvMapper documentInvMapper;
     @Autowired
     private DocumentInvItemMapper documentInvItemMapper;
+    @Autowired
+    private MarketplaceMapper marketplaceMapper;
+
+    /**
+     * 根据站点代码动态查询对应的货币代码（从 t_marketplace 获取）
+     *
+     * @param siteCode 站点代码（如 US/UK/DE）
+     * @return 货币代码（如 USD/GBP/EUR），未找到返回 null
+     */
+    private String resolveCurrencyBySiteCode(String siteCode) {
+        if (!org.springframework.util.StringUtils.hasText(siteCode)) {
+            return null;
+        }
+        Marketplace marketplace = marketplaceMapper.selectOne(
+                new LambdaQueryWrapper<Marketplace>()
+                        .eq(Marketplace::getSiteCode, siteCode)
+                        .eq(Marketplace::getStatus, 1)
+                        .last("LIMIT 1"));
+        return marketplace != null ? marketplace.getCurrencyCode() : null;
+    }
 
     /**
      * 校验结算单与INV的数据一致性
@@ -231,22 +252,25 @@ public class DocumentValidationServiceImpl implements DocumentValidationService 
      * @return 映射校验通过返回 true
      */
     private boolean doValidateSiteMapping(DocumentSettlement settlement) {
-        String siteSequence = settlement.getSiteSequence();
-        String siteCode = settlement.getSiteCode();
+        String siteSequence = settlement.getSiteSequence(); // 现在存的是站点代码（US/UK/DE...）
+        String siteCode = settlement.getSiteCode();         // 同上，两者应一致
 
-        SiteCode expectedSite = SiteCode.fromSequence(siteSequence);
-        if (expectedSite == null) {
-            log.warn("未知的站点序号, siteSequence={}", siteSequence);
+        // 通过 t_marketplace 动态查询站点对应的货币代码
+        String expectedCurrency = resolveCurrencyBySiteCode(
+                org.springframework.util.StringUtils.hasText(siteSequence) ? siteSequence : siteCode);
+        if (expectedCurrency == null) {
+            log.warn("t_marketplace 中未找到站点配置, siteCode={}", siteCode);
             return false;
         }
 
-        boolean valid = expectedSite.getCurrency().equals(siteCode);
+        // 结算单 siteCode 字段存的是货币代码（USD/GBP/EUR...），与 t_marketplace 的 currencyCode 比对
+        boolean valid = expectedCurrency.equalsIgnoreCase(siteCode);
 
         if (valid) {
-            log.info("站点映射校验通过, settlementId={}, {}→{}", settlement.getId(), siteSequence, siteCode);
+            log.info("站点映射校验通过, settlementId={}, siteCode={}, currency={}", settlement.getId(), siteSequence, siteCode);
         } else {
-            log.warn("站点映射校验失败, settlementId={}, 序号={}, 期望货币={}, 实际货币={}",
-                    settlement.getId(), siteSequence, expectedSite.getCurrency(), siteCode);
+            log.warn("站点映射校验失败, settlementId={}, siteCode={}, 期望货币={}, 实际={}",
+                    settlement.getId(), siteSequence, expectedCurrency, siteCode);
         }
 
         return valid;
