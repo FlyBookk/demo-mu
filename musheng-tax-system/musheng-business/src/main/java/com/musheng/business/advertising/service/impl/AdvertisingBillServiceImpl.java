@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdvertisingBillServiceImpl implements AdvertisingBillService {
 
-    private static final Set<String> VALID_CURRENCIES = Set.of("USD", "CAD", "GBP", "EUR");
+    private final com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
 
     private final AdvertisingBillMapper advertisingBillMapper;
     private final AdvertisingBillItemMapper advertisingBillItemMapper;
@@ -230,9 +230,7 @@ public class AdvertisingBillServiceImpl implements AdvertisingBillService {
         if (data.getBillingStartDate().isAfter(data.getBillingEndDate())) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "账单开始日期不能晚于结束日期");
         }
-        if (!VALID_CURRENCIES.contains(data.getCurrency())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "不支持的币种: " + data.getCurrency());
-        }
+        marketplaceConfigService.validateCurrency(data.getCurrency());
     }
 
     private AdvertisingBill buildBill(AdvertisingDataImportRequest r, Long shopId, String importBatchId, Long userId) {
@@ -296,13 +294,7 @@ public class AdvertisingBillServiceImpl implements AdvertisingBillService {
 
     private String inferSiteCode(String storeName, String siteCode) {
         if (StringUtils.hasText(siteCode)) return siteCode;
-        if (!StringUtils.hasText(storeName)) return null;
-        String s = storeName.toUpperCase();
-        if (s.contains("UK") || s.contains("英国")) return "UK";
-        if (s.contains("US") || s.contains("美国")) return "US";
-        if (s.contains("CA") || s.contains("加拿大")) return "CA";
-        if (s.contains("DE") || s.contains("德国")) return "DE";
-        return null;
+        return marketplaceConfigService.inferSiteCodeFromStoreName(storeName);
     }
 
     @Override

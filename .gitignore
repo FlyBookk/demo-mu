@@ -13,7 +13,7 @@ deploy-package/
 .kiro/
 .serena/
 .cursor/
-logs/
-node_modules/
-dist.zip
-dist/
+logs
+dist
+node_modules
+musheng-tax-web/dist.zip

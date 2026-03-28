@@ -92,6 +92,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     private final ImportConfig importConfig;
     private final MarketplaceService marketplaceService;
     private final ShippingDataMapper shippingDataMapper;
+    private final SiteCodeResolver siteCodeResolver;
     
     /** 亚马逊标准订单号正则：XXX-XXXXXXX-XXXXXXX，如 205-0344885-9757952 */
     private static final Pattern ORDER_ID_PATTERN_LOOSE = Pattern.compile("[A-Z0-9]{3}-\\d{7}-\\d{7}");
@@ -159,8 +160,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
 
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
-        
-        // Create import record
+        log.info("[SalesImport] 当前店铺: shopId={}, 文件: {}, 站点: {}", shopId, file.getOriginalFilename(), siteCode);
         ImportRecord importRecord = new ImportRecord();
         importRecord.setShopId(shopId);
         importRecord.setBatchNo(generateBatchNo());
@@ -311,7 +311,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
         result.put("errors", errors.size() > 10 ? errors.subList(0, 10) : errors);
         result.put("batchNo", importRecord.getBatchNo());
 
-        log.info("Sales data import completed: total={}, success={}, fail={}", totalCount, successCount, failCount);
+        log.info("[SalesImport] shopId={} 导入完成: total={}, success={}, fail={}", shopId, totalCount, successCount, failCount);
 
         return result;
     }
@@ -385,17 +385,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
                     }
                 }
                 
-                // 从数据中自动识别站点
-                if (headerRow < lines.length) {
-                    for (int i = headerRow; i < Math.min(headerRow + 10, lines.length); i++) {
-                        String line = lines[i];
-                        String detected = SiteCodeResolver.detectSiteFromLine(line);
-                        if (detected != null) {
-                            detectedSiteCode = detected;
-                            break;
-                        }
-                    }
-                }
+                // 从数据中自动识别站点（已移除，直接使用用户传入的站点）
                 
                 totalRows = totalRows - headerRow;
             } else {
@@ -461,15 +451,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
         }
         
-        // 原始数据模式：校验模板站点与文件中识别的站点一致，避免导入脏数据
-        if (request.getSourceType() == SalesSourceType.ORIGINAL
-                && StringUtils.hasText(template.getSiteCode())
-                && StringUtils.hasText(fileCache.detectedSiteCode)
-                && !template.getSiteCode().equalsIgnoreCase(fileCache.detectedSiteCode)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR,
-                    String.format("所选模板站点(%s)与文件中识别到的站点(%s)不一致，请选择正确的模板或上传对应站点的数据文件",
-                            template.getSiteCode(), fileCache.detectedSiteCode));
-        }
+        // 原始数据模式：站点校验已移除，直接使用用户传入的站点
         
         try {
             // 解析映射配置
@@ -560,20 +542,12 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
         }
         
-        // 原始数据模式：校验模板站点与文件中识别的站点一致，避免导入脏数据
-        if (request.getSourceType() == SalesSourceType.ORIGINAL
-                && StringUtils.hasText(template.getSiteCode())
-                && StringUtils.hasText(fileCache.detectedSiteCode)
-                && !template.getSiteCode().equalsIgnoreCase(fileCache.detectedSiteCode)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR,
-                    String.format("所选模板站点(%s)与文件中识别到的站点(%s)不一致，请选择正确的模板或上传对应站点的数据文件",
-                            template.getSiteCode(), fileCache.detectedSiteCode));
-        }
+        // 原始数据模式：站点校验已移除，直接使用用户传入的站点
         
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
-        
-        // 生成批次号
+        log.info("[SalesExecuteImport] 当前店铺: shopId={}, 文件: {}, 站点: {}, sourceType: {}",
+                shopId, fileCache.fileName, request.getSiteCode(), request.getSourceType());
         String batchNo = generateBatchNo();
         
         // 创建导入记录
@@ -754,8 +728,8 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             result.setErrors(errors.subList(0, Math.min(10, errors.size())));
         }
         
-        log.info("导入完成: batchNo={}, total={}, success={}, fail={}, skip={}", 
-                batchNo, totalCount, successCount, failCount, skipCount);
+        log.info("[SalesExecuteImport] shopId={} 导入完成: batchNo={}, total={}, success={}, fail={}, skip={}", 
+                shopId, batchNo, totalCount, successCount, failCount, skipCount);
 
         // 同步：将配送数据中 is_own_site=0 的订单对应的销售数据标记为非本站
         syncIsOwnSiteFromShipping(shopId);

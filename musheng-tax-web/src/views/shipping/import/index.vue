@@ -117,9 +117,42 @@
           <a-descriptions-item v-if="(importResult.skipRows ?? 0) > 0" label="跳过（空行）">
             <span class="secondary-text">{{ importResult.skipRows }}</span>
           </a-descriptions-item>
+          <a-descriptions-item v-if="(importResult.unmatchedCount ?? 0) > 0" label="站点未匹配（已跳过）">
+            <span class="warning-text">{{ importResult.unmatchedCount }}</span>
+          </a-descriptions-item>
         </a-descriptions>
+
+        <!-- 未匹配站点详情 -->
+        <a-alert
+          v-if="(importResult.unmatchedCount ?? 0) > 0"
+          type="warning"
+          show-icon
+          style="margin-top: 16px"
+          :message="`${importResult.unmatchedCount} 条记录的销售渠道未匹配到站点，已跳过`"
+        >
+          <template #description>
+            <div>以下为部分示例，请检查数据文件中的销售渠道是否已在【站点管理】中配置：</div>
+            <ul style="margin: 8px 0 0 0; padding-left: 20px">
+              <li v-for="(sample, i) in importResult.unmatchedSamples" :key="i">{{ sample }}</li>
+            </ul>
+          </template>
+        </a-alert>
       </div>
     </a-card>
+
+    <!-- 未匹配超限弹窗 -->
+    <a-modal
+      v-model:open="unmatchedModalVisible"
+      title="导入失败：站点未匹配数量超限"
+      :footer="null"
+      width="600px"
+    >
+      <a-result status="error" title="无法导入" :sub-title="unmatchedModalMsg">
+        <template #extra>
+          <a-button type="primary" @click="unmatchedModalVisible = false">我知道了</a-button>
+        </template>
+      </a-result>
+    </a-modal>
   </div>
 </template>
 
@@ -152,8 +185,13 @@ const uploadedFiles = ref<File[]>([])
 
 // ============= 导入相关 =============
 const importing = ref(false)
-const importResult = ref<(ImportRecord & { totalFiles?: number; successFiles?: number; failFiles?: number }) | null>(null)
+const importResult = ref<(ImportRecord & {
+  totalFiles?: number; successFiles?: number; failFiles?: number;
+  unmatchedCount?: number; unmatchedSamples?: string[]
+}) | null>(null)
 const importConfirmRef = ref<InstanceType<typeof ImportConfirmModal> | null>(null)
+const unmatchedModalVisible = ref(false)
+const unmatchedModalMsg = ref('')
 
 // ============= 方法 =============
 function formatFileSize(bytes: number): string {
@@ -232,6 +270,8 @@ async function doExecuteImport() {
         failedRows: d.failCount as number,
         duplicateRows: (d.duplicateCount as number) || 0,
         skipRows: (d.skipCount as number) || 0,
+        unmatchedCount: (d.unmatchedCount as number) || 0,
+        unmatchedSamples: (d.unmatchedSamples as string[]) || [],
         totalFiles: 1,
         successFiles: 1,
         failFiles: 0,
@@ -247,6 +287,8 @@ async function doExecuteImport() {
         failedRows: d.failCount as number,
         duplicateRows: (d.duplicateCount as number) || 0,
         skipRows: (d.skipCount as number) || 0,
+        unmatchedCount: (d.unmatchedCount as number) || 0,
+        unmatchedSamples: (d.unmatchedSamples as string[]) || [],
         totalFiles: d.totalFiles as number,
         successFiles: d.successFiles as number,
         failFiles: d.failFiles as number,
@@ -259,8 +301,16 @@ async function doExecuteImport() {
     message.success('导入完成')
   } catch (error: any) {
     console.error('导入失败:', error)
-    message.error(error.message || '导入失败')
     importConfirmRef.value?.setLoading(false)
+    // 未匹配超限：弹窗提示，不跳转结果页
+    const errMsg: string = error?.response?.data?.message || error?.message || '导入失败'
+    if (errMsg.includes('未能匹配到站点') || errMsg.includes('超过10条限制')) {
+      unmatchedModalMsg.value = errMsg
+      unmatchedModalVisible.value = true
+      importConfirmRef.value?.hide()
+    } else {
+      message.error(errMsg)
+    }
   } finally {
     importing.value = false
   }
@@ -300,6 +350,9 @@ function getResultSubTitle(): string {
   }
   if (importResult.value.skipRows && importResult.value.skipRows > 0) {
     parts.push(`跳过空行 ${importResult.value.skipRows} 条`)
+  }
+  if (importResult.value.unmatchedCount && importResult.value.unmatchedCount > 0) {
+    parts.push(`站点未匹配跳过 ${importResult.value.unmatchedCount} 条`)
   }
   return parts.join('，')
 }

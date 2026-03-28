@@ -12,6 +12,8 @@ import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentQueryService;
 import com.musheng.business.document.vo.*;
 import com.musheng.common.context.ShopContext;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import com.musheng.common.result.PageResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -104,6 +107,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("PO不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(po.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         PoVO vo = BeanUtil.toBean(po, PoVO.class);
 
@@ -137,6 +145,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("DN不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(dn.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         DnVO vo = BeanUtil.toBean(dn, DnVO.class);
 
@@ -168,6 +181,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
         if (settlement == null) {
             log.warn("结算单不存在, id={}", id);
             return null;
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
 
         SettlementVO vo = BeanUtil.toBean(settlement, SettlementVO.class);
@@ -201,6 +219,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
             log.warn("INV不存在, id={}", id);
             return null;
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(inv.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         InvVO vo = BeanUtil.toBean(inv, InvVO.class);
 
@@ -230,9 +253,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
     public List<DocumentListVO> listBySettlementPeriod(LocalDate periodStart, LocalDate periodEnd) {
         log.info("按结算周期查询关联单据, periodStart={}, periodEnd={}", periodStart, periodEnd);
         List<DocumentListVO> result = new ArrayList<>();
+        Long shopId = ShopContext.requireShopId();
 
-        // 查询结算单
+        // 查询结算单（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .eq(DocumentSettlement::getPeriodStart, periodStart)
                 .eq(DocumentSettlement::getPeriodEnd, periodEnd);
         List<DocumentSettlement> settlements = documentSettlementMapper.selectList(settlementQuery);
@@ -247,6 +272,7 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                     .sellerName(s.getSellerName())
                     .totalQuantity(s.getTotalQuantity())
                     .totalAmount(s.getTotalAmount())
+                    .createTime(s.getCreateTime())
                     .build());
         }
 
@@ -269,6 +295,7 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                         .sellerName(inv.getSellerName())
                         .totalQuantity(inv.getTotalQuantity())
                         .totalAmount(inv.getTotalAmount())
+                        .createTime(inv.getCreateTime())
                         .build());
             }
         }
@@ -289,17 +316,20 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
         log.info("查询货件关联关系, shipmentNo={}", shipmentNo);
         Map<String, Object> result = new HashMap<>();
         result.put("shipmentNo", shipmentNo);
+        Long shopId = ShopContext.requireShopId();
 
-        // 查询PO明细
+        // 查询PO明细（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentPoItem> poItemQuery = new LambdaQueryWrapper<DocumentPoItem>()
+                .eq(DocumentPoItem::getShopId, shopId)
                 .eq(DocumentPoItem::getShipmentNo, shipmentNo);
         List<DocumentPoItem> poItems = documentPoItemMapper.selectList(poItemQuery);
         result.put("poItems", poItems.stream()
                 .map(item -> BeanUtil.toBean(item, PoItemVO.class))
                 .collect(Collectors.toList()));
 
-        // 查询DN明细
+        // 查询DN明细（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentDnItem> dnItemQuery = new LambdaQueryWrapper<DocumentDnItem>()
+                .eq(DocumentDnItem::getShopId, shopId)
                 .eq(DocumentDnItem::getShipmentNo, shipmentNo);
         List<DocumentDnItem> dnItems = documentDnItemMapper.selectList(dnItemQuery);
         result.put("dnItems", dnItems.stream()
@@ -427,15 +457,23 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      */
     private PageResult<DocumentListVO> queryAllTypesList(DocumentQueryRequest request) {
         List<DocumentListVO> allRecords = new ArrayList<>();
+        Long shopId = ShopContext.requireShopId();
 
         // 查询PO
         LambdaQueryWrapper<DocumentPo> poQuery = new LambdaQueryWrapper<DocumentPo>()
+                .eq(DocumentPo::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentPo::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentPo::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentPo::getPoDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentPo::getPoDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentPo::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentPo::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentPo::getPoDate);
         List<DocumentPo> poList = documentPoMapper.selectList(poQuery);
         for (DocumentPo po : poList) {
@@ -444,21 +482,30 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                     .documentType(DocumentType.PO.getCode())
                     .documentNo(po.getDocumentNo())
                     .documentDate(po.getPoDate())
+                    .siteCode(po.getSiteCode())
                     .buyerName(po.getBuyerName())
                     .sellerName(po.getSellerName())
                     .totalQuantity(po.getTotalQuantity())
                     .totalAmount(null)
+                    .createTime(po.getCreateTime())
                     .build());
         }
 
         // 查询DN
         LambdaQueryWrapper<DocumentDn> dnQuery = new LambdaQueryWrapper<DocumentDn>()
+                .eq(DocumentDn::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentDn::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentDn::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentDn::getDnDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentDn::getDnDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentDn::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentDn::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentDn::getDnDate);
         List<DocumentDn> dnList = documentDnMapper.selectList(dnQuery);
         for (DocumentDn dn : dnList) {
@@ -467,21 +514,30 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                     .documentType(DocumentType.DN.getCode())
                     .documentNo(dn.getDocumentNo())
                     .documentDate(dn.getDnDate())
+                    .siteCode(dn.getSiteCode())
                     .buyerName(dn.getCustomerName())
                     .sellerName(dn.getSupplierName())
                     .totalQuantity(dn.getTotalQuantity())
                     .totalAmount(null)
+                    .createTime(dn.getCreateTime())
                     .build());
         }
 
         // 查询结算单
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentSettlement::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentSettlement::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentSettlement::getSettlementDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentSettlement::getSettlementDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentSettlement::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentSettlement::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentSettlement::getSettlementDate);
         List<DocumentSettlement> settlementList = documentSettlementMapper.selectList(settlementQuery);
         for (DocumentSettlement s : settlementList) {
@@ -490,21 +546,30 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                     .documentType(DocumentType.SETTLEMENT.getCode())
                     .documentNo(s.getDocumentNo())
                     .documentDate(s.getSettlementDate())
+                    .siteCode(s.getSiteCode())
                     .buyerName(s.getBuyerName())
                     .sellerName(s.getSellerName())
                     .totalQuantity(s.getTotalQuantity())
                     .totalAmount(s.getTotalAmount())
+                    .createTime(s.getCreateTime())
                     .build());
         }
 
         // 查询INV
         LambdaQueryWrapper<DocumentInv> invQuery = new LambdaQueryWrapper<DocumentInv>()
+                .eq(DocumentInv::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentInv::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentInv::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentInv::getInvDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentInv::getInvDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentInv::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentInv::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentInv::getInvDate);
         List<DocumentInv> invList = documentInvMapper.selectList(invQuery);
         for (DocumentInv inv : invList) {
@@ -513,10 +578,12 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                     .documentType(DocumentType.INV.getCode())
                     .documentNo(inv.getDocumentNo())
                     .documentDate(inv.getInvDate())
+                    .siteCode(inv.getSiteCode())
                     .buyerName(inv.getBuyerName())
                     .sellerName(inv.getSellerName())
                     .totalQuantity(inv.getTotalQuantity())
                     .totalAmount(inv.getTotalAmount())
+                    .createTime(inv.getCreateTime())
                     .build());
         }
 
@@ -549,14 +616,22 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryPoList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentPo> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentPo> query = new LambdaQueryWrapper<DocumentPo>()
+                .eq(DocumentPo::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentPo::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentPo::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentPo::getPoDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentPo::getPoDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentPo::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentPo::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentPo::getPoDate);
 
         Page<DocumentPo> pageResult = documentPoMapper.selectPage(page, query);
@@ -567,10 +642,12 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                         .documentType(DocumentType.PO.getCode())
                         .documentNo(po.getDocumentNo())
                         .documentDate(po.getPoDate())
+                        .siteCode(po.getSiteCode())
                         .buyerName(po.getBuyerName())
                         .sellerName(po.getSellerName())
                         .totalQuantity(po.getTotalQuantity())
                         .totalAmount(null)
+                        .createTime(po.getCreateTime())
                         .build())
                 .collect(Collectors.toList());
 
@@ -585,14 +662,22 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryDnList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentDn> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentDn> query = new LambdaQueryWrapper<DocumentDn>()
+                .eq(DocumentDn::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentDn::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentDn::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentDn::getDnDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentDn::getDnDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentDn::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentDn::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentDn::getDnDate);
 
         Page<DocumentDn> pageResult = documentDnMapper.selectPage(page, query);
@@ -603,10 +688,12 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                         .documentType(DocumentType.DN.getCode())
                         .documentNo(dn.getDocumentNo())
                         .documentDate(dn.getDnDate())
+                        .siteCode(dn.getSiteCode())
                         .buyerName(dn.getCustomerName())
                         .sellerName(dn.getSupplierName())
                         .totalQuantity(dn.getTotalQuantity())
                         .totalAmount(null)
+                        .createTime(dn.getCreateTime())
                         .build())
                 .collect(Collectors.toList());
 
@@ -621,14 +708,22 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> querySettlementList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentSettlement> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentSettlement> query = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentSettlement::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentSettlement::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentSettlement::getSettlementDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentSettlement::getSettlementDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentSettlement::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentSettlement::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentSettlement::getSettlementDate);
 
         Page<DocumentSettlement> pageResult = documentSettlementMapper.selectPage(page, query);
@@ -639,10 +734,12 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                         .documentType(DocumentType.SETTLEMENT.getCode())
                         .documentNo(s.getDocumentNo())
                         .documentDate(s.getSettlementDate())
+                        .siteCode(s.getSiteCode())
                         .buyerName(s.getBuyerName())
                         .sellerName(s.getSellerName())
                         .totalQuantity(s.getTotalQuantity())
                         .totalAmount(s.getTotalAmount())
+                        .createTime(s.getCreateTime())
                         .build())
                 .collect(Collectors.toList());
 
@@ -657,14 +754,22 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
      * @return 分页结果
      */
     private PageResult<DocumentListVO> queryInvList(DocumentQueryRequest request) {
+        Long shopId = ShopContext.requireShopId();
         Page<DocumentInv> page = new Page<>(request.getPageNum(), request.getPageSize());
         LambdaQueryWrapper<DocumentInv> query = new LambdaQueryWrapper<DocumentInv>()
+                .eq(DocumentInv::getShopId, shopId)
                 .like(StringUtils.hasText(request.getDocumentNo()),
                         DocumentInv::getDocumentNo, request.getDocumentNo())
+                .eq(StringUtils.hasText(request.getSiteCode()),
+                        DocumentInv::getSiteCode, request.getSiteCode())
                 .ge(request.getStartDate() != null,
                         DocumentInv::getInvDate, request.getStartDate())
                 .le(request.getEndDate() != null,
                         DocumentInv::getInvDate, request.getEndDate())
+                .ge(request.getCreateTimeStart() != null,
+                        DocumentInv::getCreateTime, request.getCreateTimeStart())
+                .le(request.getCreateTimeEnd() != null,
+                        DocumentInv::getCreateTime, request.getCreateTimeEnd())
                 .orderByDesc(DocumentInv::getInvDate);
 
         Page<DocumentInv> pageResult = documentInvMapper.selectPage(page, query);
@@ -675,10 +780,12 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
                         .documentType(DocumentType.INV.getCode())
                         .documentNo(inv.getDocumentNo())
                         .documentDate(inv.getInvDate())
+                        .siteCode(inv.getSiteCode())
                         .buyerName(inv.getBuyerName())
                         .sellerName(inv.getSellerName())
                         .totalQuantity(inv.getTotalQuantity())
                         .totalAmount(inv.getTotalAmount())
+                        .createTime(inv.getCreateTime())
                         .build())
                 .collect(Collectors.toList());
 

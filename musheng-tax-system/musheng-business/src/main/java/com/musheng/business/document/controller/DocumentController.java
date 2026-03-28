@@ -28,6 +28,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -60,30 +61,30 @@ public class DocumentController {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    @Operation(summary = "生成PO采购订单", description = "根据选定的FBA货件生成PO采购订单")
+    @Operation(summary = "生成PO采购订单", description = "根据选定的FBA货件生成PO采购订单（按日期分组，可能生成多份）")
     @PostMapping("/po/generate")
-    public Result<DocumentPo> generatePo(
+    public Result<List<DocumentPo>> generatePo(
             @Valid @RequestBody PoGenerateRequest request) {
-        log.info("生成PO采购订单，货件数量: {}", request.getShipmentIds().size());
-        DocumentPo po = documentGenerateService.generatePo(request);
-        return Result.success(po);
+        log.info("生成PO采购订单，站点: {}，货件数量: {}", request.getSiteCode(), request.getShipmentIds().size());
+        List<DocumentPo> pos = documentGenerateService.generatePo(request);
+        return Result.success(pos);
     }
 
     /**
      * 生成DN送货单
      *
      * @param request DN生成请求
-     * @return 生成的DN实体
+     * @return 生成的DN实体列表
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    @Operation(summary = "生成DN送货单", description = "根据DN周期批量生成送货单")
+    @Operation(summary = "生成DN送货单", description = "根据DN周期批量生成送货单（按日期分组，可能生成多份）")
     @PostMapping("/dn/generate")
-    public Result<DocumentDn> generateDn(
+    public Result<List<DocumentDn>> generateDn(
             @Valid @RequestBody DnGenerateRequest request) {
-        log.info("生成DN送货单，锚点日期: {}，货件数量: {}", request.getAnchorDate(), request.getShipmentIds().size());
-        DocumentDn dn = documentGenerateService.generateDn(request);
-        return Result.success(dn);
+        log.info("生成DN送货单，站点: {}，锚点日期: {}，货件数量: {}", request.getSiteCode(), request.getAnchorDate(), request.getShipmentIds().size());
+        List<DocumentDn> dns = documentGenerateService.generateDn(request);
+        return Result.success(dns);
     }
 
     /**
@@ -129,19 +130,25 @@ public class DocumentController {
      * @param documentNo 单据编号
      * @param startDate 开始日期
      * @param endDate 结束日期
+     * @param siteCode 站点代码
+     * @param createTimeStart 导出时间起始
+     * @param createTimeEnd 导出时间结束
      * @param pageNum 页码
      * @param pageSize 每页条数
      * @return 分页结果
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    @Operation(summary = "单据列表", description = "分页查询单据列表，支持按类型/编号/日期范围筛选")
+    @Operation(summary = "单据列表", description = "分页查询单据列表，支持按类型/编号/日期范围/站点/导出时间筛选")
     @GetMapping("/list")
     public Result<PageResult<DocumentListVO>> listDocuments(
             @Parameter(description = "单据类型（PO/DN/SETTLEMENT/INV）") @RequestParam(required = false) String documentType,
             @Parameter(description = "单据编号") @RequestParam(required = false) String documentNo,
             @Parameter(description = "开始日期") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @Parameter(description = "结束日期") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "站点代码（US/CA/UK/EU）") @RequestParam(required = false) String siteCode,
+            @Parameter(description = "导出时间起始") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeStart,
+            @Parameter(description = "导出时间结束") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime createTimeEnd,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") Integer pageNum,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") Integer pageSize) {
         DocumentQueryRequest request = DocumentQueryRequest.builder()
@@ -149,6 +156,9 @@ public class DocumentController {
                 .documentNo(documentNo)
                 .startDate(startDate)
                 .endDate(endDate)
+                .siteCode(siteCode)
+                .createTimeStart(createTimeStart)
+                .createTimeEnd(createTimeEnd)
                 .pageNum(pageNum)
                 .pageSize(pageSize)
                 .build();
@@ -428,5 +438,39 @@ public class DocumentController {
             HttpServletResponse response) {
         log.info("批量导出INV，数量: {}", invIds.size());
         documentExportService.batchExportInv(invIds, response);
+    }
+
+    /**
+     * 批量导出PO为ZIP
+     *
+     * @param poIds PO主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Operation(summary = "批量导出PO为ZIP", description = "将多份PO打包为ZIP文件下载")
+    @PostMapping("/export/po/batch")
+    public void batchExportPo(
+            @RequestBody List<Long> poIds,
+            HttpServletResponse response) {
+        log.info("批量导出PO，数量: {}", poIds.size());
+        documentExportService.batchExportPo(poIds, response);
+    }
+
+    /**
+     * 批量导出DN为ZIP
+     *
+     * @param dnIds DN主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Operation(summary = "批量导出DN为ZIP", description = "将多份DN打包为ZIP文件下载")
+    @PostMapping("/export/dn/batch")
+    public void batchExportDn(
+            @RequestBody List<Long> dnIds,
+            HttpServletResponse response) {
+        log.info("批量导出DN，数量: {}", dnIds.size());
+        documentExportService.batchExportDn(dnIds, response);
     }
 }

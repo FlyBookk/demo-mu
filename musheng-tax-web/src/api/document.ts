@@ -112,6 +112,18 @@ export function batchExportInvZip(invIds: number[]) {
   return request.downloadAndSavePost(`${BASE_URL}/export/inv/batch`, filename, invIds)
 }
 
+/** 批量导出PO为ZIP */
+export function batchExportPoZip(poIds: number[]) {
+  const filename = `PO采购订单_${poIds.length}份.zip`
+  return request.downloadAndSavePost(`${BASE_URL}/export/po/batch`, filename, poIds)
+}
+
+/** 批量导出DN为ZIP */
+export function batchExportDnZip(dnIds: number[]) {
+  const filename = `DN送货单_${dnIds.length}份.zip`
+  return request.downloadAndSavePost(`${BASE_URL}/export/dn/batch`, filename, dnIds)
+}
+
 /** 批量导出结算周期8份文件 */
 export function batchExportByPeriod(periodStart: string, periodEnd: string) {
   const filename = `结算周期_${periodStart}_${periodEnd}.zip`

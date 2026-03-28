@@ -3,7 +3,6 @@ package com.musheng.business.document.generator;
 import com.musheng.business.document.entity.DocumentPartyConfig;
 import com.musheng.business.document.entity.DocumentSettlement;
 import com.musheng.business.document.entity.DocumentSettlementItem;
-import com.musheng.business.document.enums.SiteCode;
 import com.musheng.business.document.utils.DocumentNumberCalculator;
 import com.musheng.business.document.utils.WorkingDayCalculator;
 
@@ -90,20 +89,60 @@ public final class SettlementGenerator {
      */
     public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence,
                                                            DocumentPartyConfig party) {
+        // 所有站点共用同一个 party 的兼容方法
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        if (input != null && input.getSelectedSiteCodes() != null) {
+            for (String sc : input.getSelectedSiteCodes()) {
+                partyMap.put(sc, party);
+            }
+        }
+        return generate(input, startSequence, partyMap);
+    }
+
+    /**
+     * 根据结算数据生成结算单（按站点使用不同交易方配置）
+     *
+     * @param input 结算数据输入，不能为 null
+     * @param startSequence 起始编号序号
+     * @param partyMap 站点 → 交易方配置映射，不能为 null
+     * @return 结算单生成结果列表，按月份和站点排列
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence,
+                                                           Map<String, DocumentPartyConfig> partyMap) {
         if (input == null) {
             throw new IllegalArgumentException("结算数据输入不能为 null");
         }
-        if (party == null) {
-            throw new IllegalArgumentException("交易方配置不能为 null");
+        if (partyMap == null || partyMap.isEmpty()) {
+            throw new IllegalArgumentException("交易方配置不能为空");
         }
         if (input.getItems() == null || input.getItems().isEmpty()) {
             return List.of();
+        }
+        // selectedSiteCodes 为空时：从 items 中提取去重的站点列表作为兜底
+        if (input.getSelectedSiteCodes() == null || input.getSelectedSiteCodes().isEmpty()) {
+            List<String> derived = input.getItems().stream()
+                    .map(SettlementInput.SettlementDataItem::getSiteCode)
+                    .filter(s -> s != null && !s.isEmpty())
+                    .distinct()
+                    .collect(Collectors.toList());
+            SettlementInput fallback = SettlementInput.builder()
+                    .periodStart(input.getPeriodStart())
+                    .periodEnd(input.getPeriodEnd())
+                    .selectedSiteCodes(derived)
+                    .siteCurrencyMap(input.getSiteCurrencyMap())
+                    .items(input.getItems())
+                    .build();
+            return generate(fallback, startSequence, partyMap);
         }
 
         LocalDate periodStart = input.getPeriodStart();
         LocalDate periodEnd = input.getPeriodEnd();
 
         List<SettlementGenerateResult> allResults = new ArrayList<>();
+        // sequence 全局递增，确保每份结算单单据号唯一
+        int sequence = startSequence;
 
         // 按自然月拆分：从 periodStart 所在月到 periodEnd 所在月
         LocalDate monthStart = periodStart.withDayOfMonth(1);
@@ -129,16 +168,22 @@ public final class SettlementGenerator {
                     })
                     .collect(Collectors.toList());
 
-            // 按站点分组本月数据
-            Map<SiteCode, List<SettlementInput.SettlementDataItem>> siteGroups = groupBySite(monthItems);
+            // 按站点分组本月数据（动态，基于 siteCurrencyMap）
+            Map<String, List<SettlementInput.SettlementDataItem>> siteGroups =
+                    groupBySite(monthItems, input.getSelectedSiteCodes(), input.getSiteCurrencyMap());
 
-            int sequence = startSequence;
-            for (SiteCode site : SiteCode.values()) {
-                List<SettlementInput.SettlementDataItem> siteItems = siteGroups.get(site);
+            // 只对前端传入的站点生成，每个站点使用各自的 party 配置和独立序号
+            for (String siteCode : input.getSelectedSiteCodes()) {
+                DocumentPartyConfig party = partyMap.getOrDefault(siteCode,
+                        partyMap.values().iterator().next()); // 找不到时用第一个兜底
+                String currency = resolveCurrency(siteCode, input.getSiteCurrencyMap(),
+                        siteGroups.getOrDefault(siteCode, List.of()));
+                List<SettlementInput.SettlementDataItem> siteItems =
+                        siteGroups.getOrDefault(siteCode, List.of());
                 SettlementGenerateResult result = buildSettlement(
-                        subStart, subEnd, settlementDate, site, siteItems, sequence, party);
+                        subStart, subEnd, settlementDate, siteCode, currency, siteItems, sequence, party);
                 allResults.add(result);
-                sequence++;
+                sequence++; // 每份结算单序号递增，确保单据号唯一
             }
 
             monthStart = monthStart.plusMonths(1);
@@ -148,43 +193,68 @@ public final class SettlementGenerator {
     }
 
     /**
-     * 按站点分组结算数据
+     * 按站点分组结算数据（动态版，基于 t_marketplace 配置，不依赖枚举）
      *
-     * <p>优先使用导入数据中的 siteCode（货币代码）字段匹配站点，
-     * 如果 siteCode 为空则回退到 MSKU 前缀匹配。
-     * 无法匹配的数据将被忽略。</p>
-     *
-     * @param items 结算数据明细列表
-     * @return 站点 → 明细列表的映射
-     * @author wanhua
-     * 00:30 2026年03月02日
+     * <p>将每条明细归到 selectedSiteCodes 中的某个站点：
+     * 1. 优先直接匹配 item.siteCode（如 "US"）
+     * 2. 若 item.siteCode 是货币代码（如 "USD"），通过 siteCurrencyMap 反查 siteCode
+     * 3. 无法匹配的数据忽略</p>
      */
-    private static Map<SiteCode, List<SettlementInput.SettlementDataItem>> groupBySite(
-            List<SettlementInput.SettlementDataItem> items) {
-        Map<SiteCode, List<SettlementInput.SettlementDataItem>> groups = new LinkedHashMap<>();
-        // 初始化所有站点
-        for (SiteCode site : SiteCode.values()) {
-            groups.put(site, new ArrayList<>());
+    private static Map<String, List<SettlementInput.SettlementDataItem>> groupBySite(
+            List<SettlementInput.SettlementDataItem> items,
+            List<String> selectedSiteCodes,
+            Map<String, String> siteCurrencyMap) {
+        // 初始化各站点的空列表
+        Map<String, List<SettlementInput.SettlementDataItem>> groups = new LinkedHashMap<>();
+        for (String sc : selectedSiteCodes) {
+            groups.put(sc, new ArrayList<>());
         }
-        // 优先按 siteCode（货币代码）分组，回退到 MSKU 前缀
+
+        // 构建货币→站点反查表（USD→US），用于 item.siteCode 是货币代码时的回退匹配
+        Map<String, String> currencyToSite = new LinkedHashMap<>();
+        if (siteCurrencyMap != null) {
+            siteCurrencyMap.forEach((sc, currency) -> currencyToSite.putIfAbsent(currency, sc));
+        }
+
         for (SettlementInput.SettlementDataItem item : items) {
-            SiteCode site = null;
-            // 优先使用 siteCode 字段匹配：先尝试货币代码（USD/GBP），再尝试站点名称（US/UK）
-            if (item.getSiteCode() != null && !item.getSiteCode().isEmpty()) {
-                site = SiteCode.fromCurrency(item.getSiteCode());
-                if (site == null) {
-                    site = SiteCode.fromSiteCodeName(item.getSiteCode());
+            String matched = null;
+            String itemSite = item.getSiteCode();
+            if (itemSite != null && !itemSite.isEmpty()) {
+                if (groups.containsKey(itemSite)) {
+                    matched = itemSite;                          // 直接匹配（US→US）
+                } else {
+                    String reversed = currencyToSite.get(itemSite);
+                    if (reversed != null && groups.containsKey(reversed)) {
+                        matched = reversed;                      // 货币反查（USD→US）
+                    }
                 }
             }
-            // 回退到 MSKU 前缀匹配
-            if (site == null) {
-                site = SiteCode.fromMskuPrefix(item.getMsku());
-            }
-            if (site != null) {
-                groups.get(site).add(item);
+            if (matched != null) {
+                groups.get(matched).add(item);
             }
         }
         return groups;
+    }
+
+    /**
+     * 动态获取站点的货币代码（来自 t_marketplace）
+     *
+     * <p>优先从 siteCurrencyMap 查找；找不到时从明细数据中取第一条记录的货币。</p>
+     */
+    private static String resolveCurrency(String siteCode, Map<String, String> siteCurrencyMap,
+                                          List<SettlementInput.SettlementDataItem> siteItems) {
+        if (siteCurrencyMap != null && siteCurrencyMap.containsKey(siteCode)) {
+            return siteCurrencyMap.get(siteCode);
+        }
+        // 回退：从明细数据取第一条有货币的记录
+        if (siteItems != null) {
+            for (SettlementInput.SettlementDataItem item : siteItems) {
+                if (item.getCurrency() != null && !item.getCurrency().isEmpty()) {
+                    return item.getCurrency();
+                }
+            }
+        }
+        return "";
     }
 
     /**
@@ -193,7 +263,7 @@ public final class SettlementGenerator {
      * @param periodStart 结算周期起始日
      * @param periodEnd 结算周期结束日
      * @param settlementDate 结算日
-     * @param site 站点
+     * @param siteCode 站点
      * @param siteItems 该站点的结算数据（可能为空列表）
      * @param sequence 编号序号
      * @param party 交易方配置
@@ -205,13 +275,16 @@ public final class SettlementGenerator {
             LocalDate periodStart,
             LocalDate periodEnd,
             LocalDate settlementDate,
-            SiteCode site,
+            String siteCode,
+            String currency,
             List<SettlementInput.SettlementDataItem> siteItems,
             int sequence,
             DocumentPartyConfig party) {
 
-        // 生成编号
+        // 生成编号：同一站点同一结算日只有一份，固定从 startSequence 开始
         String documentNo = DocumentNumberCalculator.generate(settlementDate, sequence);
+        // siteSequence 直接存站点编码（US/UK/JP...），动态配置，不依赖固定序号
+        String siteSequence = siteCode;
 
         // MSKU 去重汇总 + 字母升序排列
         List<MskuAggregation> aggregated = aggregateAndSort(siteItems);
@@ -223,7 +296,7 @@ public final class SettlementGenerator {
             DocumentSettlementItem item = new DocumentSettlementItem();
             item.setLineNo(lineNo);
             item.setMsku(agg.msku);
-            item.setCurrency(site.getCurrency());
+            item.setCurrency(currency);
             item.setUnitPrice(agg.unitPrice);
             item.setQuantity(agg.totalQuantity);
             item.setAmount(agg.unitPrice.multiply(BigDecimal.valueOf(agg.totalQuantity))
@@ -238,14 +311,14 @@ public final class SettlementGenerator {
                 .map(DocumentSettlementItem::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 构建结算单主表
+        // 构建结算单主表（siteCode 存站点代码如 US/CA/UK/DE，siteSequence 按选择顺序）
         DocumentSettlement settlement = new DocumentSettlement();
         settlement.setDocumentNo(documentNo);
         settlement.setSettlementDate(settlementDate);
         settlement.setPeriodStart(periodStart);
         settlement.setPeriodEnd(periodEnd);
-        settlement.setSiteCode(site.getCurrency());
-        settlement.setSiteSequence(site.getSequence());
+        settlement.setSiteCode(siteCode);
+        settlement.setSiteSequence(siteSequence);
         settlement.setBuyerName(party.getBuyerName());
         settlement.setBuyerAddress(party.getBuyerAddress());
         settlement.setSellerName(party.getSellerName());

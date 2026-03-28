@@ -15,6 +15,8 @@ export interface DocumentListVO {
   sellerName: string
   totalQuantity: number
   totalAmount: number | null
+  siteCode: string | null
+  createTime: string | null
 }
 
 // ==================== PO ====================
@@ -128,13 +130,16 @@ export interface InvVO {
 
 /** PO生成请求 */
 export interface PoGenerateRequest {
+  siteCode: string
   shipmentIds: number[]
 }
 
 /** DN生成请求 */
 export interface DnGenerateRequest {
+  siteCode: string
   anchorDate: string
   shipmentIds: number[]
+  poId?: number
 }
 
 /** 结算单生成请求 */
@@ -168,6 +173,9 @@ export interface DocumentQueryRequest {
   documentNo?: string
   startDate?: string
   endDate?: string
+  siteCode?: string
+  createTimeStart?: string
+  createTimeEnd?: string
   pageNum?: number
   pageSize?: number
 }

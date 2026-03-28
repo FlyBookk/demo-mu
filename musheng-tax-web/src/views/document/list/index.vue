@@ -29,6 +29,21 @@
               </a-select>
             </a-form-item>
           </a-col>
+          <a-col :span="4">
+            <a-form-item>
+              <a-select
+                v-model:value="searchForm.siteCode"
+                placeholder="站点"
+                allow-clear
+                style="width: 100%"
+                @change="handleSearch"
+              >
+                <a-select-option v-for="site in siteOptions" :key="site" :value="site">
+                  {{ site }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
           <a-col :span="5">
             <a-form-item>
               <a-input
@@ -44,8 +59,11 @@
           <a-col :span="6">
             <a-form-item>
               <a-range-picker
-                v-model:value="searchDateRange"
+                v-model:value="createTimeRange"
+                show-time
+                format="YYYY-MM-DD HH:mm:ss"
                 style="width: 100%"
+                placeholder="['导出时间起', '导出时间止']"
                 @change="handleSearch"
               />
             </a-form-item>
@@ -60,12 +78,12 @@
               </a-button>
             </a-space>
           </a-col>
-          <a-col :span="4" style="text-align: right">
-            <a-space>
-              <a-button type="primary" @click="$router.push('/document/generate')">
-                <PlusOutlined /> 生成单据
-              </a-button>
-            </a-space>
+        </a-row>
+        <a-row :gutter="16" style="width: 100%; margin-top: 8px">
+          <a-col :span="24" style="text-align: right">
+            <a-button type="primary" @click="$router.push('/document/generate')">
+              <PlusOutlined /> 生成单据
+            </a-button>
           </a-col>
         </a-row>
       </a-form>
@@ -78,7 +96,7 @@
         :data-source="tableData"
         :loading="loading"
         :pagination="pagination"
-        :scroll="{ x: 1200 }"
+        :scroll="{ x: 1400 }"
         row-key="id"
         size="small"
         @change="handleTableChange"
@@ -91,6 +109,9 @@
           </template>
           <template v-else-if="column.key === 'totalAmount'">
             {{ record.totalAmount != null ? record.totalAmount.toFixed(2) : '-' }}
+          </template>
+          <template v-else-if="column.key === 'siteCode'">
+            {{ record.siteCode || '-' }}
           </template>
           <template v-else-if="column.key === 'action'">
             <a-space>
@@ -150,12 +171,16 @@ const typeColorMap: Record<string, string> = {
   INV: 'purple'
 }
 
+// 站点选项（固定枚举）
+const siteOptions = ['US', 'CA', 'UK', 'EU']
+
 // 搜索
 const searchForm = reactive({
   documentType: undefined as string | undefined,
-  documentNo: ''
+  documentNo: '',
+  siteCode: undefined as string | undefined
 })
-const searchDateRange = ref<[Dayjs, Dayjs] | null>(null)
+const createTimeRange = ref<[Dayjs, Dayjs] | null>(null)
 
 // 表格
 const loading = ref(false)
@@ -172,11 +197,13 @@ const pagination = reactive({
 const columns = [
   { title: '单据编号', dataIndex: 'documentNo', key: 'documentNo', width: 180, ellipsis: true },
   { title: '单据类型', dataIndex: 'documentType', key: 'documentType', width: 120 },
+  { title: '站点', dataIndex: 'siteCode', key: 'siteCode', width: 80 },
   { title: '单据日期', dataIndex: 'documentDate', key: 'documentDate', width: 120 },
   { title: '买方', dataIndex: 'buyerName', key: 'buyerName', width: 180, ellipsis: true },
   { title: '卖方', dataIndex: 'sellerName', key: 'sellerName', width: 180, ellipsis: true },
   { title: '总数量', dataIndex: 'totalQuantity', key: 'totalQuantity', width: 100, align: 'right' as const },
   { title: '总金额', dataIndex: 'totalAmount', key: 'totalAmount', width: 120, align: 'right' as const },
+  { title: '导出时间', dataIndex: 'createTime', key: 'createTime', width: 160 },
   { title: '操作', key: 'action', width: 140, fixed: 'right' as const }
 ]
 
@@ -191,8 +218,9 @@ async function fetchData() {
     const res = await getDocumentList({
       documentType: searchForm.documentType,
       documentNo: searchForm.documentNo || undefined,
-      startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
-      endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD'),
+      siteCode: searchForm.siteCode,
+      createTimeStart: createTimeRange.value?.[0]?.format('YYYY-MM-DD HH:mm:ss'),
+      createTimeEnd: createTimeRange.value?.[1]?.format('YYYY-MM-DD HH:mm:ss'),
       pageNum: pagination.current,
       pageSize: pagination.pageSize
     })
@@ -214,7 +242,8 @@ function handleSearch() {
 function handleReset() {
   searchForm.documentType = undefined
   searchForm.documentNo = ''
-  searchDateRange.value = null
+  searchForm.siteCode = undefined
+  createTimeRange.value = null
   pagination.current = 1
   fetchData()
 }

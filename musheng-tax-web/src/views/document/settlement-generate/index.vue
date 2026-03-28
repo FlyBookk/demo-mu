@@ -29,13 +29,13 @@
         </a-form-item>
         <a-form-item label="站点" required>
           <a-spin :spinning="sitesLoading">
-            <a-checkbox-group v-model:value="selectedSiteCodes" style="width: 100%">
+            <a-radio-group v-model:value="selectedSiteCode" style="width: 100%" @change="handleSiteChange">
               <a-row :gutter="16">
                 <a-col v-for="m in marketplaceOptions" :key="m.siteCode" :span="6">
-                  <a-checkbox :value="m.siteCode">{{ m.siteCode }} - {{ m.siteName }}</a-checkbox>
+                  <a-radio :value="m.siteCode">{{ m.siteCode }} - {{ m.siteName }}</a-radio>
                 </a-col>
               </a-row>
-            </a-checkbox-group>
+            </a-radio-group>
           </a-spin>
         </a-form-item>
       </a-form>
@@ -130,7 +130,7 @@ import type { Marketplace } from '@/types/marketplace'
 // ==================== 站点 ====================
 const marketplaceOptions = ref<Marketplace[]>([])
 const sitesLoading = ref(false)
-const selectedSiteCodes = ref<string[]>([])
+const selectedSiteCode = ref<string>('')
 
 async function fetchMarketplaces() {
   sitesLoading.value = true
@@ -172,9 +172,14 @@ const quarterOptions = computed(() => {
 const periodStart = computed(() => selectedQuarter.value?.split('|')[0] || '')
 const periodEnd = computed(() => selectedQuarter.value?.split('|')[1] || '')
 
-const canGenerate = computed(() => selectedQuarter.value && selectedSiteCodes.value.length > 0)
+const canGenerate = computed(() => selectedQuarter.value && selectedSiteCode.value)
 
 function handleQuarterChange() {
+  settlementResult.value = []
+  invResult.value = []
+}
+
+function handleSiteChange() {
   settlementResult.value = []
   invResult.value = []
 }
@@ -190,7 +195,7 @@ async function handleGenerateSettlements() {
     const res = await generateSettlements({
       periodStart: periodStart.value,
       periodEnd: periodEnd.value,
-      siteCodes: selectedSiteCodes.value
+      siteCodes: [selectedSiteCode.value]
     })
     settlementResult.value = res.data || []
     // 过滤有数据的结算单，打包为ZIP下载

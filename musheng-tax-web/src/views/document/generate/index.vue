@@ -42,6 +42,13 @@
         <a-form-item label="FBA货件" required>
           <a-alert v-if="!selectedSite" type="info" message="请先选择站点" show-icon style="margin-bottom: 8px" />
           <a-alert v-else-if="!selectedQuarter" type="info" message="请先选择结算季度" show-icon style="margin-bottom: 8px" />
+          <a-alert
+            v-if="selectedShipmentIds.length > MAX_SHIPMENT_COUNT"
+            type="error"
+            :message="`最多选择 ${MAX_SHIPMENT_COUNT} 个货件，当前已选 ${selectedShipmentIds.length} 个，请减少选择`"
+            show-icon
+            style="margin-bottom: 8px"
+          />
           <a-spin :spinning="shipmentLoading">
             <a-checkbox-group v-model:value="selectedShipmentIds" style="width: 100%">
               <div v-if="shipmentList.length === 0 && !shipmentLoading && selectedSite" style="color: #999; padding: 8px 0">
@@ -97,7 +104,7 @@
           </template>
           <template #extra>
             <a-space>
-              <a-button size="small" @click="handleExportPo(poResult.id)">
+              <a-button size="small" @click="handleBatchExportPo">
                 <DownloadOutlined /> 重新下载
               </a-button>
               <a-button type="primary" @click="currentStep = 2">
@@ -114,57 +121,62 @@
       <template #title>第三步：生成DN送货单</template>
       <a-alert type="info" show-icon style="margin-bottom: 16px">
         <template #message>
-          基于已生成的PO，生成对应的DN送货单。请参考下方货件日期，选择合适的DN日期锚点。
+          基于已生成的 {{ poResults.length }} 份PO，为每份PO单独设置DN日期锚点，默认已按规则自动填入（PO日期+3工作日）。
         </template>
       </a-alert>
 
-      <!-- 已选货件摘要 -->
+      <!-- 每份PO对应一行，独立设置锚点 -->
       <a-table
-        :dataSource="selectedShipments"
-        :columns="shipmentSummaryColumns"
+        :dataSource="dnAnchorRows"
+        :columns="dnAnchorColumns"
         :pagination="false"
         size="small"
         bordered
         style="margin-bottom: 16px"
-        rowKey="id"
+        rowKey="poId"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'createdDate'">
-            {{ record.createdDate ? dayjs(record.createdDate).format('YYYY-MM-DD') : '-' }}
+          <template v-if="column.key === 'anchorDate'">
+            <a-date-picker
+              v-model:value="record.anchorDate"
+              style="width: 160px"
+              :disabledDate="(d: Dayjs) => d.isBefore(dayjs(record.poDate), 'day')"
+              @change="() => validateAnchor(record)"
+            />
+            <span v-if="record.error" style="color: #ff4d4f; margin-left: 8px; font-size: 12px">
+              {{ record.error }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'autoFill'">
+            <a-space>
+              <a-button size="small" @click="setAnchorPlus3(record)">+3工作日</a-button>
+              <a-button size="small" @click="setAnchorNextTuesday(record)">下周二</a-button>
+            </a-space>
           </template>
         </template>
       </a-table>
 
-      <a-form layout="vertical" style="max-width: 400px">
-        <a-form-item label="DN日期（锚点）" required>
-          <a-date-picker
-            v-model:value="dnDate"
-            style="width: 100%"
-            :disabledDate="dnDisabledDate"
-            :defaultPickerValue="dnDefaultPickerValue"
-          />
-        </a-form-item>
-      </a-form>
       <div class="step-actions">
         <a-button
           type="primary"
           size="large"
           :loading="dnLoading"
-          :disabled="!dnDate"
+          :disabled="!canGenerateDn"
           @click="handleGenerateDn"
         >
-          <DownloadOutlined /> 生成DN并下载Excel
+          <DownloadOutlined /> 生成全部DN并下载ZIP
         </a-button>
       </div>
-      <div v-if="dnResult" class="step-result">
-        <a-result status="success" title="DN生成成功">
-          <template #subTitle>
-            <span>{{ dnResult.documentNo }}，Excel文件已自动下载</span>
-          </template>
+
+      <div v-if="dnResults.length > 0" class="step-result">
+        <a-result status="success" :title="`DN生成成功，共 ${dnResults.length} 份`">
           <template #extra>
-            <a-button type="primary" disabled>
-              ✅ 全部完成
-            </a-button>
+            <a-space>
+              <a-button size="small" @click="handleBatchExportDn">
+                <DownloadOutlined /> 重新下载
+              </a-button>
+              <a-button type="primary" disabled>✅ 全部完成</a-button>
+            </a-space>
           </template>
         </a-result>
       </div>
@@ -182,7 +194,9 @@ import {
   generatePo,
   generateDn,
   exportPo,
-  exportDn
+  exportDn,
+  batchExportPoZip,
+  batchExportDnZip
 } from '@/api/document'
 import { getFbaShipmentList } from '@/api/fbaShipment'
 import type { FbaShipment } from '@/types/fbaShipment'
@@ -192,6 +206,9 @@ import type { Marketplace } from '@/types/marketplace'
 // ==================== 步骤控制 ====================
 const currentStep = ref(0)
 const stepCompleted = ref<boolean[]>([false, false, false])
+
+/** 货件最大选择数量 */
+const MAX_SHIPMENT_COUNT = 50
 
 function goToStep(step: number) {
   currentStep.value = step
@@ -270,7 +287,8 @@ async function handleSiteChange() {
 
 function handleQuarterChange() {
   poResult.value = null
-  dnResult.value = null
+  dnResults.value = []
+  dnAnchorRows.value = []
   stepCompleted.value = [false, false, false]
   selectedShipmentIds.value = []
   shipmentList.value = []
@@ -312,7 +330,10 @@ const shipmentSummaryColumns = [
 ]
 
 const canProceedToGenerate = computed(() => {
-  return selectedSite.value && selectedQuarter.value && selectedShipmentIds.value.length > 0
+  return selectedSite.value
+    && selectedQuarter.value
+    && selectedShipmentIds.value.length > 0
+    && selectedShipmentIds.value.length <= MAX_SHIPMENT_COUNT
 })
 
 function proceedToGeneratePo() {
@@ -323,15 +344,41 @@ function proceedToGeneratePo() {
 // ==================== Step 1: 生成PO ====================
 const poLoading = ref(false)
 const poResult = ref<any>(null)
+const poResults = ref<any[]>([])  // 多站点时可能有多个PO
 
 async function handleGeneratePo() {
   poLoading.value = true
   try {
-    const res = await generatePo({ shipmentIds: selectedShipmentIds.value })
-    poResult.value = res.data
+    const res = await generatePo({ shipmentIds: selectedShipmentIds.value, siteCode: selectedSite.value })
+    // 兼容单个或数组返回
+    const data = res.data
+    if (Array.isArray(data)) {
+      poResults.value = data
+      poResult.value = data[0]
+    } else {
+      poResult.value = data
+      poResults.value = data ? [data] : []
+    }
     stepCompleted.value[1] = true
-    if (poResult.value?.id) {
-      await exportPo(poResult.value.id)
+
+    // 初始化每份PO对应的DN锚点行，默认 PO日期+3工作日 与 下周二 取较晚者
+    dnAnchorRows.value = poResults.value.map((po: any) => ({
+      poId: po.id,
+      poDocumentNo: po.documentNo,
+      poDate: po.poDate,
+      shipmentCount: po.shipmentCount,
+      totalQuantity: po.totalQuantity,
+      anchorDate: defaultAnchor(po.poDate),
+      error: ''
+    }))
+    dnResults.value = []
+
+    if (poResults.value.length === 1) {
+      // 单个直接下载 Excel
+      await exportPo(poResults.value[0].id)
+    } else if (poResults.value.length > 1) {
+      // 多个打 ZIP
+      await batchExportPoZip(poResults.value.map((p: any) => p.id))
     }
     message.success('PO生成成功')
   } catch (error: any) {
@@ -350,47 +397,135 @@ async function handleExportPo(id: number) {
   }
 }
 
-// ==================== Step 2: 生成DN ====================
-const dnLoading = ref(false)
-const dnDate = ref<Dayjs | null>(null)
-const dnResult = ref<any>(null)
-
-const earliestShipmentDate = computed(() => {
-  const dates = selectedShipments.value
-    .map(s => s.createdDate)
-    .filter(Boolean)
-    .map(d => dayjs(d))
-  if (dates.length === 0) return null
-  return dates.reduce((min, d) => d.isBefore(min) ? d : min)
-})
-
-function dnDisabledDate(current: Dayjs) {
-  if (poResult.value?.poDate) {
-    return current.isBefore(dayjs(poResult.value.poDate), 'day')
+async function handleBatchExportPo() {
+  if (poResults.value.length === 0) return
+  try {
+    if (poResults.value.length === 1) {
+      await exportPo(poResults.value[0].id)
+    } else {
+      await batchExportPoZip(poResults.value.map((p: any) => p.id))
+    }
+    message.success('下载成功')
+  } catch (error) {
+    message.error('下载失败')
   }
-  if (!earliestShipmentDate.value) return false
-  return current.isBefore(earliestShipmentDate.value, 'day')
 }
 
-const dnDefaultPickerValue = computed(() => {
-  if (poResult.value?.poDate) return dayjs(poResult.value.poDate)
-  return earliestShipmentDate.value || dayjs()
+// ==================== Step 2: 生成DN ====================
+const dnLoading = ref(false)
+const dnResults = ref<any[]>([])
+
+/** 每份PO对应的锚点行数据 */
+interface DnAnchorRow {
+  poId: number
+  poDocumentNo: string
+  poDate: string
+  shipmentCount: number
+  totalQuantity: number
+  anchorDate: Dayjs | null
+  error: string
+}
+const dnAnchorRows = ref<DnAnchorRow[]>([])
+
+const dnAnchorColumns = [
+  { title: 'PO编号', dataIndex: 'poDocumentNo', key: 'poDocumentNo', width: 200 },
+  { title: 'PO日期', dataIndex: 'poDate', key: 'poDate', width: 110 },
+  { title: '货件数', dataIndex: 'shipmentCount', key: 'shipmentCount', width: 80, align: 'center' as const },
+  { title: '总数量', dataIndex: 'totalQuantity', key: 'totalQuantity', width: 90, align: 'center' as const },
+  { title: 'DN日期（锚点）', key: 'anchorDate', width: 260 },
+  { title: '快速填入', key: 'autoFill', width: 180 }
+]
+
+/** 计算 PO日期 + n 个工作日（跳过周末） */
+function addWorkingDays(date: Dayjs, n: number): Dayjs {
+  let d = date
+  let count = 0
+  while (count < n) {
+    d = d.add(1, 'day')
+    const dow = d.day() // 0=Sun, 6=Sat
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return d
+}
+
+/** 计算下周二 */
+function nextTuesday(date: Dayjs): Dayjs {
+  let d = date.add(1, 'day')
+  while (d.day() !== 2) d = d.add(1, 'day') // 2 = Tuesday
+  return d
+}
+
+/** 默认锚点：PO日期+3工作日 与 下周二 取较晚者 */
+function defaultAnchor(poDate: string): Dayjs {
+  const base = dayjs(poDate)
+  const plus3 = addWorkingDays(base, 3)
+  const tue = nextTuesday(base)
+  return plus3.isAfter(tue) ? plus3 : tue
+}
+
+function setAnchorPlus3(row: DnAnchorRow) {
+  row.anchorDate = addWorkingDays(dayjs(row.poDate), 3)
+  row.error = ''
+}
+
+function setAnchorNextTuesday(row: DnAnchorRow) {
+  row.anchorDate = nextTuesday(dayjs(row.poDate))
+  row.error = ''
+}
+
+function validateAnchor(row: DnAnchorRow) {
+  if (!row.anchorDate) {
+    row.error = '请选择DN日期'
+    return false
+  }
+  if (row.anchorDate.isBefore(dayjs(row.poDate), 'day')) {
+    row.error = `不能早于PO日期 ${row.poDate}`
+    return false
+  }
+  row.error = ''
+  return true
+}
+
+const canGenerateDn = computed(() => {
+  if (dnAnchorRows.value.length === 0) return false
+  return dnAnchorRows.value.every(r => r.anchorDate && !r.error)
 })
 
 async function handleGenerateDn() {
-  if (!dnDate.value) return
+  // 校验所有行
+  let hasError = false
+  for (const row of dnAnchorRows.value) {
+    if (!validateAnchor(row)) hasError = true
+  }
+  if (hasError) {
+    message.error('请检查DN日期设置，存在错误项')
+    return
+  }
+
   dnLoading.value = true
   try {
-    const res = await generateDn({
-      anchorDate: dnDate.value.format('YYYY-MM-DD'),
-      shipmentIds: selectedShipmentIds.value
-    })
-    dnResult.value = res.data
-    stepCompleted.value[2] = true
-    if (dnResult.value?.id) {
-      await exportDn(dnResult.value.id)
+    const allDns: any[] = []
+    // 按每份PO的锚点分别调用生成接口，传 poId 让后端自动提取对应货件
+    for (const row of dnAnchorRows.value) {
+      const res = await generateDn({
+        siteCode: selectedSite.value,
+        anchorDate: row.anchorDate!.format('YYYY-MM-DD'),
+        poId: row.poId,
+        shipmentIds: []
+      })
+      const data = res.data
+      if (Array.isArray(data)) allDns.push(...data)
+      else if (data) allDns.push(data)
     }
-    message.success('DN生成成功')
+    dnResults.value = allDns
+    stepCompleted.value[2] = true
+
+    if (allDns.length === 1) {
+      await exportDn(allDns[0].id)
+    } else if (allDns.length > 1) {
+      await batchExportDnZip(allDns.map((d: any) => d.id))
+    }
+    message.success(`DN生成成功，共 ${allDns.length} 份`)
   } catch (error: any) {
     message.error(error?.message || 'DN生成失败')
   } finally {
@@ -398,9 +533,14 @@ async function handleGenerateDn() {
   }
 }
 
-async function handleExportDn(id: number) {
+async function handleBatchExportDn() {
+  if (dnResults.value.length === 0) return
   try {
-    await exportDn(id)
+    if (dnResults.value.length === 1) {
+      await exportDn(dnResults.value[0].id)
+    } else {
+      await batchExportDnZip(dnResults.value.map((d: any) => d.id))
+    }
     message.success('下载成功')
   } catch (error) {
     message.error('下载失败')

@@ -50,6 +50,7 @@ public class TaxReportServiceImpl implements TaxReportService {
     private final AdvertisingBillItemMapper advertisingBillItemMapper;
     private final MarketplaceMapper marketplaceMapper;
     private final RateService rateService;
+    private final com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
 
     /**
      * 站点到货币的映射
@@ -64,10 +65,15 @@ public class TaxReportServiceImpl implements TaxReportService {
     @Override
     public DashboardData getDashboardData(String quarterParam) {
         long startTime = System.currentTimeMillis();
-        log.info("Getting dashboard data (lightweight), quarter={}", quarterParam);
+        log.info("[Dashboard] 获取仪表盘数据, quarter={}", quarterParam);
 
         Long shopId = ShopContext.requireShopId();
-        List<String> sites = List.of("US", "CA", "UK", "DE");
+        log.info("[Dashboard] 当前店铺: shopId={}, 请求季度参数: {}", shopId, quarterParam);
+        LambdaQueryWrapper<Marketplace> dashMpWrapper = new LambdaQueryWrapper<>();
+        dashMpWrapper.eq(Marketplace::getStatus, 1);
+        List<String> sites = marketplaceMapper.selectList(dashMpWrapper).stream()
+                .map(Marketplace::getSiteCode).filter(StringUtils::hasText).distinct()
+                .collect(Collectors.toList());
 
         // 确定当前季度：传入参数优先，否则取系统当前季度
         LocalDate now = LocalDate.now();
@@ -115,8 +121,8 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .lt(SalesData::getTransactionDate, maxEndDate.plusMonths(2).atStartOfDay());
         List<SalesData> refundData = salesDataMapper.selectList(refundWrapper);
 
-        log.debug("Dashboard data loaded in {}ms: shipping={}, refunds={}", 
-                System.currentTimeMillis() - startTime, shippingData.size(), refundData.size());
+        log.debug("[Dashboard] shopId={} 数据加载完成, 耗时={}ms, 配送数据={}条, 退款数据={}条",
+                shopId, System.currentTimeMillis() - startTime, shippingData.size(), refundData.size());
 
         // ========== 构建订单→发货日期映射 ==========
         Map<String, LocalDate> orderShipDateMap = new HashMap<>();
@@ -232,7 +238,7 @@ public class TaxReportServiceImpl implements TaxReportService {
         }
         dashboard.setQuarterTrends(trends);
 
-        log.info("Dashboard data completed in {}ms", System.currentTimeMillis() - startTime);
+        log.info("[Dashboard] shopId={} 仪表盘计算完成, 耗时={}ms", shopId, System.currentTimeMillis() - startTime);
         return dashboard;
     }
 
@@ -321,11 +327,26 @@ public class TaxReportServiceImpl implements TaxReportService {
         log.info("Getting tax summary: siteCode={}, startQuarter={}, endQuarter={}, refundDateMode={}", siteCode, startQuarter, endQuarter, mode);
 
         Long shopId = ShopContext.requireShopId();
-        log.debug("Using shopId={} for data isolation", shopId);
+        log.info("[TaxSummary] 当前店铺: shopId={}, siteCode={}, startQuarter={}, endQuarter={}, refundDateMode={}",
+                shopId, siteCode, startQuarter, endQuarter, mode);
 
-        List<String> sites = StringUtils.hasText(siteCode)
-                ? List.of(siteCode)
-                : List.of("US", "CA", "UK", "DE");
+        // 站点列表：传了 siteCode 则只查该站点，否则从 t_marketplace 取所有启用站点
+        List<String> sites;
+        if (StringUtils.hasText(siteCode)) {
+            sites = List.of(siteCode);
+        } else {
+            LambdaQueryWrapper<Marketplace> mpWrapper = new LambdaQueryWrapper<>();
+            mpWrapper.eq(Marketplace::getStatus, 1);
+            sites = marketplaceMapper.selectList(mpWrapper).stream()
+                    .map(Marketplace::getSiteCode)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (sites.isEmpty()) {
+                log.warn("[TaxSummary] t_marketplace 无启用站点，返回空结果");
+                return Collections.emptyList();
+            }
+        }
 
         List<String> quarters = getQuartersInRange(startQuarter, endQuarter);
 
@@ -447,8 +468,8 @@ public class TaxReportServiceImpl implements TaxReportService {
             }
         }
 
-        log.info("Data loaded in {}ms: shipping={}, sales={}, other={}, sim1={}, ads={}",
-                System.currentTimeMillis() - startTime,
+        log.info("[TaxSummary] shopId={} 数据加载完成, 耗时={}ms: 配送={}条, 销售={}条, 其他={}条, sim1={}条, 广告={}条",
+                shopId, System.currentTimeMillis() - startTime,
                 allShippingData.size(), allSalesData.size(), allOtherData.size(), sim1Data.size(), allAdData.size());
 
         // ========== 按站点分组（内存操作，快速） ==========
@@ -492,8 +513,8 @@ public class TaxReportServiceImpl implements TaxReportService {
                 .filter(TaxReportServiceImpl::hasAnyTaxData)
                 .collect(Collectors.toList());
 
-        log.info("Tax summary calculation completed in {}ms, filtered to {} rows with data",
-                System.currentTimeMillis() - startTime, results.size());
+        log.info("[TaxSummary] shopId={} 报税汇总计算完成, 耗时={}ms, 有效结果={}行",
+                shopId, System.currentTimeMillis() - startTime, results.size());
         return results;
     }
 
@@ -538,7 +559,9 @@ public class TaxReportServiceImpl implements TaxReportService {
         LocalDate endDate = getQuarterEndDate(year, quarter);
 
         String siteName = marketplace != null ? marketplace.getSiteName() : siteCode;
-        String currencyCode = SITE_CURRENCY_MAP.getOrDefault(siteCode, "USD");
+        // 货币从 t_marketplace 动态取，找不到时回退 USD
+        String currencyCode = marketplace != null && StringUtils.hasText(marketplace.getCurrencyCode())
+                ? marketplace.getCurrencyCode() : "USD";
 
         // ========== 1. 筛选本季度发货数据，收集订单号 ==========
         Set<String> shippingOrderIds = new HashSet<>();
@@ -923,15 +946,9 @@ public class TaxReportServiceImpl implements TaxReportService {
                                 LocalDate billingStartDate, LocalDate billingEndDate,
                                 String currency, LocalDate issueDate) {}
 
-    /** 从店铺名称推断站点编码（与 AdvertisingBillServiceImpl 一致） */
-    private static String inferSiteCodeFromStoreName(String storeName) {
-        if (!StringUtils.hasText(storeName)) return null;
-        String s = storeName.toUpperCase();
-        if (s.contains("UK") || s.contains("英国")) return "UK";
-        if (s.contains("US") || s.contains("美国")) return "US";
-        if (s.contains("CA") || s.contains("加拿大")) return "CA";
-        if (s.contains("DE") || s.contains("德国")) return "DE";
-        return null;
+    /** 从店铺名称推断站点编码（从 t_marketplace 动态匹配） */
+    private String inferSiteCodeFromStoreName(String storeName) {
+        return marketplaceConfigService.inferSiteCodeFromStoreName(storeName);
     }
 
     /**
@@ -1047,7 +1064,8 @@ public class TaxReportServiceImpl implements TaxReportService {
 
     @Override
     public void exportTaxSummary(String siteCode, String startQuarter, String endQuarter, String refundDateMode, HttpServletResponse response) {
-        log.info("导出报税汇总列表: siteCode={}, startQuarter={}, endQuarter={}, refundDateMode={}", siteCode, startQuarter, endQuarter, refundDateMode);
+        log.info("[TaxExport] 导出报税汇总: shopId={}, siteCode={}, startQuarter={}, endQuarter={}, refundDateMode={}",
+                ShopContext.requireShopId(), siteCode, startQuarter, endQuarter, refundDateMode);
 
         try {
             List<TaxReportSummary> summaries = getTaxSummary(siteCode, startQuarter, endQuarter, refundDateMode);

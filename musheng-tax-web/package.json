@@ -46,6 +46,7 @@
     "postcss": "^8.4.38",
     "prettier": "^3.2.5",
     "sass": "^1.72.0",
+    "terser": "^5.46.1",
     "typescript": "^5.4.3",
     "unplugin-auto-import": "^0.17.8",
     "unplugin-vue-components": "^0.27.5",

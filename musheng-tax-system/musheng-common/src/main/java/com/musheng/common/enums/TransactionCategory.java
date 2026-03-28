@@ -13,6 +13,7 @@ public enum TransactionCategory {
     INCOME("income", "收入"),
     REFUND("refund", "退款"),
     FEE("fee", "费用"),
+    OTHER_ADJUSTMENT("otherAdjustment", "其它调整"),
     ADJUSTMENT("adjustment", "调整"),
     TRANSFER("transfer", "划转"),
     OTHER("other", "其他");

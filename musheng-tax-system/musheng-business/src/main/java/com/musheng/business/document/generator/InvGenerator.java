@@ -75,6 +75,45 @@ public final class InvGenerator {
     }
 
     /**
+     * 根据结算单生成结果列表生成INV发票（按站点使用不同交易方配置）
+     *
+     * @param settlementResults 结算单生成结果列表，不能为 null
+     * @param startSequence 起始编号序号
+     * @param partyMap 站点 → 交易方配置映射
+     * @return INV生成结果列表
+     * @author wanhua
+     * 10:30 2026年01月29日
+     */
+    public static List<InvGenerateResult> generate(List<SettlementGenerateResult> settlementResults,
+                                                    int startSequence,
+                                                    java.util.Map<String, DocumentPartyConfig> partyMap) {
+        if (settlementResults == null) {
+            throw new IllegalArgumentException("结算单结果列表不能为 null");
+        }
+        if (partyMap == null || partyMap.isEmpty()) {
+            throw new IllegalArgumentException("交易方配置不能为空");
+        }
+        if (settlementResults.isEmpty()) {
+            return List.of();
+        }
+
+        List<InvGenerateResult> results = new ArrayList<>();
+        int sequence = startSequence;
+
+        for (SettlementGenerateResult settlementResult : settlementResults) {
+            // 按结算单的站点代码取对应的交易方配置
+            String siteCode = settlementResult.getSettlement().getSiteCode();
+            DocumentPartyConfig party = partyMap.getOrDefault(siteCode,
+                    partyMap.values().iterator().next()); // 找不到时用第一个兜底
+            InvGenerateResult invResult = buildInv(settlementResult, sequence, party);
+            results.add(invResult);
+            sequence++;
+        }
+
+        return results;
+    }
+
+    /**
      * 根据单份结算单构建INV
      *
      * @param settlementResult 结算单生成结果

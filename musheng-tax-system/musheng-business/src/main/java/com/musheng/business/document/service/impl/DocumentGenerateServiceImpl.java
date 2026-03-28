@@ -14,7 +14,11 @@ import com.musheng.business.fbashipment.entity.FbaShipment;
 import com.musheng.business.fbashipment.entity.FbaShipmentItem;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
+import com.musheng.config.marketplace.entity.Marketplace;
+import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 
+import com.musheng.business.settlement.derivation.service.SalesDataAggregator;
+import com.musheng.business.settlement.derivation.vo.AggregationResult;
 import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,10 +27,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.musheng.common.result.ErrorCode.FORBIDDEN;
 
 /**
  * 单据生成服务实现类
@@ -74,11 +81,16 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     @Autowired
     private SettlementImportDataMapper settlementImportDataMapper;
 
+    @Autowired
+    private SalesDataAggregator salesDataAggregator;
+
 
 
     @Autowired
     private DocumentPartyConfigService documentPartyConfigService;
 
+    @Autowired
+    private MarketplaceMapper marketplaceMapper;
     /**
      * 根据选定的FBA货件生成PO采购订单
      *
@@ -92,52 +104,53 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class, noRollbackFor = DuplicateKeyException.class)
-    public DocumentPo generatePo(PoGenerateRequest request) {
+    public List<DocumentPo> generatePo(PoGenerateRequest request) {
         log.info("开始生成PO采购订单，货件ID数量: {}", request.getShipmentIds().size());
 
-        // 构建货件输入数据（后续可对接 FbaShipmentService 查询真实数据）
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
-        // 从第一个货件获取站点代码，查询交易方配置
-        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
-        // 调用生成器
         List<PoGenerateResult> results = PoGenerator.generate(shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("PO生成结果为空，无数据可持久化");
-            return null;
+            return List.of();
         }
 
-        // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
+        log.info("[GeneratePO] 当前店铺: shopId={}, 货件数量: {}, 站点: {}, 生成PO数量: {}",
+                shopId, request.getShipmentIds().size(), siteCode, results.size());
 
-        // 取第一份PO结果进行持久化（一次请求通常生成一份PO）
-        PoGenerateResult result = results.get(0);
-        DocumentPo po = result.getPo();
-        po.setShopId(shopId);
-        po.setSiteCode(siteCode);
-
-        // 持久化PO主表（幂等：重复单据号时返回已有记录）
-        try {
-            documentPoMapper.insert(po);
-            log.info("PO主表持久化成功，编号: {}, ID: {}", po.getDocumentNo(), po.getId());
-
-            // 持久化PO明细
-            for (DocumentPoItem item : result.getItems()) {
-                item.setPoId(po.getId());
-                item.setShopId(shopId);
-                documentPoItemMapper.insert(item);
+        List<DocumentPo> savedPos = new ArrayList<>();
+        int sequence = 1;
+        for (PoGenerateResult result : results) {
+            DocumentPo po = result.getPo();
+            po.setShopId(shopId);
+            po.setSiteCode(siteCode);
+            // 重新生成编号，确保序号递增
+            po.setDocumentNo(com.musheng.business.document.utils.DocumentNumberCalculator.generate(po.getPoDate(), sequence));
+            try {
+                documentPoMapper.insert(po);
+                log.info("PO主表持久化成功，编号: {}, ID: {}", po.getDocumentNo(), po.getId());
+                for (DocumentPoItem item : result.getItems()) {
+                    item.setPoId(po.getId());
+                    item.setShopId(shopId);
+                    documentPoItemMapper.insert(item);
+                }
+                log.info("PO明细持久化成功，明细数量: {}", result.getItems().size());
+            } catch (DuplicateKeyException e) {
+                log.info("PO单据号已存在，返回已有记录，编号: {}", po.getDocumentNo());
+                LambdaQueryWrapper<DocumentPo> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo())
+                       .eq(DocumentPo::getShopId, shopId);
+                po = documentPoMapper.selectOne(wrapper);
             }
-            log.info("PO明细持久化成功，明细数量: {}", result.getItems().size());
-        } catch (DuplicateKeyException e) {
-            log.info("PO单据号已存在，返回已有记录，编号: {}", po.getDocumentNo());
-            LambdaQueryWrapper<DocumentPo> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo());
-            po = documentPoMapper.selectOne(wrapper);
+            savedPos.add(po);
+            sequence++;
         }
 
-        return po;
+        return savedPos;
     }
 
     /**
@@ -152,19 +165,35 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class, noRollbackFor = DuplicateKeyException.class)
-    public DocumentDn generateDn(DnGenerateRequest request) {
-        log.info("开始生成DN送货单，锚点日期: {}, 货件ID数量: {}",
-                request.getAnchorDate(), request.getShipmentIds().size());
+    public List<DocumentDn> generateDn(DnGenerateRequest request) {
+        // 当传入 poId 时，从 PO 明细提取对应货件 ID
+        List<Long> shipmentIds = request.getShipmentIds();
+        if (request.getPoId() != null) {
+            List<DocumentPoItem> poItems = documentPoItemMapper.selectList(
+                    new LambdaQueryWrapper<DocumentPoItem>()
+                            .eq(DocumentPoItem::getPoId, request.getPoId()));
+            List<String> shipmentNos = poItems.stream()
+                    .map(DocumentPoItem::getShipmentNo)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (!CollectionUtils.isEmpty(shipmentNos)) {
+                List<FbaShipment> shipments = fbaShipmentMapper.selectList(
+                        new LambdaQueryWrapper<FbaShipment>()
+                                .in(FbaShipment::getShipmentId, shipmentNos));
+                shipmentIds = shipments.stream().map(FbaShipment::getId).collect(Collectors.toList());
+            }
+        }
+        if (CollectionUtils.isEmpty(shipmentIds)) {
+            throw new IllegalArgumentException("货件ID列表不能为空");
+        }
+        log.info("开始生成DN送货单，锚点日期: {}, 货件ID数量: {}", request.getAnchorDate(), shipmentIds.size());
 
-        // 构建货件输入数据
-        List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
+        List<ShipmentInput> shipmentInputs = buildShipmentInputs(shipmentIds);
 
-        // 从货件获取站点代码，查询交易方配置
-        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
         // 校验锚点日期不能早于所有货件的最晚PO日期
-        // PO日期 = 货件创建时间所在周的下一个周二（或当天若为周二），非工作日顺延
         if (!CollectionUtils.isEmpty(shipmentInputs)) {
             LocalDate latestPoDate = shipmentInputs.stream()
                     .map(s -> PoGenerator.calculatePoDate(s.getCreateTime()))
@@ -176,43 +205,42 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             }
         }
 
-        // 调用生成器
         List<DnGenerateResult> results = DnGenerator.generate(
                 request.getAnchorDate(), shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("DN生成结果为空，无数据可持久化");
-            return null;
+            return List.of();
         }
 
-        // 取第一份DN结果进行持久化
-        DnGenerateResult result = results.get(0);
-        DocumentDn dn = result.getDn();
-
-        // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
-        dn.setShopId(shopId);
-        dn.setSiteCode(siteCode);
+        log.info("[GenerateDN] 当前店铺: shopId={}, 锚点日期: {}, 货件数量: {}, 站点: {}, 生成DN数量: {}",
+                shopId, request.getAnchorDate(), request.getShipmentIds().size(), siteCode, results.size());
 
-        // 持久化DN主表（幂等：重复单据号时返回已有记录）
-        try {
-            documentDnMapper.insert(dn);
-            log.info("DN主表持久化成功，编号: {}, ID: {}", dn.getDocumentNo(), dn.getId());
-
-            // 持久化DN明细
-            for (DocumentDnItem item : result.getItems()) {
-                item.setDnId(dn.getId());
-                item.setShopId(shopId);
-                documentDnItemMapper.insert(item);
+        List<DocumentDn> savedDns = new ArrayList<>();
+        for (DnGenerateResult result : results) {
+            DocumentDn dn = result.getDn();
+            dn.setSiteCode(siteCode);
+            dn.setShopId(shopId);
+            try {
+                documentDnMapper.insert(dn);
+                log.info("DN主表持久化成功，编号: {}, ID: {}", dn.getDocumentNo(), dn.getId());
+                for (DocumentDnItem item : result.getItems()) {
+                    item.setDnId(dn.getId());
+                    item.setShopId(shopId);
+                    documentDnItemMapper.insert(item);
+                }
+                log.info("DN明细持久化成功，明细数量: {}", result.getItems().size());
+            } catch (DuplicateKeyException e) {
+                log.info("DN单据号已存在，返回已有记录，编号: {}", dn.getDocumentNo());
+                LambdaQueryWrapper<DocumentDn> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo())
+                       .eq(DocumentDn::getShopId, shopId);
+                dn = documentDnMapper.selectOne(wrapper);
             }
-            log.info("DN明细持久化成功，明细数量: {}", result.getItems().size());
-        } catch (DuplicateKeyException e) {
-            log.info("DN单据号已存在，返回已有记录，编号: {}", dn.getDocumentNo());
-            LambdaQueryWrapper<DocumentDn> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo());
-            dn = documentDnMapper.selectOne(wrapper);
+            savedDns.add(dn);
         }
 
-        return dn;
+        return savedDns;
     }
 
     /**
@@ -230,17 +258,28 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     public List<DocumentSettlement> generateSettlements(SettlementGenerateRequest request) {
         log.info("开始生成结算单，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
 
-        // 构建结算数据输入（后续可对接 SettlementImportDataMapper 查询真实数据）
+        // 构建结算数据输入
         SettlementInput input = buildSettlementInput(request);
 
-        // 从请求的站点列表取第一个站点查询交易方配置（结算单按站点拆分，配置在生成器内部按站点使用）
-        // 注意：SettlementGenerator 内部会为每个站点生成一份结算单，party 用于填充买卖方信息
-        String siteCode = CollectionUtils.isEmpty(request.getSiteCodes())
-                ? "US" : request.getSiteCodes().get(0);
-        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+        // 按站点分别查询交易方配置，确保每个站点使用正确的买卖方信息
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        for (String siteCode : request.getSiteCodes()) {
+            try {
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+                partyMap.put(siteCode, party);
+            } catch (Exception e) {
+                log.warn("站点 {} 未配置交易方信息，使用默认配置", siteCode);
+                // 使用默认配置兜底
+                DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+                defaultParty.setBuyerName("东莞市慕声商贸有限公司");
+                defaultParty.setBuyerAddress("广东省东莞市");
+                defaultParty.setSellerName("Hong Kong Andeo Group Limited");
+                partyMap.put(siteCode, defaultParty);
+            }
+        }
 
-        // 调用生成器
-        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1, party);
+        // 调用生成器（按站点使用各自的交易方配置，sequence 全局递增确保单据号唯一）
+        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1, partyMap);
         if (CollectionUtils.isEmpty(allResults)) {
             log.info("结算单生成结果为空，无数据可持久化");
             return List.of();
@@ -259,6 +298,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         // 持久化所有结算单
         Long shopId = ShopContext.requireShopId();
+        log.info("[GenerateSettlement] 当前店铺: shopId={}, 周期: {} ~ {}, 有效结算单: {}份",
+                shopId, request.getPeriodStart(), request.getPeriodEnd(), results.size());
         List<DocumentSettlement> settlements = new ArrayList<>();
         for (SettlementGenerateResult result : results) {
             DocumentSettlement settlement = result.getSettlement();
@@ -277,9 +318,10 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     documentSettlementItemMapper.insert(item);
                 }
             } catch (DuplicateKeyException e) {
-                log.info("结算单单据号已存在，使用已有记录，编号: {}", settlement.getDocumentNo());
+                log.error("结算单单据号已存在，使用已有记录，编号: {}", settlement.getDocumentNo(), e);
                 LambdaQueryWrapper<DocumentSettlement> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(DocumentSettlement::getDocumentNo, settlement.getDocumentNo());
+                wrapper.eq(DocumentSettlement::getDocumentNo, settlement.getDocumentNo())
+                       .eq(DocumentSettlement::getShopId, shopId);
                 settlement = documentSettlementMapper.selectOne(wrapper);
             }
 
@@ -318,6 +360,14 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                 log.warn("结算单不存在，ID: {}", settlementId);
                 continue;
             }
+            // 校验结算单归属当前店铺，防止越权访问
+            Long currentShopId = ShopContext.requireShopId();
+            log.info("[generateInvoices] settlementId={}, 请求shopId={}, 数据库shopId={}", settlementId, currentShopId, settlement.getShopId());
+            if (!currentShopId.equals(settlement.getShopId())) {
+                log.warn("[generateInvoices] 权限校验失败: 请求shopId={} != 数据库shopId={}, settlementId={}", currentShopId, settlement.getShopId(), settlementId);
+                throw new com.musheng.common.exception.BusinessException(
+                        FORBIDDEN, "无权访问该数据");
+            }
 
             // 查询结算单明细
             LambdaQueryWrapper<DocumentSettlementItem> queryWrapper = new LambdaQueryWrapper<>();
@@ -335,19 +385,28 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             return List.of();
         }
 
-        // 调用INV生成器
-        // 从第一份结算单获取货币代码，转换为站点代码后查询交易方配置
-        // 注意：DocumentSettlement.siteCode 存储的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
-        String currencyCode = settlementResults.isEmpty() ? "USD"
-                : settlementResults.get(0).getSettlement().getSiteCode();
-        com.musheng.business.document.enums.SiteCode siteEnum =
-                com.musheng.business.document.enums.SiteCode.fromCurrency(currencyCode);
-        String siteCode = siteEnum != null ? siteEnum.name() : currencyCode;
-        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, party);
+        // 按结算单的站点分别查询交易方配置，确保每份 INV 使用正确的买卖方信息
+        Long shopId = ShopContext.requireShopId();
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        for (SettlementGenerateResult sr : settlementResults) {
+            String siteCode = sr.getSettlement().getSiteCode();
+            if (!partyMap.containsKey(siteCode)) {
+                try {
+                    partyMap.put(siteCode, documentPartyConfigService.getBySiteCode(siteCode));
+                } catch (Exception e) {
+                    log.warn("站点 {} 未配置交易方信息，使用默认配置", siteCode);
+                    DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+                    defaultParty.setSellerName("Hong Kong Andeo Group Limited");
+                    defaultParty.setBuyerName("东莞市慕声商贸有限公司");
+                    partyMap.put(siteCode, defaultParty);
+                }
+            }
+        }
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, partyMap);
 
         // 持久化所有INV
-        Long shopId = ShopContext.requireShopId();
+        log.info("[GenerateINV] 当前店铺: shopId={}, 结算单数量: {}, 生成INV数量: {}",
+                shopId, settlementIds.size(), invResults.size());
         List<DocumentInv> invoices = new ArrayList<>();
         for (InvGenerateResult invResult : invResults) {
             DocumentInv inv = invResult.getInv();
@@ -369,7 +428,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             } catch (DuplicateKeyException e) {
                 log.info("INV单据号已存在，使用已有记录，编号: {}", inv.getDocumentNo());
                 LambdaQueryWrapper<DocumentInv> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(DocumentInv::getDocumentNo, inv.getDocumentNo());
+                wrapper.eq(DocumentInv::getDocumentNo, inv.getDocumentNo())
+                       .eq(DocumentInv::getShopId, shopId);
                 inv = documentInvMapper.selectOne(wrapper);
             }
 
@@ -378,28 +438,6 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         log.info("INV生成完成，共 {} 份", invoices.size());
 
         return invoices;
-    }
-
-    /**
-     * 从货件ID列表解析站点代码
-     *
-     * <p>查询第一个货件的 siteCode 字段，用于获取交易方配置。
-     * 若货件无 siteCode 则默认返回 "US"。</p>
-     *
-     * @param shipmentIds 货件ID列表
-     * @return 站点代码
-     * @author wanhua
-     * 10:30 2026年03月22日
-     */
-    private String resolveSiteCodeFromShipments(List<Long> shipmentIds) {
-        if (CollectionUtils.isEmpty(shipmentIds)) {
-            return "US";
-        }
-        FbaShipment shipment = fbaShipmentMapper.selectById(shipmentIds.get(0));
-        if (shipment == null || !org.springframework.util.StringUtils.hasText(shipment.getSiteCode())) {
-            return "US";
-        }
-        return shipment.getSiteCode();
     }
 
     /**
@@ -419,8 +457,12 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             return List.of();
         }
 
-        // 批量查询货件主表
-        List<FbaShipment> shipments = fbaShipmentMapper.selectBatchIds(shipmentIds);
+        // 批量查询货件主表（强制 shopId 隔离，防止跨店铺访问）
+        Long shopId = ShopContext.requireShopId();
+        LambdaQueryWrapper<FbaShipment> shipmentWrapper = new LambdaQueryWrapper<>();
+        shipmentWrapper.in(FbaShipment::getId, shipmentIds)
+                .eq(FbaShipment::getShopId, shopId);
+        List<FbaShipment> shipments = fbaShipmentMapper.selectList(shipmentWrapper);
         if (CollectionUtils.isEmpty(shipments)) {
             log.warn("未查询到货件数据，ID列表: {}", shipmentIds);
             return List.of();
@@ -467,17 +509,20 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     private SettlementInput buildSettlementInput(SettlementGenerateRequest request) {
         Long shopId = ShopContext.requireShopId();
+        log.info("[BuildSettlementInput] 当前店铺: shopId={}, 周期: {} ~ {}, 站点: {}",
+                shopId, request.getPeriodStart(), request.getPeriodEnd(), request.getSiteCodes());
 
+        // Step 1：从推导结果读取季度单价（MSKU → unitPrice）
         LambdaQueryWrapper<SettlementImportData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SettlementImportData::getShopId, shopId)
                 .eq(SettlementImportData::getDelFlag, 0)
                 .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
                 .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart())
                 .in(SettlementImportData::getSiteCode, request.getSiteCodes());
-        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(wrapper);
+        List<SettlementImportData> derivedList = settlementImportDataMapper.selectList(wrapper);
 
-        if (CollectionUtils.isEmpty(dataList)) {
-            log.warn("未查询到结算导入数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
+        if (CollectionUtils.isEmpty(derivedList)) {
+            log.warn("未查询到推导数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
             return SettlementInput.builder()
                     .periodStart(request.getPeriodStart())
                     .periodEnd(request.getPeriodEnd())
@@ -485,20 +530,81 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     .build();
         }
 
-        List<SettlementInput.SettlementDataItem> items = dataList.stream()
-                .map(data -> SettlementInput.SettlementDataItem.builder()
-                        .siteCode(data.getSiteCode())
-                        .msku(data.getMsku())
-                        .currency(data.getCurrency())
-                        .unitPrice(data.getUnitPrice())
-                        .quantity(data.getQuantity())
-                        .build())
-                .collect(Collectors.toList());
+        // 构建 siteCode → (msku → unitPrice) 映射
+        Map<String, Map<String, BigDecimal>> siteUnitPriceMap = new LinkedHashMap<>();
+        Map<String, String> siteCurrencyFromDerived = new LinkedHashMap<>();
+        for (SettlementImportData d : derivedList) {
+            siteUnitPriceMap
+                    .computeIfAbsent(d.getSiteCode(), k -> new LinkedHashMap<>())
+                    .put(d.getMsku(), d.getUnitPrice());
+            if (d.getCurrency() != null) {
+                siteCurrencyFromDerived.put(d.getSiteCode(), d.getCurrency());
+            }
+        }
 
-        log.info("构建 SettlementInput 完成，共 {} 条明细", items.size());
+        // Step 2：按月重新聚合销售数量，用季度单价计算月度金额
+        List<SettlementInput.SettlementDataItem> items = new ArrayList<>();
+        LocalDate periodStart = request.getPeriodStart();
+        LocalDate periodEnd = request.getPeriodEnd();
+
+        LocalDate monthStart = periodStart.withDayOfMonth(1);
+        while (!monthStart.isAfter(periodEnd)) {
+            LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+            LocalDate subStart = monthStart.isBefore(periodStart) ? periodStart : monthStart;
+            LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
+
+            // 按月聚合净销售数量（shopId + siteCode + 时间，三者缺一不可）
+            AggregationResult monthAgg = salesDataAggregator.aggregateNetSales(
+                    shopId, subStart, subEnd, request.getSiteCodes());
+
+            for (String siteCode : request.getSiteCodes()) {
+                Map<String, BigDecimal> unitPriceMap = siteUnitPriceMap.getOrDefault(siteCode, Collections.emptyMap());
+                Map<String, Integer> monthQty = monthAgg.getNetSalesMap().getOrDefault(siteCode, Collections.emptyMap());
+                String currency = siteCurrencyFromDerived.get(siteCode);
+
+                for (Map.Entry<String, Integer> entry : monthQty.entrySet()) {
+                    String msku = entry.getKey();
+                    int qty = entry.getValue();
+                    if (qty <= 0) continue;
+
+                    BigDecimal unitPrice = unitPriceMap.get(msku);
+                    if (unitPrice == null) {
+                        // 推导结果中没有该 MSKU 的单价，跳过（可能是新增 MSKU）
+                        log.warn("MSKU {} 在推导结果中无单价，站点: {}, 月份: {}", msku, siteCode, subStart);
+                        continue;
+                    }
+
+                    items.add(SettlementInput.SettlementDataItem.builder()
+                            .transactionDate(subStart)   // 月份起始日，供 SettlementGenerator 按月过滤
+                            .siteCode(siteCode)
+                            .msku(msku)
+                            .currency(currency)
+                            .unitPrice(unitPrice)
+                            .quantity(qty)
+                            .build());
+                }
+            }
+
+            monthStart = monthStart.plusMonths(1);
+        }
+
+        // Step 3：构建站点货币映射
+        LambdaQueryWrapper<Marketplace> mWrapper = new LambdaQueryWrapper<>();
+        mWrapper.eq(Marketplace::getStatus, 1);
+        List<Marketplace> marketplaces = marketplaceMapper.selectList(mWrapper);
+        Map<String, String> siteCurrencyMap = new LinkedHashMap<>();
+        for (Marketplace m : marketplaces) {
+            if (m.getSiteCode() != null && m.getCurrencyCode() != null) {
+                siteCurrencyMap.put(m.getSiteCode(), m.getCurrencyCode());
+            }
+        }
+
+        log.info("构建 SettlementInput 完成，共 {} 条月度明细，站点货币映射: {}", items.size(), siteCurrencyMap);
         return SettlementInput.builder()
-                .periodStart(request.getPeriodStart())
-                .periodEnd(request.getPeriodEnd())
+                .periodStart(periodStart)
+                .periodEnd(periodEnd)
+                .selectedSiteCodes(request.getSiteCodes())
+                .siteCurrencyMap(siteCurrencyMap)
                 .items(items)
                 .build();
     }

@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 单据查询请求
@@ -32,6 +33,15 @@ public class DocumentQueryRequest {
 
     @Schema(description = "结束日期")
     private LocalDate endDate;
+
+    @Schema(description = "站点代码（US/CA/UK/EU）")
+    private String siteCode;
+
+    @Schema(description = "导出时间起始（创建时间范围）")
+    private LocalDateTime createTimeStart;
+
+    @Schema(description = "导出时间结束（创建时间范围）")
+    private LocalDateTime createTimeEnd;
 
     @Builder.Default
     @Schema(description = "页码", example = "1")

@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 结算数据输入类（纯函数输入，不依赖数据库实体）
@@ -29,6 +30,15 @@ public class SettlementInput {
 
     /** 结算周期结束日 */
     private LocalDate periodEnd;
+
+    /** 前端选择的站点列表（按传入顺序生成结算单，序号从 001 开始递增） */
+    private List<String> selectedSiteCodes;
+
+    /**
+     * 站点→货币映射（来自 t_marketplace 动态配置）
+     * key 为站点代码（如 "US"），value 为货币代码（如 "USD"）
+     */
+    private Map<String, String> siteCurrencyMap;
 
     /** 结算数据明细列表 */
     private List<SettlementDataItem> items;

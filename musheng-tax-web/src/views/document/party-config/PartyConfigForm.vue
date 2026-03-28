@@ -106,11 +106,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 import { addPartyConfig, updatePartyConfig } from '@/api/documentPartyConfig'
 import type { DocumentPartyConfig } from '@/api/documentPartyConfig'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 
 const props = defineProps<{
   config: DocumentPartyConfig
@@ -122,12 +124,19 @@ const emit = defineEmits<{
   (e: 'cancel'): void
 }>()
 
-const siteOptions = [
-  { label: 'US', value: 'US' },
-  { label: 'CA', value: 'CA' },
-  { label: 'UK', value: 'UK' },
-  { label: 'EU', value: 'EU' }
-]
+const siteOptions = ref<{ label: string; value: string }[]>([])
+
+async function fetchSiteOptions() {
+  try {
+    const res = await getEnabledMarketplaces() as any
+    const list: Marketplace[] = res?.data ?? res ?? []
+    siteOptions.value = list.map(m => ({ label: `${m.siteCode} - ${m.siteName}`, value: m.siteCode }))
+  } catch {
+    siteOptions.value = []
+  }
+}
+
+onMounted(fetchSiteOptions)
 
 const formRef = ref<FormInstance>()
 const saving = ref(false)

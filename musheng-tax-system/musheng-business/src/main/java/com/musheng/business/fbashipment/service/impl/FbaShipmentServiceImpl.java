@@ -64,11 +64,10 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
      * 10:30 2026年03月07日
      */
     private Map<String, Object> importData(MultipartFile file, String siteCode) {
-        log.info("导入FBA货件明细: fileName={}, size={} bytes, siteCode={}",
-                file.getOriginalFilename(), file.getSize(), siteCode);
-
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
+        log.info("[FbaImport] 当前店铺: shopId={}, 文件: {}, 大小: {}bytes, siteCode: {}",
+                shopId, file.getOriginalFilename(), file.getSize(), siteCode);
 
         // 计算文件哈希值（仅用于记录，不用于阻止导入）
         String fileHash = calculateFileHash(file);
@@ -188,8 +187,8 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         result.put("shipmentCount", successShipmentCount);
         result.put("errors", errors);
 
-        log.info("FBA货件导入完成: totalSku={}, successSku={}, failSku={}, duplicateSku={}, duplicateShipment={}, successShipment={}",
-                totalSkuCount, successSkuCount, failSkuCount, duplicateSkuCount, duplicateShipmentCount, successShipmentCount);
+        log.info("[FbaImport] shopId={} 导入完成: totalSku={}, successSku={}, failSku={}, duplicateSku={}, duplicateShipment={}, successShipment={}",
+                shopId, totalSkuCount, successSkuCount, failSkuCount, duplicateSkuCount, duplicateShipmentCount, successShipmentCount);
 
         return result;
     }
@@ -205,6 +204,12 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         // 使用 Repository 查询
         FbaShipment shipment = fbaShipmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
+
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(shipment.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         // 查询关联的SKU明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();
@@ -222,6 +227,12 @@ public class FbaShipmentServiceImpl implements FbaShipmentService {
         // 使用 Repository 查询
         FbaShipment shipment = fbaShipmentRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DATA_NOT_EXIST, "货件不存在"));
+
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(shipment.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
 
         // 删除明细
         LambdaQueryWrapper<FbaShipmentItem> itemWrapper = new LambdaQueryWrapper<>();

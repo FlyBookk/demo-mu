@@ -6,6 +6,7 @@ import com.musheng.business.document.dto.SettlementImportRequest.SettlementImpor
 import com.musheng.business.document.entity.SettlementImportData;
 import com.musheng.business.document.mapper.SettlementImportDataMapper;
 import com.musheng.business.document.service.SettlementImportService;
+import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 结算数据导入服务实现类
@@ -78,7 +80,7 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     }
 
     /**
-     * 根据结算周期查询导入数据
+     * 根据结算周期查询导入数据（仅返回当前店铺数据）
      *
      * @param periodStart 周期起始日
      * @param periodEnd 周期结束日
@@ -88,10 +90,13 @@ public class SettlementImportServiceImpl implements SettlementImportService {
      */
     @Override
     public List<SettlementImportData> queryByPeriod(LocalDate periodStart, LocalDate periodEnd) {
-        log.info("查询结算导入数据，周期: {} ~ {}", periodStart, periodEnd);
+        Long shopId = ShopContext.requireShopId();
+        log.info("查询结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
 
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SettlementImportData::getPeriodStart, periodStart)
+        queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getDelFlag, 0)
+                .eq(SettlementImportData::getPeriodStart, periodStart)
                 .eq(SettlementImportData::getPeriodEnd, periodEnd);
 
         List<SettlementImportData> result = settlementImportDataMapper.selectList(queryWrapper);
@@ -100,7 +105,7 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     }
 
     /**
-     * 删除指定周期的导入数据（用于重新导入）
+     * 删除指定周期的导入数据（仅删除当前店铺数据，用于重新导入）
      *
      * @param periodStart 周期起始日
      * @param periodEnd 周期结束日
@@ -111,14 +116,28 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int deleteByPeriod(LocalDate periodStart, LocalDate periodEnd) {
-        log.info("删除结算导入数据，周期: {} ~ {}", periodStart, periodEnd);
+        Long shopId = ShopContext.requireShopId();
+        log.info("逻辑删除结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
 
+        // 查出该周期下所有站点，逐站点逻辑删除（del_flag = 1）
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SettlementImportData::getPeriodStart, periodStart)
-                .eq(SettlementImportData::getPeriodEnd, periodEnd);
+        queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getDelFlag, 0)
+                .eq(SettlementImportData::getPeriodStart, periodStart)
+                .eq(SettlementImportData::getPeriodEnd, periodEnd)
+                .select(SettlementImportData::getSiteCode);
+        List<SettlementImportData> existing = settlementImportDataMapper.selectList(queryWrapper);
 
-        int deleted = settlementImportDataMapper.delete(queryWrapper);
-        log.info("删除结算导入数据完成，共删除 {} 条", deleted);
+        int deleted = 0;
+        Set<String> siteCodes = existing.stream()
+                .map(SettlementImportData::getSiteCode)
+                .filter(s -> s != null && !s.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+        for (String siteCode : siteCodes) {
+            deleted += settlementImportDataMapper.logicalDeleteByPeriodAndSite(shopId, periodStart, periodEnd, siteCode);
+        }
+
+        log.info("逻辑删除结算导入数据完成，共删除 {} 条", deleted);
         return deleted;
     }
 }

@@ -5,6 +5,11 @@ import com.musheng.business.document.entity.*;
 import com.musheng.business.document.mapper.*;
 import com.musheng.business.document.service.DocumentExportService;
 import com.musheng.business.document.service.DocumentPartyConfigService;
+import com.musheng.config.marketplace.entity.Marketplace;
+import com.musheng.config.marketplace.mapper.MarketplaceMapper;
+import com.musheng.common.context.ShopContext;
+import com.musheng.common.exception.BusinessException;
+import com.musheng.common.result.ErrorCode;
 import com.musheng.common.service.SysConfigService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +64,26 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     private SysConfigService sysConfigService;
     @Autowired
     private DocumentPartyConfigService documentPartyConfigService;
+    @Autowired
+    private MarketplaceMapper marketplaceMapper;
+
+    /**
+     * 根据货币代码动态查询对应的站点代码（从 t_marketplace 获取，不依赖枚举）
+     *
+     * @param currencyCode 货币代码（如 USD/GBP/CAD/EUR）
+     * @return 站点代码（如 US/UK/CA/EU），未找到时返回原值
+     */
+    private String resolveSiteCodeByCurrency(String currencyCode) {
+        if (!org.springframework.util.StringUtils.hasText(currencyCode)) {
+            return currencyCode;
+        }
+        Marketplace marketplace = marketplaceMapper.selectOne(
+                new LambdaQueryWrapper<Marketplace>()
+                        .eq(Marketplace::getCurrencyCode, currencyCode)
+                        .eq(Marketplace::getStatus, 1)
+                        .last("LIMIT 1"));
+        return marketplace != null ? marketplace.getSiteCode() : currencyCode;
+    }
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy/M/d");
 
@@ -92,6 +117,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentPo po = documentPoMapper.selectById(poId);
         if (po == null) {
             throw new RuntimeException("PO不存在, poId=" + poId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(po.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
         if (org.springframework.util.StringUtils.hasText(po.getSiteCode())) {
@@ -315,6 +345,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         DocumentDn dn = documentDnMapper.selectById(dnId);
         if (dn == null) {
             throw new RuntimeException("DN不存在, dnId=" + dnId);
+        }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        log.info("[exportDn] dnId={}, 请求shopId={}, 数据库shopId={}", dnId, shopId, dn.getShopId());
+        if (!shopId.equals(dn.getShopId())) {
+            log.warn("[exportDn] 权限校验失败: 请求shopId={} != 数据库shopId={}, dnId={}", shopId, dn.getShopId(), dnId);
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
         }
         // 实时用最新配置覆盖交易方字段
         if (org.springframework.util.StringUtils.hasText(dn.getSiteCode())) {
@@ -577,13 +614,16 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         if (settlement == null) {
             throw new RuntimeException("结算单不存在, settlementId=" + settlementId);
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(settlement.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
         // 实时用最新配置覆盖交易方字段
-        // 注意：结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
+        // 结算单 siteCode 存的是货币代码（USD/GBP/CAD/EUR），通过 t_marketplace 动态转换为站点代码
         if (org.springframework.util.StringUtils.hasText(settlement.getSiteCode())) {
             try {
-                com.musheng.business.document.enums.SiteCode siteEnum =
-                        com.musheng.business.document.enums.SiteCode.fromCurrency(settlement.getSiteCode());
-                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : settlement.getSiteCode();
+                String resolvedSiteCode = resolveSiteCodeByCurrency(settlement.getSiteCode());
                 DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
                 settlement.setBuyerName(party.getBuyerName());
                 settlement.setBuyerAddress(party.getBuyerAddress());
@@ -878,13 +918,16 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         if (inv == null) {
             throw new RuntimeException("INV不存在, invId=" + invId);
         }
+        // 校验店铺数据隔离
+        Long shopId = ShopContext.requireShopId();
+        if (!shopId.equals(inv.getShopId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权访问该数据");
+        }
         // 实时用最新配置覆盖交易方及银行字段
-        // 注意：INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码
+        // INV 的 siteCode 来自结算单，存的是货币代码（USD/GBP/CAD/EUR），通过 t_marketplace 动态转换为站点代码
         if (org.springframework.util.StringUtils.hasText(inv.getSiteCode())) {
             try {
-                com.musheng.business.document.enums.SiteCode siteEnum =
-                        com.musheng.business.document.enums.SiteCode.fromCurrency(inv.getSiteCode());
-                String resolvedSiteCode = siteEnum != null ? siteEnum.name() : inv.getSiteCode();
+                String resolvedSiteCode = resolveSiteCodeByCurrency(inv.getSiteCode());
                 DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(resolvedSiteCode);
                 inv.setSellerName(party.getSellerName());
                 inv.setSellerAddress(party.getSellerAddress());
@@ -1220,20 +1263,24 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     public void batchExportByPeriod(LocalDate periodStart, LocalDate periodEnd, HttpServletResponse response) {
         log.info("批量导出结算周期文件, periodStart={}, periodEnd={}", periodStart, periodEnd);
 
-        // 查询该周期的结算单
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 查询该周期的结算单（限当前店铺）
         List<DocumentSettlement> settlements = documentSettlementMapper.selectList(
                 new LambdaQueryWrapper<DocumentSettlement>()
+                        .eq(DocumentSettlement::getShopId, shopId)
                         .eq(DocumentSettlement::getPeriodStart, periodStart)
                         .eq(DocumentSettlement::getPeriodEnd, periodEnd));
         if (CollectionUtils.isEmpty(settlements)) {
             throw new RuntimeException("该结算周期无结算单数据");
         }
 
-        // 查询关联的INV
+        // 查询关联的INV（限当前店铺）
         List<Long> settlementIds = settlements.stream()
                 .map(DocumentSettlement::getId).collect(Collectors.toList());
         List<DocumentInv> invList = documentInvMapper.selectList(
                 new LambdaQueryWrapper<DocumentInv>()
+                        .eq(DocumentInv::getShopId, shopId)
                         .in(DocumentInv::getSettlementId, settlementIds));
 
         String zipFileName = formatPeriod(periodStart, periodEnd) + "-结算文件.zip";
@@ -1273,6 +1320,133 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     }
 
 
+    // ==================== 批量导出PO/DN ====================
+
+    /**
+     * 批量导出PO为ZIP文件
+     *
+     * @param poIds PO主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Override
+    public void batchExportPo(List<Long> poIds, HttpServletResponse response) {
+        log.info("批量导出PO, 数量={}", poIds.size());
+        if (CollectionUtils.isEmpty(poIds)) {
+            throw new RuntimeException("PO ID列表不能为空");
+        }
+
+        Long shopId = ShopContext.requireShopId();
+
+        List<DocumentPo> poList = documentPoMapper.selectList(
+                new LambdaQueryWrapper<DocumentPo>()
+                        .eq(DocumentPo::getShopId, shopId)
+                        .in(DocumentPo::getId, poIds));
+        if (CollectionUtils.isEmpty(poList)) {
+            throw new RuntimeException("未找到对应的PO数据");
+        }
+
+        // 实时覆盖交易方字段
+        for (DocumentPo po : poList) {
+            if (org.springframework.util.StringUtils.hasText(po.getSiteCode())) {
+                try {
+                    DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(po.getSiteCode());
+                    po.setBuyerName(party.getBuyerName());
+                    po.setBuyerAddress(party.getBuyerAddress());
+                    po.setSellerName(party.getSellerName());
+                } catch (Exception e) {
+                    log.warn("批量导出PO：获取交易方配置失败，使用单据原始值，siteCode={}", po.getSiteCode());
+                }
+            }
+        }
+
+        String zipFileName = "PO采购订单_" + poList.size() + "份.zip";
+        try {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment;filename*=UTF-8''" +
+                    URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20"));
+
+            try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
+                for (DocumentPo po : poList) {
+                    List<DocumentPoItem> items = documentPoItemMapper.selectList(
+                            new LambdaQueryWrapper<DocumentPoItem>()
+                                    .eq(DocumentPoItem::getPoId, po.getId())
+                                    .orderByAsc(DocumentPoItem::getSortOrder));
+                    String fileName = generatePoFileName(po.getDocumentNo(), po.getBuyerName(), po.getSellerName());
+                    zos.putNextEntry(new ZipEntry(fileName));
+                    writePoExcel(zos, po, items);
+                    zos.closeEntry();
+                }
+            }
+        } catch (IOException e) {
+            log.error("批量导出PO失败, 数量={}", poIds.size(), e);
+            throw new RuntimeException("批量导出PO失败", e);
+        }
+    }
+
+    /**
+     * 批量导出DN为ZIP文件
+     *
+     * @param dnIds DN主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Override
+    public void batchExportDn(List<Long> dnIds, HttpServletResponse response) {
+        log.info("批量导出DN, 数量={}", dnIds.size());
+        if (CollectionUtils.isEmpty(dnIds)) {
+            throw new RuntimeException("DN ID列表不能为空");
+        }
+
+        Long shopId = ShopContext.requireShopId();
+
+        List<DocumentDn> dnList = documentDnMapper.selectList(
+                new LambdaQueryWrapper<DocumentDn>()
+                        .eq(DocumentDn::getShopId, shopId)
+                        .in(DocumentDn::getId, dnIds));
+        if (CollectionUtils.isEmpty(dnList)) {
+            throw new RuntimeException("未找到对应的DN数据");
+        }
+
+        // 实时覆盖交易方字段
+        for (DocumentDn dn : dnList) {
+            if (org.springframework.util.StringUtils.hasText(dn.getSiteCode())) {
+                try {
+                    DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(dn.getSiteCode());
+                    dn.setSupplierName(party.getSupplierName());
+                    dn.setCustomerName(party.getCustomerNameTc());
+                } catch (Exception e) {
+                    log.warn("批量导出DN：获取交易方配置失败，使用单据原始值，siteCode={}", dn.getSiteCode());
+                }
+            }
+        }
+
+        String zipFileName = "DN送货单_" + dnList.size() + "份.zip";
+        try {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment;filename*=UTF-8''" +
+                    URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20"));
+
+            try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
+                for (DocumentDn dn : dnList) {
+                    List<DocumentDnItem> items = documentDnItemMapper.selectList(
+                            new LambdaQueryWrapper<DocumentDnItem>()
+                                    .eq(DocumentDnItem::getDnId, dn.getId())
+                                    .orderByAsc(DocumentDnItem::getLineNo));
+                    String fileName = generateDnFileName(dn.getDocumentNo(), dn.getSupplierName(), dn.getCustomerName());
+                    zos.putNextEntry(new ZipEntry(fileName));
+                    writeDnExcel(zos, dn, items);
+                    zos.closeEntry();
+                }
+            }
+        } catch (IOException e) {
+            log.error("批量导出DN失败, 数量={}", dnIds.size(), e);
+            throw new RuntimeException("批量导出DN失败", e);
+        }
+    }
+
     // ==================== 文件名生成 ====================
 
     /**
@@ -1290,7 +1464,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new RuntimeException("结算单ID列表不能为空");
         }
 
-        List<DocumentSettlement> settlementList = documentSettlementMapper.selectBatchIds(settlementIds);
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 限当前店铺，防止越权下载
+        List<DocumentSettlement> settlementList = documentSettlementMapper.selectList(
+                new LambdaQueryWrapper<DocumentSettlement>()
+                        .eq(DocumentSettlement::getShopId, shopId)
+                        .in(DocumentSettlement::getId, settlementIds));
         if (CollectionUtils.isEmpty(settlementList)) {
             throw new RuntimeException("未找到对应的结算单数据");
         }
@@ -1335,7 +1515,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             throw new RuntimeException("INV ID列表不能为空");
         }
 
-        List<DocumentInv> invList = documentInvMapper.selectBatchIds(invIds);
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+
+        // 限当前店铺，防止越权下载
+        List<DocumentInv> invList = documentInvMapper.selectList(
+                new LambdaQueryWrapper<DocumentInv>()
+                        .eq(DocumentInv::getShopId, shopId)
+                        .in(DocumentInv::getId, invIds));
         if (CollectionUtils.isEmpty(invList)) {
             throw new RuntimeException("未找到对应的INV数据");
         }
