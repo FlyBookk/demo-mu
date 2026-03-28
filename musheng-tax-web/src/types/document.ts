@@ -139,6 +139,7 @@ export interface DnGenerateRequest {
   siteCode: string
   anchorDate: string
   shipmentIds: number[]
+  poId?: number
 }
 
 /** 结算单生成请求 */
