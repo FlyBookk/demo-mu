@@ -98,15 +98,8 @@ public class AmazonOriginalParser implements SalesDataParser {
                         }
                         
                         try {
-                            // 获取marketplace并识别站点
-                            String marketplace = getFieldValue(record, headerMap, MARKETPLACE_FIELD);
-                            String recordSiteCode = siteCodeResolver.getSiteCode(marketplace);
-                            if (recordSiteCode != null) {
-                                detectedSites.add(recordSiteCode);
-                            }
-                            
-                            // 使用上下文中的站点编码，如果未指定则使用检测到的
-                            String siteCode = context.getSiteCode() != null ? context.getSiteCode() : recordSiteCode;
+                            // 直接使用用户传入的站点编码
+                            String siteCode = context.getSiteCode();
                             
                             // 解析数据行
                             SalesData salesData = parseRecord(record, headerMap, siteCode, context);
@@ -241,15 +234,8 @@ public class AmazonOriginalParser implements SalesDataParser {
                     }
                     
                     try {
-                        // 获取marketplace并识别站点
-                        String marketplace = getFieldValue(record, headerMap, MARKETPLACE_FIELD);
-                        String recordSiteCode = siteCodeResolver.getSiteCode(marketplace);
-                        if (recordSiteCode != null) {
-                            detectedSites.add(recordSiteCode);
-                        }
-                        
-                        // 使用上下文中的站点编码，如果未指定则使用检测到的
-                        String siteCode = context.getSiteCode() != null ? context.getSiteCode() : recordSiteCode;
+                        // 直接使用用户传入的站点编码
+                        String siteCode = context.getSiteCode();
                         
                         // 解析数据行
                         SalesData salesData = parseRecord(record, headerMap, siteCode, context);

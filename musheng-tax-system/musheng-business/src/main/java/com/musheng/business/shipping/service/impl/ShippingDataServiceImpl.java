@@ -126,6 +126,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         int failCount = 0;
         int duplicateCount = 0;
         int skipCount = 0;
+        int unmatchedCount = 0;
+        List<String> unmatchedSamples = new ArrayList<>();
 
         // Create import record
         ImportRecord importRecord = new ImportRecord();
@@ -165,6 +167,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                     .collect(java.util.stream.Collectors.toMap(Marketplace::getSiteCode, m -> m));
             log.info("Pre-loaded {} marketplace configurations", marketplaceMap.size());
 
+            // 未匹配销售渠道的记录（用于告知用户）
+
             // Reset input stream and skip to data rows using detected charset
             try (BufferedReader dataReader = new BufferedReader(
                     new InputStreamReader(file.getInputStream(), charset))) {
@@ -182,11 +186,26 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                         ShippingData shippingData = parseShippingRecord(record, headers, totalCount, marketplaceMap, headerLanguage);
 
                         if (shippingData != null) {
-                            shippingData.setShopId(shopId);  // 设置店铺ID
+                            shippingData.setShopId(shopId);
                             shippingData.setImportBatchId(importRecord.getId());
                             parsedRecords.add(shippingData);
                         } else {
-                            skipCount++;  // 空行（无订单号）静默跳过
+                            // 检查是否是未匹配站点（非空行）
+                            Map<String, String> rowData = new HashMap<>();
+                            for (int i = 0; i < Math.min(headers.size(), record.size()); i++) {
+                                rowData.put(headers.get(i).toLowerCase().trim(), record.get(i).trim());
+                            }
+                            String orderIdCheck = getFieldValue(rowData, "order id", "order-id", "orderid", "bestellnummer", "亚马逊订单编号");
+                            if (StringUtils.hasText(orderIdCheck)) {
+                                // 有订单号但站点未匹配
+                                String salesChannel = resolveSalesChannel(rowData);
+                                unmatchedCount++;
+                                if (unmatchedSamples.size() < 5) {
+                                    unmatchedSamples.add(String.format("第%d行: 订单%s, 销售渠道[%s]未匹配到站点", totalCount, orderIdCheck, salesChannel));
+                                }
+                            } else {
+                                skipCount++;  // 空行静默跳过
+                            }
                         }
                     } catch (Exception e) {
                         failCount++;
@@ -196,7 +215,18 @@ public class ShippingDataServiceImpl implements ShippingDataService {
                 }
             }
 
-            log.info("Parsed {} valid records from {} total rows", parsedRecords.size(), totalCount);
+            log.info("Parsed {} valid records from {} total rows, unmatchedCount={}", parsedRecords.size(), totalCount, unmatchedCount);
+
+            // 未匹配超过10条：禁止导入，提示用户检查数据文件
+            if (unmatchedCount > 10) {
+                String msg = String.format(
+                        "导入失败：共 %d 条记录的销售渠道未能匹配到站点（超过10条限制），请检查数据文件后重新导入。示例：%s",
+                        unmatchedCount, String.join("；", unmatchedSamples));
+                importRecord.setImportStatus("fail");
+                importRecord.setErrorMessage(msg);
+                importRecordMapper.updateById(importRecord);
+                throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, msg);
+            }
 
             // Step 1.5: 强制校验每条记录必须有站点和店铺归属，防止信息缺失导致数据错乱
             Iterator<ShippingData> validationIter = parsedRecords.iterator();
@@ -316,6 +346,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
         result.put("failCount", failCount);
         result.put("duplicateCount", duplicateCount);
         result.put("skipCount", skipCount);
+        result.put("unmatchedCount", unmatchedCount);
+        result.put("unmatchedSamples", unmatchedSamples);
         result.put("errors", errors);
         result.put("batchNo", importRecord.getBatchNo());
 
@@ -432,9 +464,8 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     /**
      * Parse a single CSV record into ShippingData entity (自动识别销售渠道)
      * @param marketplaceMap Pre-loaded marketplace configurations to avoid N+1 queries
-     * @param headerLanguage 表头语言（EN/DE/CN），用于决定数字格式：
-     *                       - DE: 德语表头，使用逗号作为小数分隔符
-     *                       - EN/CN/其他: 使用点作为小数分隔符
+     * @param headerLanguage 表头语言（EN/DE/CN），用于决定数字格式
+     * @return 解析结果，销售渠道未匹配时返回 null（由调用方统计跳过）
      */
     private ShippingData parseShippingRecord(CSVRecord record, List<String> headers, int rowNum,
                                              Map<String, Marketplace> marketplaceMap, String headerLanguage) {
@@ -450,15 +481,17 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             return null;
         }
 
-        // 从CSV中读取销售渠道（部分 Amazon 导出中 "sales channel" 可能指配送渠道 AFN/MFN，需从 marketplace 列获取实际站点；
-        // 合并文件存在列错位时，销售渠道列可能被填成 AFN，需从整行扫描 amazon.xx）
+        // 从CSV中读取销售渠道
         String salesChannel = resolveSalesChannel(rowData);
-        if (!StringUtils.hasText(salesChannel)) {
-            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Missing sales channel");
-        }
 
-        // 将销售渠道映射为站点编码（Non-Amazon MCF 订单返回 null，后续关联销售订单赋值）
+        // 将销售渠道映射为站点编码（基于 domain 关键字匹配）
         String siteCode = mapSalesChannelToSiteCode(salesChannel);
+
+        // 未匹配到站点（非 non-amazon）：返回 null，由调用方统计并决定是否跳过
+        if (!StringUtils.hasText(salesChannel) || (siteCode == null && !salesChannel.toLowerCase().contains("non-amazon"))) {
+            log.debug("销售渠道未匹配到站点，跳过: orderId={}, salesChannel={}", orderIdEarly, salesChannel);
+            return null;
+        }
 
         ShippingData shippingData = new ShippingData();
 
@@ -713,51 +746,29 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
-     * 将销售渠道映射为站点编码
-     * 例如: amazon.de -> DE, amazon.co.uk -> UK, amazon.fr -> FR
-     * Non-Amazon（MCF 多渠道配送订单）返回 null，由调用方关联销售订单确定站点
+     * 将销售渠道映射为站点编码（基于 domain 关键字匹配）
+     * 匹配不到返回 null（由调用方决定跳过）
      *
-     * @param salesChannel 销售渠道字符串
-     * @return 站点编码，Non-Amazon 时返回 null
-     * @author wanhua
-     * 10:00 2026年03月14日
+     * @param salesChannel 销售渠道字符串，如 "amazon.co.uk"
+     * @return 站点编码，匹配不到返回 null
      */
     private String mapSalesChannelToSiteCode(String salesChannel) {
-        if (!StringUtils.hasText(salesChannel)) {
-            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR, "Sales channel is empty");
-        }
-
+        if (!StringUtils.hasText(salesChannel)) return null;
         String channel = salesChannel.toLowerCase().trim();
-
-        // 映射规则
-        if (channel.contains("amazon.de")) {
-            return "DE";
-        } else if (channel.contains("amazon.co.uk") || channel.contains("amazon.uk")) {
-            return "UK";
-        } else if (channel.contains("amazon.fr")) {
-            return "FR";
-        } else if (channel.contains("amazon.it")) {
-            return "IT";
-        } else if (channel.contains("amazon.es")) {
-            return "ES";
-        } else if (channel.contains("amazon.nl")) {
-            return "NL";
-        } else if (channel.contains("amazon.pl")) {
-            return "PL";
-        } else if (channel.contains("amazon.se")) {
-            return "SE";
-        } else if (channel.contains("amazon.ca")) {
-            return "CA";
-        } else if (channel.contains("amazon.com")) {
-            return "US";
-        } else if (channel.contains("non-amazon")) {
-            // MCF（多渠道配送）订单：卖家通过非亚马逊渠道接单，委托亚马逊仓库发货
-            // 站点未知，返回 null，后续通过关联销售订单表来确定站点
-            return null;
-        } else {
-            throw new BusinessException(ErrorCode.IMPORT_PARSE_ERROR,
-                    "Unsupported sales channel: " + salesChannel);
-        }
+        if (channel.contains("amazon.co.uk") || channel.contains("amazon.uk")) return "UK";
+        if (channel.contains("amazon.de")) return "DE";
+        if (channel.contains("amazon.fr")) return "FR";
+        if (channel.contains("amazon.it")) return "IT";
+        if (channel.contains("amazon.es")) return "ES";
+        if (channel.contains("amazon.nl")) return "NL";
+        if (channel.contains("amazon.pl")) return "PL";
+        if (channel.contains("amazon.se")) return "SE";
+        if (channel.contains("amazon.ca")) return "CA";
+        if (channel.contains("amazon.com")) return "US";
+        if (channel.contains("amazon.co.jp") || channel.contains("amazon.jp")) return "JP";
+        if (channel.contains("amazon.com.au") || channel.contains("amazon.au")) return "AU";
+        if (channel.contains("non-amazon")) return null; // MCF 多渠道配送，站点未知
+        return null; // 未匹配
     }
 
     /**

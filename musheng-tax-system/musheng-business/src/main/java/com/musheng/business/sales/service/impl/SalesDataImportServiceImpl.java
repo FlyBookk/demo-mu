@@ -385,17 +385,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
                     }
                 }
                 
-                // 从数据中自动识别站点
-                if (headerRow < lines.length) {
-                    for (int i = headerRow; i < Math.min(headerRow + 10, lines.length); i++) {
-                        String line = lines[i];
-                        String detected = siteCodeResolver.detectSiteFromLine(line);
-                        if (detected != null) {
-                            detectedSiteCode = detected;
-                            break;
-                        }
-                    }
-                }
+                // 从数据中自动识别站点（已移除，直接使用用户传入的站点）
                 
                 totalRows = totalRows - headerRow;
             } else {
@@ -461,15 +451,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
         }
         
-        // 原始数据模式：校验模板站点与文件中识别的站点一致，避免导入脏数据
-        if (request.getSourceType() == SalesSourceType.ORIGINAL
-                && StringUtils.hasText(template.getSiteCode())
-                && StringUtils.hasText(fileCache.detectedSiteCode)
-                && !template.getSiteCode().equalsIgnoreCase(fileCache.detectedSiteCode)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR,
-                    String.format("所选模板站点(%s)与文件中识别到的站点(%s)不一致，请选择正确的模板或上传对应站点的数据文件",
-                            template.getSiteCode(), fileCache.detectedSiteCode));
-        }
+        // 原始数据模式：站点校验已移除，直接使用用户传入的站点
         
         try {
             // 解析映射配置
@@ -560,15 +542,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
             throw new BusinessException(ErrorCode.DATA_NOT_EXIST, "模板不存在");
         }
         
-        // 原始数据模式：校验模板站点与文件中识别的站点一致，避免导入脏数据
-        if (request.getSourceType() == SalesSourceType.ORIGINAL
-                && StringUtils.hasText(template.getSiteCode())
-                && StringUtils.hasText(fileCache.detectedSiteCode)
-                && !template.getSiteCode().equalsIgnoreCase(fileCache.detectedSiteCode)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR,
-                    String.format("所选模板站点(%s)与文件中识别到的站点(%s)不一致，请选择正确的模板或上传对应站点的数据文件",
-                            template.getSiteCode(), fileCache.detectedSiteCode));
-        }
+        // 原始数据模式：站点校验已移除，直接使用用户传入的站点
         
         // 获取当前店铺ID
         Long shopId = ShopContext.requireShopId();
