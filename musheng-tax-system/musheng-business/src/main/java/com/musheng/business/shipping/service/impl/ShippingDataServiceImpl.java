@@ -218,7 +218,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             log.info("Parsed {} valid records from {} total rows, unmatchedCount={}", parsedRecords.size(), totalCount, unmatchedCount);
 
             // 未匹配超过10条：禁止导入，提示用户检查数据文件
-            if (unmatchedCount > 10) {
+            if (unmatchedCount > 50) {
                 String msg = String.format(
                         "导入失败：共 %d 条记录的销售渠道未能匹配到站点（超过10条限制），请检查数据文件后重新导入。示例：%s",
                         unmatchedCount, String.join("；", unmatchedSamples));
