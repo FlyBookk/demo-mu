@@ -61,30 +61,30 @@ public class DocumentController {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    @Operation(summary = "生成PO采购订单", description = "根据选定的FBA货件生成PO采购订单")
+    @Operation(summary = "生成PO采购订单", description = "根据选定的FBA货件生成PO采购订单（按日期分组，可能生成多份）")
     @PostMapping("/po/generate")
-    public Result<DocumentPo> generatePo(
+    public Result<List<DocumentPo>> generatePo(
             @Valid @RequestBody PoGenerateRequest request) {
         log.info("生成PO采购订单，站点: {}，货件数量: {}", request.getSiteCode(), request.getShipmentIds().size());
-        DocumentPo po = documentGenerateService.generatePo(request);
-        return Result.success(po);
+        List<DocumentPo> pos = documentGenerateService.generatePo(request);
+        return Result.success(pos);
     }
 
     /**
      * 生成DN送货单
      *
      * @param request DN生成请求
-     * @return 生成的DN实体
+     * @return 生成的DN实体列表
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    @Operation(summary = "生成DN送货单", description = "根据DN周期批量生成送货单")
+    @Operation(summary = "生成DN送货单", description = "根据DN周期批量生成送货单（按日期分组，可能生成多份）")
     @PostMapping("/dn/generate")
-    public Result<DocumentDn> generateDn(
+    public Result<List<DocumentDn>> generateDn(
             @Valid @RequestBody DnGenerateRequest request) {
         log.info("生成DN送货单，站点: {}，锚点日期: {}，货件数量: {}", request.getSiteCode(), request.getAnchorDate(), request.getShipmentIds().size());
-        DocumentDn dn = documentGenerateService.generateDn(request);
-        return Result.success(dn);
+        List<DocumentDn> dns = documentGenerateService.generateDn(request);
+        return Result.success(dns);
     }
 
     /**
@@ -438,5 +438,39 @@ public class DocumentController {
             HttpServletResponse response) {
         log.info("批量导出INV，数量: {}", invIds.size());
         documentExportService.batchExportInv(invIds, response);
+    }
+
+    /**
+     * 批量导出PO为ZIP
+     *
+     * @param poIds PO主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Operation(summary = "批量导出PO为ZIP", description = "将多份PO打包为ZIP文件下载")
+    @PostMapping("/export/po/batch")
+    public void batchExportPo(
+            @RequestBody List<Long> poIds,
+            HttpServletResponse response) {
+        log.info("批量导出PO，数量: {}", poIds.size());
+        documentExportService.batchExportPo(poIds, response);
+    }
+
+    /**
+     * 批量导出DN为ZIP
+     *
+     * @param dnIds DN主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Operation(summary = "批量导出DN为ZIP", description = "将多份DN打包为ZIP文件下载")
+    @PostMapping("/export/dn/batch")
+    public void batchExportDn(
+            @RequestBody List<Long> dnIds,
+            HttpServletResponse response) {
+        log.info("批量导出DN，数量: {}", dnIds.size());
+        documentExportService.batchExportDn(dnIds, response);
     }
 }

@@ -33,7 +33,9 @@ public class DnGenerateRequest {
     @Schema(description = "锚点日期")
     private LocalDate anchorDate;
 
-    @NotEmpty(message = "货件ID列表不能为空")
-    @Schema(description = "FBA货件ID列表")
+    @Schema(description = "FBA货件ID列表（与poId二选一，传poId时可不传）")
     private List<Long> shipmentIds;
+
+    @Schema(description = "关联PO主键（传入时自动从PO明细提取货件，shipmentIds可为空）")
+    private Long poId;
 }

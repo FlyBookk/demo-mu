@@ -1302,6 +1302,133 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     }
 
 
+    // ==================== 批量导出PO/DN ====================
+
+    /**
+     * 批量导出PO为ZIP文件
+     *
+     * @param poIds PO主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Override
+    public void batchExportPo(List<Long> poIds, HttpServletResponse response) {
+        log.info("批量导出PO, 数量={}", poIds.size());
+        if (CollectionUtils.isEmpty(poIds)) {
+            throw new RuntimeException("PO ID列表不能为空");
+        }
+
+        Long shopId = ShopContext.requireShopId();
+
+        List<DocumentPo> poList = documentPoMapper.selectList(
+                new LambdaQueryWrapper<DocumentPo>()
+                        .eq(DocumentPo::getShopId, shopId)
+                        .in(DocumentPo::getId, poIds));
+        if (CollectionUtils.isEmpty(poList)) {
+            throw new RuntimeException("未找到对应的PO数据");
+        }
+
+        // 实时覆盖交易方字段
+        for (DocumentPo po : poList) {
+            if (org.springframework.util.StringUtils.hasText(po.getSiteCode())) {
+                try {
+                    DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(po.getSiteCode());
+                    po.setBuyerName(party.getBuyerName());
+                    po.setBuyerAddress(party.getBuyerAddress());
+                    po.setSellerName(party.getSellerName());
+                } catch (Exception e) {
+                    log.warn("批量导出PO：获取交易方配置失败，使用单据原始值，siteCode={}", po.getSiteCode());
+                }
+            }
+        }
+
+        String zipFileName = "PO采购订单_" + poList.size() + "份.zip";
+        try {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment;filename*=UTF-8''" +
+                    URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20"));
+
+            try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
+                for (DocumentPo po : poList) {
+                    List<DocumentPoItem> items = documentPoItemMapper.selectList(
+                            new LambdaQueryWrapper<DocumentPoItem>()
+                                    .eq(DocumentPoItem::getPoId, po.getId())
+                                    .orderByAsc(DocumentPoItem::getSortOrder));
+                    String fileName = generatePoFileName(po.getDocumentNo(), po.getBuyerName(), po.getSellerName());
+                    zos.putNextEntry(new ZipEntry(fileName));
+                    writePoExcel(zos, po, items);
+                    zos.closeEntry();
+                }
+            }
+        } catch (IOException e) {
+            log.error("批量导出PO失败, 数量={}", poIds.size(), e);
+            throw new RuntimeException("批量导出PO失败", e);
+        }
+    }
+
+    /**
+     * 批量导出DN为ZIP文件
+     *
+     * @param dnIds DN主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    @Override
+    public void batchExportDn(List<Long> dnIds, HttpServletResponse response) {
+        log.info("批量导出DN, 数量={}", dnIds.size());
+        if (CollectionUtils.isEmpty(dnIds)) {
+            throw new RuntimeException("DN ID列表不能为空");
+        }
+
+        Long shopId = ShopContext.requireShopId();
+
+        List<DocumentDn> dnList = documentDnMapper.selectList(
+                new LambdaQueryWrapper<DocumentDn>()
+                        .eq(DocumentDn::getShopId, shopId)
+                        .in(DocumentDn::getId, dnIds));
+        if (CollectionUtils.isEmpty(dnList)) {
+            throw new RuntimeException("未找到对应的DN数据");
+        }
+
+        // 实时覆盖交易方字段
+        for (DocumentDn dn : dnList) {
+            if (org.springframework.util.StringUtils.hasText(dn.getSiteCode())) {
+                try {
+                    DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(dn.getSiteCode());
+                    dn.setSupplierName(party.getSupplierName());
+                    dn.setCustomerName(party.getCustomerNameTc());
+                } catch (Exception e) {
+                    log.warn("批量导出DN：获取交易方配置失败，使用单据原始值，siteCode={}", dn.getSiteCode());
+                }
+            }
+        }
+
+        String zipFileName = "DN送货单_" + dnList.size() + "份.zip";
+        try {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment;filename*=UTF-8''" +
+                    URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20"));
+
+            try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
+                for (DocumentDn dn : dnList) {
+                    List<DocumentDnItem> items = documentDnItemMapper.selectList(
+                            new LambdaQueryWrapper<DocumentDnItem>()
+                                    .eq(DocumentDnItem::getDnId, dn.getId())
+                                    .orderByAsc(DocumentDnItem::getLineNo));
+                    String fileName = generateDnFileName(dn.getDocumentNo(), dn.getSupplierName(), dn.getCustomerName());
+                    zos.putNextEntry(new ZipEntry(fileName));
+                    writeDnExcel(zos, dn, items);
+                    zos.closeEntry();
+                }
+            }
+        } catch (IOException e) {
+            log.error("批量导出DN失败, 数量={}", dnIds.size(), e);
+            throw new RuntimeException("批量导出DN失败", e);
+        }
+    }
+
     // ==================== 文件名生成 ====================
 
     /**

@@ -104,52 +104,53 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class, noRollbackFor = DuplicateKeyException.class)
-    public DocumentPo generatePo(PoGenerateRequest request) {
+    public List<DocumentPo> generatePo(PoGenerateRequest request) {
         log.info("开始生成PO采购订单，货件ID数量: {}", request.getShipmentIds().size());
 
-        // 构建货件输入数据（后续可对接 FbaShipmentService 查询真实数据）
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
-        // 以前端用户选择的站点为准，避免因货件数据站点不一致导致脏数据
         String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
-        // 调用生成器
         List<PoGenerateResult> results = PoGenerator.generate(shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("PO生成结果为空，无数据可持久化");
-            return null;
+            return List.of();
         }
 
-        // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
-        log.info("[GeneratePO] 当前店铺: shopId={}, 货件数量: {}, 站点: {}", shopId, request.getShipmentIds().size(), siteCode);
-        PoGenerateResult result = results.get(0);
-        DocumentPo po = result.getPo();
-        po.setShopId(shopId);
-        po.setSiteCode(siteCode);
+        log.info("[GeneratePO] 当前店铺: shopId={}, 货件数量: {}, 站点: {}, 生成PO数量: {}",
+                shopId, request.getShipmentIds().size(), siteCode, results.size());
 
-        // 持久化PO主表（幂等：重复单据号时返回已有记录）
-        try {
-            documentPoMapper.insert(po);
-            log.info("PO主表持久化成功，编号: {}, ID: {}", po.getDocumentNo(), po.getId());
-
-            // 持久化PO明细
-            for (DocumentPoItem item : result.getItems()) {
-                item.setPoId(po.getId());
-                item.setShopId(shopId);
-                documentPoItemMapper.insert(item);
+        List<DocumentPo> savedPos = new ArrayList<>();
+        int sequence = 1;
+        for (PoGenerateResult result : results) {
+            DocumentPo po = result.getPo();
+            po.setShopId(shopId);
+            po.setSiteCode(siteCode);
+            // 重新生成编号，确保序号递增
+            po.setDocumentNo(com.musheng.business.document.utils.DocumentNumberCalculator.generate(po.getPoDate(), sequence));
+            try {
+                documentPoMapper.insert(po);
+                log.info("PO主表持久化成功，编号: {}, ID: {}", po.getDocumentNo(), po.getId());
+                for (DocumentPoItem item : result.getItems()) {
+                    item.setPoId(po.getId());
+                    item.setShopId(shopId);
+                    documentPoItemMapper.insert(item);
+                }
+                log.info("PO明细持久化成功，明细数量: {}", result.getItems().size());
+            } catch (DuplicateKeyException e) {
+                log.info("PO单据号已存在，返回已有记录，编号: {}", po.getDocumentNo());
+                LambdaQueryWrapper<DocumentPo> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo())
+                       .eq(DocumentPo::getShopId, shopId);
+                po = documentPoMapper.selectOne(wrapper);
             }
-            log.info("PO明细持久化成功，明细数量: {}", result.getItems().size());
-        } catch (DuplicateKeyException e) {
-            log.info("PO单据号已存在，返回已有记录，编号: {}", po.getDocumentNo());
-            LambdaQueryWrapper<DocumentPo> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentPo::getDocumentNo, po.getDocumentNo())
-                   .eq(DocumentPo::getShopId, shopId);
-            po = documentPoMapper.selectOne(wrapper);
+            savedPos.add(po);
+            sequence++;
         }
 
-        return po;
+        return savedPos;
     }
 
     /**
@@ -164,19 +165,35 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class, noRollbackFor = DuplicateKeyException.class)
-    public DocumentDn generateDn(DnGenerateRequest request) {
-        log.info("开始生成DN送货单，锚点日期: {}, 货件ID数量: {}",
-                request.getAnchorDate(), request.getShipmentIds().size());
+    public List<DocumentDn> generateDn(DnGenerateRequest request) {
+        // 当传入 poId 时，从 PO 明细提取对应货件 ID
+        List<Long> shipmentIds = request.getShipmentIds();
+        if (request.getPoId() != null) {
+            List<DocumentPoItem> poItems = documentPoItemMapper.selectList(
+                    new LambdaQueryWrapper<DocumentPoItem>()
+                            .eq(DocumentPoItem::getPoId, request.getPoId()));
+            List<String> shipmentNos = poItems.stream()
+                    .map(DocumentPoItem::getShipmentNo)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (!CollectionUtils.isEmpty(shipmentNos)) {
+                List<FbaShipment> shipments = fbaShipmentMapper.selectList(
+                        new LambdaQueryWrapper<FbaShipment>()
+                                .in(FbaShipment::getShipmentId, shipmentNos));
+                shipmentIds = shipments.stream().map(FbaShipment::getId).collect(Collectors.toList());
+            }
+        }
+        if (CollectionUtils.isEmpty(shipmentIds)) {
+            throw new IllegalArgumentException("货件ID列表不能为空");
+        }
+        log.info("开始生成DN送货单，锚点日期: {}, 货件ID数量: {}", request.getAnchorDate(), shipmentIds.size());
 
-        // 构建货件输入数据
-        List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
+        List<ShipmentInput> shipmentInputs = buildShipmentInputs(shipmentIds);
 
-        // 以前端用户选择的站点为准，避免因货件数据站点不一致导致脏数据
         String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
         // 校验锚点日期不能早于所有货件的最晚PO日期
-        // PO日期 = 货件创建时间所在周的下一个周二（或当天若为周二），非工作日顺延
         if (!CollectionUtils.isEmpty(shipmentInputs)) {
             LocalDate latestPoDate = shipmentInputs.stream()
                     .map(s -> PoGenerator.calculatePoDate(s.getCreateTime()))
@@ -188,46 +205,42 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             }
         }
 
-        // 调用生成器
         List<DnGenerateResult> results = DnGenerator.generate(
                 request.getAnchorDate(), shipmentInputs, 1, party);
         if (CollectionUtils.isEmpty(results)) {
             log.info("DN生成结果为空，无数据可持久化");
-            return null;
+            return List.of();
         }
 
-        // 取第一份DN结果进行持久化
-        DnGenerateResult result = results.get(0);
-        DocumentDn dn = result.getDn();
-
-        // 获取当前店铺ID（数据隔离）
         Long shopId = ShopContext.requireShopId();
-        log.info("[GenerateDN] 当前店铺: shopId={}, 锚点日期: {}, 货件数量: {}, 站点: {}",
-                shopId, request.getAnchorDate(), request.getShipmentIds().size(), siteCode);
-        dn.setSiteCode(siteCode);
-        dn.setShopId(shopId);
+        log.info("[GenerateDN] 当前店铺: shopId={}, 锚点日期: {}, 货件数量: {}, 站点: {}, 生成DN数量: {}",
+                shopId, request.getAnchorDate(), request.getShipmentIds().size(), siteCode, results.size());
 
-        // 持久化DN主表（幂等：重复单据号时返回已有记录）
-        try {
-            documentDnMapper.insert(dn);
-            log.info("DN主表持久化成功，编号: {}, ID: {}", dn.getDocumentNo(), dn.getId());
-
-            // 持久化DN明细
-            for (DocumentDnItem item : result.getItems()) {
-                item.setDnId(dn.getId());
-                item.setShopId(shopId);
-                documentDnItemMapper.insert(item);
+        List<DocumentDn> savedDns = new ArrayList<>();
+        for (DnGenerateResult result : results) {
+            DocumentDn dn = result.getDn();
+            dn.setSiteCode(siteCode);
+            dn.setShopId(shopId);
+            try {
+                documentDnMapper.insert(dn);
+                log.info("DN主表持久化成功，编号: {}, ID: {}", dn.getDocumentNo(), dn.getId());
+                for (DocumentDnItem item : result.getItems()) {
+                    item.setDnId(dn.getId());
+                    item.setShopId(shopId);
+                    documentDnItemMapper.insert(item);
+                }
+                log.info("DN明细持久化成功，明细数量: {}", result.getItems().size());
+            } catch (DuplicateKeyException e) {
+                log.info("DN单据号已存在，返回已有记录，编号: {}", dn.getDocumentNo());
+                LambdaQueryWrapper<DocumentDn> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo())
+                       .eq(DocumentDn::getShopId, shopId);
+                dn = documentDnMapper.selectOne(wrapper);
             }
-            log.info("DN明细持久化成功，明细数量: {}", result.getItems().size());
-        } catch (DuplicateKeyException e) {
-            log.info("DN单据号已存在，返回已有记录，编号: {}", dn.getDocumentNo());
-            LambdaQueryWrapper<DocumentDn> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DocumentDn::getDocumentNo, dn.getDocumentNo())
-                   .eq(DocumentDn::getShopId, shopId);
-            dn = documentDnMapper.selectOne(wrapper);
+            savedDns.add(dn);
         }
 
-        return dn;
+        return savedDns;
     }
 
     /**

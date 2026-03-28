@@ -21,24 +21,24 @@ import java.util.List;
 public interface DocumentGenerateService {
 
     /**
-     * 根据选定的FBA货件生成PO采购订单
+     * 根据选定的FBA货件生成PO采购订单（可能按日期分组生成多份）
      *
      * @param request PO生成请求（包含货件ID列表）
-     * @return 持久化后的PO实体，无数据时返回 null
+     * @return 持久化后的PO实体列表，无数据时返回空列表
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    DocumentPo generatePo(PoGenerateRequest request);
+    List<DocumentPo> generatePo(PoGenerateRequest request);
 
     /**
-     * 根据DN周期批量生成送货单
+     * 根据DN周期批量生成送货单（可能按日期分组生成多份）
      *
      * @param request DN生成请求（包含锚点日期和货件ID列表）
-     * @return 持久化后的DN实体，无数据时返回 null
+     * @return 持久化后的DN实体列表，无数据时返回空列表
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    DocumentDn generateDn(DnGenerateRequest request);
+    List<DocumentDn> generateDn(DnGenerateRequest request);
 
     /**
      * 根据结算周期生成4份结算单（按站点拆分）

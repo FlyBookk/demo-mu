@@ -89,6 +89,26 @@ public interface DocumentExportService {
     void batchExportInv(List<Long> invIds, HttpServletResponse response);
 
     /**
+     * 批量导出PO为ZIP（多选时使用）
+     *
+     * @param poIds PO主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    void batchExportPo(List<Long> poIds, HttpServletResponse response);
+
+    /**
+     * 批量导出DN为ZIP（多选时使用）
+     *
+     * @param dnIds DN主键ID列表
+     * @param response HTTP响应对象
+     * @author wanhua
+     * 10:30 2026年03月28日
+     */
+    void batchExportDn(List<Long> dnIds, HttpServletResponse response);
+
+    /**
      * 生成PO导出文件名
      *
      * <p>格式：{编号}-{买方中文名}-{卖方名}-PO.xlsx</p>
