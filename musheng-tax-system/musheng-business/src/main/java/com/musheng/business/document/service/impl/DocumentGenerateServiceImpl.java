@@ -245,17 +245,28 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     public List<DocumentSettlement> generateSettlements(SettlementGenerateRequest request) {
         log.info("开始生成结算单，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
 
-        // 构建结算数据输入（后续可对接 SettlementImportDataMapper 查询真实数据）
+        // 构建结算数据输入
         SettlementInput input = buildSettlementInput(request);
 
-        // 从请求的站点列表取第一个站点查询交易方配置（结算单按站点拆分，配置在生成器内部按站点使用）
-        // 注意：SettlementGenerator 内部会为每个站点生成一份结算单，party 用于填充买卖方信息
-        String siteCode = CollectionUtils.isEmpty(request.getSiteCodes())
-                ? "US" : request.getSiteCodes().get(0);
-        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+        // 按站点分别查询交易方配置，确保每个站点使用正确的买卖方信息
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        for (String siteCode : request.getSiteCodes()) {
+            try {
+                DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
+                partyMap.put(siteCode, party);
+            } catch (Exception e) {
+                log.warn("站点 {} 未配置交易方信息，使用默认配置", siteCode);
+                // 使用默认配置兜底
+                DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+                defaultParty.setBuyerName("东莞市慕声商贸有限公司");
+                defaultParty.setBuyerAddress("广东省东莞市");
+                defaultParty.setSellerName("Hong Kong Andeo Group Limited");
+                partyMap.put(siteCode, defaultParty);
+            }
+        }
 
-        // 调用生成器
-        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1, party);
+        // 调用生成器（按站点使用各自的交易方配置，sequence 全局递增确保单据号唯一）
+        List<SettlementGenerateResult> allResults = SettlementGenerator.generate(input, 1, partyMap);
         if (CollectionUtils.isEmpty(allResults)) {
             log.info("结算单生成结果为空，无数据可持久化");
             return List.of();
@@ -294,7 +305,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     documentSettlementItemMapper.insert(item);
                 }
             } catch (DuplicateKeyException e) {
-                log.info("结算单单据号已存在，使用已有记录，编号: {}", settlement.getDocumentNo());
+                log.error("结算单单据号已存在，使用已有记录，编号: {}", settlement.getDocumentNo(), e);
                 LambdaQueryWrapper<DocumentSettlement> wrapper = new LambdaQueryWrapper<>();
                 wrapper.eq(DocumentSettlement::getDocumentNo, settlement.getDocumentNo())
                        .eq(DocumentSettlement::getShopId, shopId);
@@ -361,19 +372,26 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             return List.of();
         }
 
-        // 调用INV生成器
-        // 从第一份结算单获取货币代码，转换为站点代码后查询交易方配置
-        // 注意：DocumentSettlement.siteCode 存储的是货币代码（USD/GBP/CAD/EUR），需转换为站点代码（US/UK/CA/EU）
-        String currencyCode = settlementResults.isEmpty() ? "USD"
-                : settlementResults.get(0).getSettlement().getSiteCode();
-        com.musheng.business.document.enums.SiteCode siteEnum =
-                com.musheng.business.document.enums.SiteCode.fromCurrency(currencyCode);
-        String siteCode = siteEnum != null ? siteEnum.name() : currencyCode;
-        DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
-        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, party);
+        // 按结算单的站点分别查询交易方配置，确保每份 INV 使用正确的买卖方信息
+        Long shopId = ShopContext.requireShopId();
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        for (SettlementGenerateResult sr : settlementResults) {
+            String siteCode = sr.getSettlement().getSiteCode();
+            if (!partyMap.containsKey(siteCode)) {
+                try {
+                    partyMap.put(siteCode, documentPartyConfigService.getBySiteCode(siteCode));
+                } catch (Exception e) {
+                    log.warn("站点 {} 未配置交易方信息，使用默认配置", siteCode);
+                    DocumentPartyConfig defaultParty = new DocumentPartyConfig();
+                    defaultParty.setSellerName("Hong Kong Andeo Group Limited");
+                    defaultParty.setBuyerName("东莞市慕声商贸有限公司");
+                    partyMap.put(siteCode, defaultParty);
+                }
+            }
+        }
+        List<InvGenerateResult> invResults = InvGenerator.generate(settlementResults, 1, partyMap);
 
         // 持久化所有INV
-        Long shopId = ShopContext.requireShopId();
         log.info("[GenerateINV] 当前店铺: shopId={}, 结算单数量: {}, 生成INV数量: {}",
                 shopId, settlementIds.size(), invResults.size());
         List<DocumentInv> invoices = new ArrayList<>();
@@ -426,8 +444,12 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
             return List.of();
         }
 
-        // 批量查询货件主表
-        List<FbaShipment> shipments = fbaShipmentMapper.selectBatchIds(shipmentIds);
+        // 批量查询货件主表（强制 shopId 隔离，防止跨店铺访问）
+        Long shopId = ShopContext.requireShopId();
+        LambdaQueryWrapper<FbaShipment> shipmentWrapper = new LambdaQueryWrapper<>();
+        shipmentWrapper.in(FbaShipment::getId, shipmentIds)
+                .eq(FbaShipment::getShopId, shopId);
+        List<FbaShipment> shipments = fbaShipmentMapper.selectList(shipmentWrapper);
         if (CollectionUtils.isEmpty(shipments)) {
             log.warn("未查询到货件数据，ID列表: {}", shipmentIds);
             return List.of();

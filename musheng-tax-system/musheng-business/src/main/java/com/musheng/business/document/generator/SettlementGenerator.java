@@ -89,11 +89,33 @@ public final class SettlementGenerator {
      */
     public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence,
                                                            DocumentPartyConfig party) {
+        // 所有站点共用同一个 party 的兼容方法
+        Map<String, DocumentPartyConfig> partyMap = new LinkedHashMap<>();
+        if (input != null && input.getSelectedSiteCodes() != null) {
+            for (String sc : input.getSelectedSiteCodes()) {
+                partyMap.put(sc, party);
+            }
+        }
+        return generate(input, startSequence, partyMap);
+    }
+
+    /**
+     * 根据结算数据生成结算单（按站点使用不同交易方配置）
+     *
+     * @param input 结算数据输入，不能为 null
+     * @param startSequence 起始编号序号
+     * @param partyMap 站点 → 交易方配置映射，不能为 null
+     * @return 结算单生成结果列表，按月份和站点排列
+     * @author wanhua
+     * 10:30 2026年03月07日
+     */
+    public static List<SettlementGenerateResult> generate(SettlementInput input, int startSequence,
+                                                           Map<String, DocumentPartyConfig> partyMap) {
         if (input == null) {
             throw new IllegalArgumentException("结算数据输入不能为 null");
         }
-        if (party == null) {
-            throw new IllegalArgumentException("交易方配置不能为 null");
+        if (partyMap == null || partyMap.isEmpty()) {
+            throw new IllegalArgumentException("交易方配置不能为空");
         }
         if (input.getItems() == null || input.getItems().isEmpty()) {
             return List.of();
@@ -112,13 +134,15 @@ public final class SettlementGenerator {
                     .siteCurrencyMap(input.getSiteCurrencyMap())
                     .items(input.getItems())
                     .build();
-            return generate(fallback, startSequence, party);
+            return generate(fallback, startSequence, partyMap);
         }
 
         LocalDate periodStart = input.getPeriodStart();
         LocalDate periodEnd = input.getPeriodEnd();
 
         List<SettlementGenerateResult> allResults = new ArrayList<>();
+        // sequence 全局递增，确保每份结算单单据号唯一
+        int sequence = startSequence;
 
         // 按自然月拆分：从 periodStart 所在月到 periodEnd 所在月
         LocalDate monthStart = periodStart.withDayOfMonth(1);
@@ -148,15 +172,18 @@ public final class SettlementGenerator {
             Map<String, List<SettlementInput.SettlementDataItem>> siteGroups =
                     groupBySite(monthItems, input.getSelectedSiteCodes(), input.getSiteCurrencyMap());
 
-            // 只对前端传入的站点生成，每个站点独立编号（同一结算日同一站点只有一份）
+            // 只对前端传入的站点生成，每个站点使用各自的 party 配置和独立序号
             for (String siteCode : input.getSelectedSiteCodes()) {
+                DocumentPartyConfig party = partyMap.getOrDefault(siteCode,
+                        partyMap.values().iterator().next()); // 找不到时用第一个兜底
                 String currency = resolveCurrency(siteCode, input.getSiteCurrencyMap(),
                         siteGroups.getOrDefault(siteCode, List.of()));
                 List<SettlementInput.SettlementDataItem> siteItems =
                         siteGroups.getOrDefault(siteCode, List.of());
                 SettlementGenerateResult result = buildSettlement(
-                        subStart, subEnd, settlementDate, siteCode, currency, siteItems, startSequence, party);
+                        subStart, subEnd, settlementDate, siteCode, currency, siteItems, sequence, party);
                 allResults.add(result);
+                sequence++; // 每份结算单序号递增，确保单据号唯一
             }
 
             monthStart = monthStart.plusMonths(1);
@@ -236,7 +263,7 @@ public final class SettlementGenerator {
      * @param periodStart 结算周期起始日
      * @param periodEnd 结算周期结束日
      * @param settlementDate 结算日
-     * @param site 站点
+     * @param siteCode 站点
      * @param siteItems 该站点的结算数据（可能为空列表）
      * @param sequence 编号序号
      * @param party 交易方配置

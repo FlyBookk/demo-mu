@@ -252,9 +252,11 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
     public List<DocumentListVO> listBySettlementPeriod(LocalDate periodStart, LocalDate periodEnd) {
         log.info("按结算周期查询关联单据, periodStart={}, periodEnd={}", periodStart, periodEnd);
         List<DocumentListVO> result = new ArrayList<>();
+        Long shopId = ShopContext.requireShopId();
 
-        // 查询结算单
+        // 查询结算单（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentSettlement> settlementQuery = new LambdaQueryWrapper<DocumentSettlement>()
+                .eq(DocumentSettlement::getShopId, shopId)
                 .eq(DocumentSettlement::getPeriodStart, periodStart)
                 .eq(DocumentSettlement::getPeriodEnd, periodEnd);
         List<DocumentSettlement> settlements = documentSettlementMapper.selectList(settlementQuery);
@@ -311,17 +313,20 @@ public class DocumentQueryServiceImpl implements DocumentQueryService {
         log.info("查询货件关联关系, shipmentNo={}", shipmentNo);
         Map<String, Object> result = new HashMap<>();
         result.put("shipmentNo", shipmentNo);
+        Long shopId = ShopContext.requireShopId();
 
-        // 查询PO明细
+        // 查询PO明细（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentPoItem> poItemQuery = new LambdaQueryWrapper<DocumentPoItem>()
+                .eq(DocumentPoItem::getShopId, shopId)
                 .eq(DocumentPoItem::getShipmentNo, shipmentNo);
         List<DocumentPoItem> poItems = documentPoItemMapper.selectList(poItemQuery);
         result.put("poItems", poItems.stream()
                 .map(item -> BeanUtil.toBean(item, PoItemVO.class))
                 .collect(Collectors.toList()));
 
-        // 查询DN明细
+        // 查询DN明细（强制 shopId 隔离）
         LambdaQueryWrapper<DocumentDnItem> dnItemQuery = new LambdaQueryWrapper<DocumentDnItem>()
+                .eq(DocumentDnItem::getShopId, shopId)
                 .eq(DocumentDnItem::getShipmentNo, shipmentNo);
         List<DocumentDnItem> dnItems = documentDnItemMapper.selectList(dnItemQuery);
         result.put("dnItems", dnItems.stream()
