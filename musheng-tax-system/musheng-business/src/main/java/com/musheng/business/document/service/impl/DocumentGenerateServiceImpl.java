@@ -17,6 +17,8 @@ import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
 import com.musheng.config.marketplace.entity.Marketplace;
 import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 
+import com.musheng.business.settlement.derivation.service.SalesDataAggregator;
+import com.musheng.business.settlement.derivation.vo.AggregationResult;
 import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import java.util.*;
@@ -77,6 +80,9 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
     @Autowired
     private SettlementImportDataMapper settlementImportDataMapper;
+
+    @Autowired
+    private SalesDataAggregator salesDataAggregator;
 
 
 
@@ -471,16 +477,17 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         log.info("[BuildSettlementInput] 当前店铺: shopId={}, 周期: {} ~ {}, 站点: {}",
                 shopId, request.getPeriodStart(), request.getPeriodEnd(), request.getSiteCodes());
 
+        // Step 1：从推导结果读取季度单价（MSKU → unitPrice）
         LambdaQueryWrapper<SettlementImportData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SettlementImportData::getShopId, shopId)
                 .eq(SettlementImportData::getDelFlag, 0)
                 .le(SettlementImportData::getPeriodStart, request.getPeriodEnd())
                 .ge(SettlementImportData::getPeriodEnd, request.getPeriodStart())
                 .in(SettlementImportData::getSiteCode, request.getSiteCodes());
-        List<SettlementImportData> dataList = settlementImportDataMapper.selectList(wrapper);
+        List<SettlementImportData> derivedList = settlementImportDataMapper.selectList(wrapper);
 
-        if (CollectionUtils.isEmpty(dataList)) {
-            log.warn("未查询到结算导入数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
+        if (CollectionUtils.isEmpty(derivedList)) {
+            log.warn("未查询到推导数据，周期: {} ~ {}", request.getPeriodStart(), request.getPeriodEnd());
             return SettlementInput.builder()
                     .periodStart(request.getPeriodStart())
                     .periodEnd(request.getPeriodEnd())
@@ -488,33 +495,79 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                     .build();
         }
 
-        List<SettlementInput.SettlementDataItem> items = dataList.stream()
-                .map(data -> SettlementInput.SettlementDataItem.builder()
-                        .transactionDate(data.getPeriodStart()) // 月份起始日，供 SettlementGenerator 按月过滤
-                        .siteCode(data.getSiteCode())
-                        .msku(data.getMsku())
-                        .currency(data.getCurrency())
-                        .unitPrice(data.getUnitPrice())
-                        .quantity(data.getQuantity())
-                        .build())
-                .collect(Collectors.toList());
+        // 构建 siteCode → (msku → unitPrice) 映射
+        Map<String, Map<String, BigDecimal>> siteUnitPriceMap = new LinkedHashMap<>();
+        Map<String, String> siteCurrencyFromDerived = new LinkedHashMap<>();
+        for (SettlementImportData d : derivedList) {
+            siteUnitPriceMap
+                    .computeIfAbsent(d.getSiteCode(), k -> new LinkedHashMap<>())
+                    .put(d.getMsku(), d.getUnitPrice());
+            if (d.getCurrency() != null) {
+                siteCurrencyFromDerived.put(d.getSiteCode(), d.getCurrency());
+            }
+        }
 
-        // 从 t_marketplace 动态构建站点→货币映射，支持 siteCode 和 currencyCode 两种形式查找
+        // Step 2：按月重新聚合销售数量，用季度单价计算月度金额
+        List<SettlementInput.SettlementDataItem> items = new ArrayList<>();
+        LocalDate periodStart = request.getPeriodStart();
+        LocalDate periodEnd = request.getPeriodEnd();
+
+        LocalDate monthStart = periodStart.withDayOfMonth(1);
+        while (!monthStart.isAfter(periodEnd)) {
+            LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+            LocalDate subStart = monthStart.isBefore(periodStart) ? periodStart : monthStart;
+            LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
+
+            // 按月聚合净销售数量（shopId + siteCode + 时间，三者缺一不可）
+            AggregationResult monthAgg = salesDataAggregator.aggregateNetSales(
+                    shopId, subStart, subEnd, request.getSiteCodes());
+
+            for (String siteCode : request.getSiteCodes()) {
+                Map<String, BigDecimal> unitPriceMap = siteUnitPriceMap.getOrDefault(siteCode, Collections.emptyMap());
+                Map<String, Integer> monthQty = monthAgg.getNetSalesMap().getOrDefault(siteCode, Collections.emptyMap());
+                String currency = siteCurrencyFromDerived.get(siteCode);
+
+                for (Map.Entry<String, Integer> entry : monthQty.entrySet()) {
+                    String msku = entry.getKey();
+                    int qty = entry.getValue();
+                    if (qty <= 0) continue;
+
+                    BigDecimal unitPrice = unitPriceMap.get(msku);
+                    if (unitPrice == null) {
+                        // 推导结果中没有该 MSKU 的单价，跳过（可能是新增 MSKU）
+                        log.warn("MSKU {} 在推导结果中无单价，站点: {}, 月份: {}", msku, siteCode, subStart);
+                        continue;
+                    }
+
+                    items.add(SettlementInput.SettlementDataItem.builder()
+                            .transactionDate(subStart)   // 月份起始日，供 SettlementGenerator 按月过滤
+                            .siteCode(siteCode)
+                            .msku(msku)
+                            .currency(currency)
+                            .unitPrice(unitPrice)
+                            .quantity(qty)
+                            .build());
+                }
+            }
+
+            monthStart = monthStart.plusMonths(1);
+        }
+
+        // Step 3：构建站点货币映射
         LambdaQueryWrapper<Marketplace> mWrapper = new LambdaQueryWrapper<>();
         mWrapper.eq(Marketplace::getStatus, 1);
         List<Marketplace> marketplaces = marketplaceMapper.selectList(mWrapper);
         Map<String, String> siteCurrencyMap = new LinkedHashMap<>();
         for (Marketplace m : marketplaces) {
-            // siteCode（US/CA/UK/DE）→ currencyCode（USD/CAD/GBP/EUR）
             if (m.getSiteCode() != null && m.getCurrencyCode() != null) {
                 siteCurrencyMap.put(m.getSiteCode(), m.getCurrencyCode());
             }
         }
 
-        log.info("构建 SettlementInput 完成，共 {} 条明细，站点货币映射: {}", items.size(), siteCurrencyMap);
+        log.info("构建 SettlementInput 完成，共 {} 条月度明细，站点货币映射: {}", items.size(), siteCurrencyMap);
         return SettlementInput.builder()
-                .periodStart(request.getPeriodStart())
-                .periodEnd(request.getPeriodEnd())
+                .periodStart(periodStart)
+                .periodEnd(periodEnd)
                 .selectedSiteCodes(request.getSiteCodes())
                 .siteCurrencyMap(siteCurrencyMap)
                 .items(items)

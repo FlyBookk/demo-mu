@@ -93,7 +93,7 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
             }
         }
 
-        // === Step 2：删除该季度内所有旧数据（含已有月份分拆记录）===
+        // === Step 2：删除该季度内所有旧数据 ===
         String batchId = UUID.randomUUID().toString();
         int deletedCount = 0;
         for (String siteCode : siteResultMap.keySet()) {
@@ -101,83 +101,36 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                     shopId, periodStart, periodEnd, siteCode);
         }
 
-        // === Step 3：按自然月循环，分月汇总数量并存储（按站点+店筛选）===
-        // 负数量跨月结转，跨季度清零
+        // === Step 3：按季度写入，每个站点每个 MSKU 一条记录，汇总金额 = 成本金额 ===
         int insertedCount = 0;
-        // carryoverMap: 站点 -> (MSKU -> 结转到下月的负数量)
-        Map<String, Map<String, Integer>> carryoverMap = new HashMap<>();
+        for (Map.Entry<String, SiteDerivationResult> entry : siteResultMap.entrySet()) {
+            String siteCode = entry.getKey();
+            SiteDerivationResult sr = entry.getValue();
 
-        LocalDate monthStart = periodStart.withDayOfMonth(1);
-        while (!monthStart.isAfter(periodEnd)) {
-            LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
-            LocalDate subStart = monthStart.isBefore(periodStart) ? periodStart : monthStart;
-            LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
+            for (MskuDerivationItem item : sr.getItems()) {
+                if (item.getQuantity() <= 0) continue;
 
-            // 聚合本月销售数量（按站点+店过滤）
-            AggregationResult monthAgg = salesDataAggregator.aggregateNetSales(
-                    shopId, subStart, subEnd, siteCodes);
-
-            for (Map.Entry<String, SiteDerivationResult> entry : siteResultMap.entrySet()) {
-                String siteCode = entry.getKey();
-                SiteDerivationResult sr = entry.getValue();
-
-                // 本月净销售量（可变副本，用于叠加结转）
-                Map<String, Integer> monthQty = new HashMap<>(
-                        monthAgg.getNetSalesMap().getOrDefault(siteCode, Collections.emptyMap()));
-
-                // 叠加上月结转的负数量
-                Map<String, Integer> prevCarryover = carryoverMap.getOrDefault(siteCode, Collections.emptyMap());
-                for (Map.Entry<String, Integer> co : prevCarryover.entrySet()) {
-                    monthQty.merge(co.getKey(), co.getValue(), Integer::sum);
-                }
-
-                // 计算本月结转到下月的负数量（跨季度在循环结束后自动丢弃）
-                Map<String, Integer> nextCarryover = new HashMap<>();
-                for (Map.Entry<String, Integer> qe : monthQty.entrySet()) {
-                    if (qe.getValue() < 0) {
-                        nextCarryover.put(qe.getKey(), qe.getValue());
-                    }
-                }
-                carryoverMap.put(siteCode, nextCarryover);
-
-                // 构建 MSKU → 单价 映射（来自季度推导结果）
-                Map<String, BigDecimal> unitPriceMap = sr.getItems().stream()
-                        .collect(Collectors.toMap(MskuDerivationItem::getMsku, MskuDerivationItem::getUnitPrice));
-
-                // 写入本月有效数量的记录（数量 > 0）
-                for (Map.Entry<String, Integer> qe : monthQty.entrySet()) {
-                    String msku = qe.getKey();
-                    int qty = qe.getValue();
-                    if (qty <= 0) continue;
-
-                    BigDecimal unitPrice = unitPriceMap.getOrDefault(msku, BigDecimal.ZERO);
-                    BigDecimal amount = unitPrice.multiply(BigDecimal.valueOf(qty))
-                            .setScale(2, RoundingMode.HALF_UP);
-
-                    SettlementImportData entity = new SettlementImportData();
-                    entity.setShopId(shopId);
-                    entity.setPeriodStart(subStart);   // 月份起始，供 SettlementGenerator 按月过滤
-                    entity.setPeriodEnd(subEnd);         // 月份结束
-                    entity.setSiteCode(siteCode);
-                    entity.setCurrency(sr.getCurrency());
-                    entity.setMsku(msku);
-                    entity.setQuantity(qty);
-                    entity.setUnitPrice(unitPrice);
-                    entity.setAmount(amount);
-                    entity.setProcurementCostCny(sr.getProcurementCostCny());
-                    entity.setAverageExchangeRate(sr.getAverageExchangeRate());
-                    entity.setImportBatchId(0L);
-                    entity.setSettlementBatchId(batchId);
-                    entity.setDelFlag(0);
-                    settlementImportDataMapper.insert(entity);
-                    insertedCount++;
-                }
+                SettlementImportData entity = new SettlementImportData();
+                entity.setShopId(shopId);
+                entity.setPeriodStart(periodStart);
+                entity.setPeriodEnd(periodEnd);
+                entity.setSiteCode(siteCode);
+                entity.setCurrency(sr.getCurrency());
+                entity.setMsku(item.getMsku());
+                entity.setQuantity(item.getQuantity());
+                entity.setUnitPrice(item.getUnitPrice());
+                entity.setAmount(item.getAmount());
+                entity.setProcurementCostCny(sr.getProcurementCostCny());
+                entity.setAverageExchangeRate(sr.getAverageExchangeRate());
+                entity.setImportBatchId(0L);
+                entity.setSettlementBatchId(batchId);
+                entity.setDelFlag(0);
+                settlementImportDataMapper.insert(entity);
+                insertedCount++;
             }
-
-            monthStart = monthStart.plusMonths(1);
         }
 
-        log.info("[Derive] shopId={} 推导完成: 删除{}条旧数据, 按月写入{}条新数据, 批次={}",
+        log.info("[Derive] shopId={} 推导完成: 删除{}条旧数据, 按季度写入{}条新数据, 批次={}",
                 shopId, deletedCount, insertedCount, batchId);
 
         return DerivationResultVO.builder()
@@ -308,7 +261,15 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                     entity.setQuantity(monthQty);
                     entity.setUnitPrice(unitPrice);
                     entity.setAmount(amount);
-                    entity.setProcurementCostCny(siteData.getProcurementCostCny());
+                    // 采购成本按该月数量占站点总数量的比例分摊
+                    int siteTotalQty = siteData.getItems().stream()
+                            .mapToInt(MskuConfirmItem::getQuantity).sum();
+                    BigDecimal allocatedCostCny = siteTotalQty > 0
+                            ? siteData.getProcurementCostCny()
+                                    .multiply(BigDecimal.valueOf(monthQty))
+                                    .divide(BigDecimal.valueOf(siteTotalQty), 2, RoundingMode.HALF_UP)
+                            : siteData.getProcurementCostCny();
+                    entity.setProcurementCostCny(allocatedCostCny);
                     entity.setAverageExchangeRate(siteData.getAverageExchangeRate());
                     entity.setImportBatchId(0L);
                     entity.setSettlementBatchId(batchId);

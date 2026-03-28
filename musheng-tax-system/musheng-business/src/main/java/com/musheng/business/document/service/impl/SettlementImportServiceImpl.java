@@ -15,6 +15,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 结算数据导入服务实现类
@@ -94,6 +95,7 @@ public class SettlementImportServiceImpl implements SettlementImportService {
 
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getDelFlag, 0)
                 .eq(SettlementImportData::getPeriodStart, periodStart)
                 .eq(SettlementImportData::getPeriodEnd, periodEnd);
 
@@ -115,15 +117,27 @@ public class SettlementImportServiceImpl implements SettlementImportService {
     @Transactional(rollbackFor = Exception.class)
     public int deleteByPeriod(LocalDate periodStart, LocalDate periodEnd) {
         Long shopId = ShopContext.requireShopId();
-        log.info("删除结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
+        log.info("逻辑删除结算导入数据，周期: {} ~ {}, shopId={}", periodStart, periodEnd, shopId);
 
+        // 查出该周期下所有站点，逐站点逻辑删除（del_flag = 1）
         LambdaQueryWrapper<SettlementImportData> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(SettlementImportData::getShopId, shopId)
+                .eq(SettlementImportData::getDelFlag, 0)
                 .eq(SettlementImportData::getPeriodStart, periodStart)
-                .eq(SettlementImportData::getPeriodEnd, periodEnd);
+                .eq(SettlementImportData::getPeriodEnd, periodEnd)
+                .select(SettlementImportData::getSiteCode);
+        List<SettlementImportData> existing = settlementImportDataMapper.selectList(queryWrapper);
 
-        int deleted = settlementImportDataMapper.delete(queryWrapper);
-        log.info("删除结算导入数据完成，共删除 {} 条", deleted);
+        int deleted = 0;
+        Set<String> siteCodes = existing.stream()
+                .map(SettlementImportData::getSiteCode)
+                .filter(s -> s != null && !s.isEmpty())
+                .collect(java.util.stream.Collectors.toSet());
+        for (String siteCode : siteCodes) {
+            deleted += settlementImportDataMapper.logicalDeleteByPeriodAndSite(shopId, periodStart, periodEnd, siteCode);
+        }
+
+        log.info("逻辑删除结算导入数据完成，共删除 {} 条", deleted);
         return deleted;
     }
 }
