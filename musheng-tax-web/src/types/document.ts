@@ -128,11 +128,13 @@ export interface InvVO {
 
 /** PO生成请求 */
 export interface PoGenerateRequest {
+  siteCode: string
   shipmentIds: number[]
 }
 
 /** DN生成请求 */
 export interface DnGenerateRequest {
+  siteCode: string
   anchorDate: string
   shipmentIds: number[]
 }

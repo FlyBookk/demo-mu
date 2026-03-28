@@ -327,7 +327,7 @@ const poResult = ref<any>(null)
 async function handleGeneratePo() {
   poLoading.value = true
   try {
-    const res = await generatePo({ shipmentIds: selectedShipmentIds.value })
+    const res = await generatePo({ shipmentIds: selectedShipmentIds.value, siteCode: selectedSite.value })
     poResult.value = res.data
     stepCompleted.value[1] = true
     if (poResult.value?.id) {
@@ -382,6 +382,7 @@ async function handleGenerateDn() {
   dnLoading.value = true
   try {
     const res = await generateDn({
+      siteCode: selectedSite.value,
       anchorDate: dnDate.value.format('YYYY-MM-DD'),
       shipmentIds: selectedShipmentIds.value
     })
