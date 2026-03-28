@@ -83,7 +83,7 @@ class SalesDataAggregatorTest {
                 .thenReturn(new ArrayList<>(List.of(refund1)));
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");
@@ -114,7 +114,7 @@ class SalesDataAggregatorTest {
                 .thenReturn(new ArrayList<>());
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");
@@ -139,7 +139,7 @@ class SalesDataAggregatorTest {
                 .thenReturn(new ArrayList<>());
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         Map<String, Integer> caSales = result.getNetSalesMap().get("CA");
@@ -165,7 +165,7 @@ class SalesDataAggregatorTest {
                 .thenReturn(new ArrayList<>(List.of(refund1)));
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         Map<String, Integer> ukSales = result.getNetSalesMap().get("UK");
@@ -197,7 +197,7 @@ class SalesDataAggregatorTest {
                 .thenReturn(new ArrayList<>(List.of(ref1)));
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         // US 站点

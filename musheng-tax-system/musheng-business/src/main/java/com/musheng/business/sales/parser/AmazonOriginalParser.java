@@ -27,7 +27,13 @@ import java.util.*;
 @Slf4j
 @Component
 public class AmazonOriginalParser implements SalesDataParser {
-    
+
+    private final SiteCodeResolver siteCodeResolver;
+
+    public AmazonOriginalParser(SiteCodeResolver siteCodeResolver) {
+        this.siteCodeResolver = siteCodeResolver;
+    }
+
     /**
      * 默认跳过的表头行数（亚马逊原始数据通常有7-8行说明性内容）
      */
@@ -94,7 +100,7 @@ public class AmazonOriginalParser implements SalesDataParser {
                         try {
                             // 获取marketplace并识别站点
                             String marketplace = getFieldValue(record, headerMap, MARKETPLACE_FIELD);
-                            String recordSiteCode = SiteCodeResolver.getSiteCode(marketplace);
+                            String recordSiteCode = siteCodeResolver.getSiteCode(marketplace);
                             if (recordSiteCode != null) {
                                 detectedSites.add(recordSiteCode);
                             }
@@ -237,7 +243,7 @@ public class AmazonOriginalParser implements SalesDataParser {
                     try {
                         // 获取marketplace并识别站点
                         String marketplace = getFieldValue(record, headerMap, MARKETPLACE_FIELD);
-                        String recordSiteCode = SiteCodeResolver.getSiteCode(marketplace);
+                        String recordSiteCode = siteCodeResolver.getSiteCode(marketplace);
                         if (recordSiteCode != null) {
                             detectedSites.add(recordSiteCode);
                         }
@@ -318,7 +324,7 @@ public class AmazonOriginalParser implements SalesDataParser {
                     int count = 0;
                     for (CSVRecord record : parser) {
                         String marketplace = getFieldValue(record, headerMap, MARKETPLACE_FIELD);
-                        String siteCode = SiteCodeResolver.getSiteCode(marketplace);
+                        String siteCode = siteCodeResolver.getSiteCode(marketplace);
                         if (siteCode != null) {
                             sites.add(siteCode);
                         }
@@ -377,7 +383,7 @@ public class AmazonOriginalParser implements SalesDataParser {
         
         // 基础字段
         data.setSiteCode(siteCode);
-        data.setCurrencyCode(SiteCodeResolver.getCurrencyCode(siteCode));
+        data.setCurrencyCode(siteCodeResolver.getCurrencyCode(siteCode));
         
         // 通过字段映射获取值
         data.setOrderId(getMappedValue(record, headerMap, fieldMapping, "orderId"));

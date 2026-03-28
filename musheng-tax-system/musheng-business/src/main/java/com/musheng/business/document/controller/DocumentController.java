@@ -64,7 +64,7 @@ public class DocumentController {
     @PostMapping("/po/generate")
     public Result<DocumentPo> generatePo(
             @Valid @RequestBody PoGenerateRequest request) {
-        log.info("生成PO采购订单，货件数量: {}", request.getShipmentIds().size());
+        log.info("生成PO采购订单，站点: {}，货件数量: {}", request.getSiteCode(), request.getShipmentIds().size());
         DocumentPo po = documentGenerateService.generatePo(request);
         return Result.success(po);
     }
@@ -81,7 +81,7 @@ public class DocumentController {
     @PostMapping("/dn/generate")
     public Result<DocumentDn> generateDn(
             @Valid @RequestBody DnGenerateRequest request) {
-        log.info("生成DN送货单，锚点日期: {}，货件数量: {}", request.getAnchorDate(), request.getShipmentIds().size());
+        log.info("生成DN送货单，站点: {}，锚点日期: {}，货件数量: {}", request.getSiteCode(), request.getAnchorDate(), request.getShipmentIds().size());
         DocumentDn dn = documentGenerateService.generateDn(request);
         return Result.success(dn);
     }

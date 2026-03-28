@@ -50,6 +50,7 @@ public class TaxReportServiceImpl implements TaxReportService {
     private final AdvertisingBillItemMapper advertisingBillItemMapper;
     private final MarketplaceMapper marketplaceMapper;
     private final RateService rateService;
+    private final com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
 
     /**
      * 站点到货币的映射
@@ -68,7 +69,11 @@ public class TaxReportServiceImpl implements TaxReportService {
 
         Long shopId = ShopContext.requireShopId();
         log.info("[Dashboard] 当前店铺: shopId={}, 请求季度参数: {}", shopId, quarterParam);
-        List<String> sites = List.of("US", "CA", "UK", "DE");
+        LambdaQueryWrapper<Marketplace> dashMpWrapper = new LambdaQueryWrapper<>();
+        dashMpWrapper.eq(Marketplace::getStatus, 1);
+        List<String> sites = marketplaceMapper.selectList(dashMpWrapper).stream()
+                .map(Marketplace::getSiteCode).filter(StringUtils::hasText).distinct()
+                .collect(Collectors.toList());
 
         // 确定当前季度：传入参数优先，否则取系统当前季度
         LocalDate now = LocalDate.now();
@@ -325,9 +330,23 @@ public class TaxReportServiceImpl implements TaxReportService {
         log.info("[TaxSummary] 当前店铺: shopId={}, siteCode={}, startQuarter={}, endQuarter={}, refundDateMode={}",
                 shopId, siteCode, startQuarter, endQuarter, mode);
 
-        List<String> sites = StringUtils.hasText(siteCode)
-                ? List.of(siteCode)
-                : List.of("US", "CA", "UK", "DE");
+        // 站点列表：传了 siteCode 则只查该站点，否则从 t_marketplace 取所有启用站点
+        List<String> sites;
+        if (StringUtils.hasText(siteCode)) {
+            sites = List.of(siteCode);
+        } else {
+            LambdaQueryWrapper<Marketplace> mpWrapper = new LambdaQueryWrapper<>();
+            mpWrapper.eq(Marketplace::getStatus, 1);
+            sites = marketplaceMapper.selectList(mpWrapper).stream()
+                    .map(Marketplace::getSiteCode)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (sites.isEmpty()) {
+                log.warn("[TaxSummary] t_marketplace 无启用站点，返回空结果");
+                return Collections.emptyList();
+            }
+        }
 
         List<String> quarters = getQuartersInRange(startQuarter, endQuarter);
 
@@ -540,7 +559,9 @@ public class TaxReportServiceImpl implements TaxReportService {
         LocalDate endDate = getQuarterEndDate(year, quarter);
 
         String siteName = marketplace != null ? marketplace.getSiteName() : siteCode;
-        String currencyCode = SITE_CURRENCY_MAP.getOrDefault(siteCode, "USD");
+        // 货币从 t_marketplace 动态取，找不到时回退 USD
+        String currencyCode = marketplace != null && StringUtils.hasText(marketplace.getCurrencyCode())
+                ? marketplace.getCurrencyCode() : "USD";
 
         // ========== 1. 筛选本季度发货数据，收集订单号 ==========
         Set<String> shippingOrderIds = new HashSet<>();
@@ -925,15 +946,9 @@ public class TaxReportServiceImpl implements TaxReportService {
                                 LocalDate billingStartDate, LocalDate billingEndDate,
                                 String currency, LocalDate issueDate) {}
 
-    /** 从店铺名称推断站点编码（与 AdvertisingBillServiceImpl 一致） */
-    private static String inferSiteCodeFromStoreName(String storeName) {
-        if (!StringUtils.hasText(storeName)) return null;
-        String s = storeName.toUpperCase();
-        if (s.contains("UK") || s.contains("英国")) return "UK";
-        if (s.contains("US") || s.contains("美国")) return "US";
-        if (s.contains("CA") || s.contains("加拿大")) return "CA";
-        if (s.contains("DE") || s.contains("德国")) return "DE";
-        return null;
+    /** 从店铺名称推断站点编码（从 t_marketplace 动态匹配） */
+    private String inferSiteCodeFromStoreName(String storeName) {
+        return marketplaceConfigService.inferSiteCodeFromStoreName(storeName);
     }
 
     /**

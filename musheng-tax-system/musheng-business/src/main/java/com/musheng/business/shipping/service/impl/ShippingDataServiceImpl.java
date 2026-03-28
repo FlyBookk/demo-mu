@@ -49,6 +49,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
 
     private final ShippingDataMapper shippingDataMapper;
     private final MarketplaceMapper marketplaceMapper;
+    private final com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
     private final ImportRecordMapper importRecordMapper;
     private final CsvParseServiceImpl csvParseService;
     private final RateService rateService;
@@ -196,6 +197,28 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             }
 
             log.info("Parsed {} valid records from {} total rows", parsedRecords.size(), totalCount);
+
+            // Step 1.5: 强制校验每条记录必须有站点和店铺归属，防止信息缺失导致数据错乱
+            Iterator<ShippingData> validationIter = parsedRecords.iterator();
+            while (validationIter.hasNext()) {
+                ShippingData data = validationIter.next();
+                if (data.getShopId() == null) {
+                    failCount++;
+                    if (errors.size() < 10) {
+                        errors.add("记录缺少店铺信息，已拒绝: orderId=" + data.getOrderId());
+                    }
+                    log.warn("[ShippingImport] 记录缺少shopId，已拒绝: orderId={}", data.getOrderId());
+                    validationIter.remove();
+                } else if (!StringUtils.hasText(data.getSiteCode())) {
+                    failCount++;
+                    if (errors.size() < 10) {
+                        errors.add("记录缺少站点信息，已拒绝: orderId=" + data.getOrderId());
+                    }
+                    log.warn("[ShippingImport] 记录缺少siteCode，已拒绝: orderId={}", data.getOrderId());
+                    validationIter.remove();
+                }
+            }
+            log.info("[ShippingImport] 站点/店铺归属校验完成: {}条通过", parsedRecords.size());
 
             // Step 2: Batch check for duplicates (单次查询避免N+1)
             List<ShippingData> toInsert = new ArrayList<>();
@@ -884,27 +907,16 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
-     * 根据站点编码推断默认货币
+     * 根据站点编码推断默认货币（从 t_marketplace 动态查询）
      */
     private String mapSiteCodeToCurrency(String siteCode) {
-        if (siteCode == null) {
+        if (siteCode == null) return "USD";
+        try {
+            return marketplaceConfigService.getCurrencyBySiteCode(siteCode);
+        } catch (Exception e) {
+            log.warn("站点 [{}] 未在 t_marketplace 中配置，货币默认 USD", siteCode);
             return "USD";
         }
-        return switch (siteCode.toUpperCase()) {
-            case "US" -> "USD";
-            case "CA" -> "CAD";
-            case "MX" -> "MXN";
-            case "UK", "GB" -> "GBP";
-            case "DE", "FR", "IT", "ES", "NL", "BE", "AT", "PL" -> "EUR";
-            case "JP" -> "JPY";
-            case "AU" -> "AUD";
-            case "SG" -> "SGD";
-            case "AE", "SA" -> "AED";
-            case "IN" -> "INR";
-            case "BR" -> "BRL";
-            case "SE" -> "SEK";
-            default -> "USD";
-        };
     }
 
     /**

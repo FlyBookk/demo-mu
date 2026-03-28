@@ -79,7 +79,7 @@ class SalesDataAggregatorImplTest {
                 .thenReturn(new ArrayList<>());
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");
@@ -125,7 +125,7 @@ class SalesDataAggregatorImplTest {
                 .thenReturn(new ArrayList<>(List.of(refund1)));
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");
@@ -184,7 +184,7 @@ class SalesDataAggregatorImplTest {
                 .thenReturn(new ArrayList<>(List.of(refund1)));
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");
@@ -236,7 +236,7 @@ class SalesDataAggregatorImplTest {
                 .thenReturn(new ArrayList<>());
 
         // When
-        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END);
+        AggregationResult result = aggregator.aggregateNetSales(SHOP_ID, PERIOD_START, PERIOD_END, List.of("US", "CA", "UK", "EU"));
 
         // Then
         assertNotNull(result, "汇总结果不应为 null");

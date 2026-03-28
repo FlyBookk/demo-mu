@@ -22,6 +22,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 销售数据汇总组件实现类
@@ -50,14 +51,22 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
     private SalesDataMapper salesDataMapper;
 
     @Override
-    public AggregationResult aggregateNetSales(Long shopId, LocalDate periodStart, LocalDate periodEnd) {
-        log.info("[Aggregator] 开始汇总净销售数量（双路径），shopId={}, 周期: {} ~ {}", shopId, periodStart, periodEnd);
+    public AggregationResult aggregateNetSales(Long shopId, LocalDate periodStart, LocalDate periodEnd,
+                                               List<String> siteCodes) {
+        if (shopId == null) {
+            throw new IllegalArgumentException("shopId 不能为空");
+        }
+        if (CollectionUtils.isEmpty(siteCodes)) {
+            throw new IllegalArgumentException("站点列表不能为空，shopId=" + shopId);
+        }
+        log.info("[Aggregator] 开始汇总净销售数量（双路径），shopId={}, 周期: {} ~ {}, 站点: {}",
+                shopId, periodStart, periodEnd, siteCodes);
 
         // === Income 路径：按配送日期匹配周期 ===
-        IncomePathResult incomeResult = processIncomePath(shopId, periodStart, periodEnd);
+        IncomePathResult incomeResult = processIncomePath(shopId, periodStart, periodEnd, siteCodes);
 
         // === Refund 路径：按结算日期匹配周期 ===
-        List<SalesData> refundList = queryRefundByTransactionDate(shopId, periodStart, periodEnd);
+        List<SalesData> refundList = queryRefundByTransactionDate(shopId, periodStart, periodEnd, siteCodes);
 
         // 处理退款汇率回退
         Map<String, BigDecimal> refundOrderRateMap = processRefundExchangeRates(refundList, incomeResult.getOrderRateMap());
@@ -94,11 +103,16 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    private List<ShippingData> queryShippingData(Long shopId, LocalDate periodStart, LocalDate periodEnd) {
+    private List<ShippingData> queryShippingData(Long shopId, LocalDate periodStart, LocalDate periodEnd,
+                                                  List<String> siteCodes) {
+        if (CollectionUtils.isEmpty(siteCodes)) {
+            throw new IllegalArgumentException("站点列表不能为空，禁止跨站点查询配送数据");
+        }
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ShippingData::getShopId, shopId)
                 .ge(ShippingData::getShipDate, periodStart)
-                .le(ShippingData::getShipDate, periodEnd);
+                .le(ShippingData::getShipDate, periodEnd)
+                .in(ShippingData::getSiteCode, siteCodes);
         return shippingDataMapper.selectList(wrapper);
     }
 
@@ -111,7 +125,7 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    private List<SalesData> querySalesData(Long shopId, Set<String> orderIds) {
+    private List<SalesData> querySalesData(Long shopId, Set<String> orderIds, List<String> siteCodes) {
         List<String> orderIdList = new ArrayList<>(orderIds);
         List<SalesData> result = new ArrayList<>();
         // 分批查询，每批最多 500 个 orderId，避免 SQL IN 子句过长
@@ -120,7 +134,8 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
             List<String> batch = orderIdList.subList(i, Math.min(i + batchSize, orderIdList.size()));
             LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(SalesData::getShopId, shopId)
-                    .in(SalesData::getOrderId, batch);
+                    .in(SalesData::getOrderId, batch)
+                    .in(SalesData::getSiteCode, siteCodes); // 双重保险：确保站点一致
             result.addAll(salesDataMapper.selectList(wrapper));
         }
         return result;
@@ -199,9 +214,10 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    private IncomePathResult processIncomePath(Long shopId, LocalDate periodStart, LocalDate periodEnd) {
-        // 1. 查询周期内配送记录
-        List<ShippingData> shippingList = queryShippingData(shopId, periodStart, periodEnd);
+    private IncomePathResult processIncomePath(Long shopId, LocalDate periodStart, LocalDate periodEnd,
+                                                List<String> siteCodes) {
+        // 1. 查询周期内配送记录（按店铺+站点过滤）
+        List<ShippingData> shippingList = queryShippingData(shopId, periodStart, periodEnd, siteCodes);
 
         if (CollectionUtils.isEmpty(shippingList)) {
             log.info("Income 路径：周期 {} ~ {} 内无配送数据", periodStart, periodEnd);
@@ -232,8 +248,8 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
 
         log.info("Income 路径：配送数据查询完成，订单数: {}", orderIds.size());
 
-        // 3. 用 orderId 关联查询销售数据
-        List<SalesData> salesList = querySalesData(shopId, orderIds);
+        // 3. 用 orderId 关联查询销售数据（双重保险：同时过滤 siteCode）
+        List<SalesData> salesList = querySalesData(shopId, orderIds, siteCodes);
 
         // 4. 仅处理 income 记录，按站点+MSKU 维度汇总
         Map<String, Map<String, Integer>> incomeNetSalesMap = calculateNetSales(salesList, "income");
@@ -286,14 +302,19 @@ public class SalesDataAggregatorImpl implements SalesDataAggregator {
      * @author wanhua
      * 10:30 2026年01月29日
      */
-    private List<SalesData> queryRefundByTransactionDate(Long shopId, LocalDate periodStart, LocalDate periodEnd) {
+    private List<SalesData> queryRefundByTransactionDate(Long shopId, LocalDate periodStart, LocalDate periodEnd,
+                                                          List<String> siteCodes) {
+        if (CollectionUtils.isEmpty(siteCodes)) {
+            throw new IllegalArgumentException("站点列表不能为空，禁止跨站点查询退款数据");
+        }
         LambdaQueryWrapper<SalesData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SalesData::getShopId, shopId)
                 .ge(SalesData::getTransactionDate, periodStart.atStartOfDay())
                 .lt(SalesData::getTransactionDate, periodEnd.plusDays(1).atStartOfDay())
                 .eq(SalesData::getTransactionCategory, "refund")
                 .isNotNull(SalesData::getSku)
-                .ne(SalesData::getSku, "");
+                .ne(SalesData::getSku, "")
+                .in(SalesData::getSiteCode, siteCodes);
 
         List<SalesData> refundList = salesDataMapper.selectList(wrapper);
 

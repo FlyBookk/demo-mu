@@ -26,7 +26,10 @@ import java.util.*;
  */
 @Slf4j
 @Service
+@lombok.RequiredArgsConstructor
 public class CsvParseServiceImpl implements CsvParseService {
+
+    private final com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
 
     /**
      * English header keywords for detection
@@ -56,20 +59,7 @@ public class CsvParseServiceImpl implements CsvParseService {
             "货件名称", "货件编号", "已创建", "收货地址", "预计商品数量"
     );
 
-    /**
-     * Marketplace to site code mapping
-     */
-    private static final Map<String, String> MARKETPLACE_SITE_MAP = Map.of(
-            "amazon.com", "US",
-            "amazon.ca", "CA",
-            "amazon.co.uk", "UK",
-            "amazon.co.uk/", "UK",
-            "amazon.de", "DE",
-            "amazon.fr", "FR",
-            "amazon.it", "IT",
-            "amazon.es", "ES",
-            "amazon.nl", "NL"
-    );
+    // MARKETPLACE_SITE_MAP 已移除，改为从 t_marketplace 动态加载（见 marketplaceConfigService.buildDomainToSiteCodeMap()）
 
     @Override
     public CsvHeaderResult parseHeaders(MultipartFile file) {
@@ -253,7 +243,8 @@ public class CsvParseServiceImpl implements CsvParseService {
             String[] row = lines.get(i);
             if (marketplaceIdx < row.length) {
                 String marketplace = row[marketplaceIdx].toLowerCase().trim();
-                for (Map.Entry<String, String> entry : MARKETPLACE_SITE_MAP.entrySet()) {
+                Map<String, String> domainMap = marketplaceConfigService.buildDomainToSiteCodeMap();
+                for (Map.Entry<String, String> entry : domainMap.entrySet()) {
                     if (marketplace.contains(entry.getKey())) {
                         return entry.getValue();
                     }

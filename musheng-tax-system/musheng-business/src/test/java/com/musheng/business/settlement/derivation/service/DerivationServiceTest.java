@@ -87,7 +87,7 @@ class DerivationServiceTest {
                 .orderRateMap(new HashMap<>())
                 .build();
 
-        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), eq(Q3_START), eq(Q3_END)))
+        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), any(LocalDate.class), any(LocalDate.class), anyList()))
                 .thenReturn(aggResult);
 
         // mock 汇率查询
@@ -105,7 +105,7 @@ class DerivationServiceTest {
         when(exchangeRateMapper.selectList(any())).thenReturn(usdRates);
 
         // mock 删除旧数据
-        when(settlementImportDataMapper.logicalDeleteByPeriodAndSite(any(), any(), any())).thenReturn(0);
+        when(settlementImportDataMapper.logicalDeleteByPeriodRangeAndSite(any(), any(), any(), any())).thenReturn(0);
         when(settlementImportDataMapper.insert(any())).thenReturn(1);
 
         DerivationRequest request = DerivationRequest.builder()
@@ -160,7 +160,7 @@ class DerivationServiceTest {
                 .orderRateMap(new HashMap<>())
                 .build();
 
-        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), eq(Q3_START), eq(Q3_END)))
+        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), any(LocalDate.class), any(LocalDate.class), anyList()))
                 .thenReturn(aggResult);
 
         // 返回空汇率列表
@@ -195,7 +195,7 @@ class DerivationServiceTest {
                 .orderRateMap(new HashMap<>())
                 .build();
 
-        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), eq(Q3_START), eq(Q3_END)))
+        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), any(LocalDate.class), any(LocalDate.class), anyList()))
                 .thenReturn(aggResult);
 
         List<ExchangeRate> rates = new ArrayList<>();
@@ -206,7 +206,7 @@ class DerivationServiceTest {
         rates.add(usdRate);
         when(exchangeRateMapper.selectList(any())).thenReturn(rates);
 
-        when(settlementImportDataMapper.logicalDeleteByPeriodAndSite(any(), any(), any())).thenReturn(0);
+        when(settlementImportDataMapper.logicalDeleteByPeriodRangeAndSite(any(), any(), any(), any())).thenReturn(0);
         when(settlementImportDataMapper.insert(any())).thenReturn(1);
 
         DerivationRequest request = DerivationRequest.builder()
@@ -249,7 +249,7 @@ class DerivationServiceTest {
                 .orderRateMap(new HashMap<>())
                 .build();
 
-        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), eq(Q3_START), eq(Q3_END)))
+        when(salesDataAggregator.aggregateNetSales(eq(SHOP_ID), any(LocalDate.class), any(LocalDate.class), anyList()))
                 .thenReturn(aggResult);
 
         List<ExchangeRate> rates = new ArrayList<>();
@@ -260,7 +260,7 @@ class DerivationServiceTest {
         rates.add(usdRate);
         when(exchangeRateMapper.selectList(any())).thenReturn(rates);
 
-        when(settlementImportDataMapper.logicalDeleteByPeriodAndSite(any(), any(), any())).thenReturn(0);
+        when(settlementImportDataMapper.logicalDeleteByPeriodRangeAndSite(any(), any(), any(), any())).thenReturn(0);
         when(settlementImportDataMapper.insert(any())).thenReturn(1);
 
         DerivationRequest request = DerivationRequest.builder()

@@ -1,5 +1,6 @@
 package com.musheng.business.sales.parser;
 
+import com.musheng.business.common.config.MarketplaceConfigService;
 import com.musheng.business.sales.entity.SalesData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +34,7 @@ class ErpSettlementParserTransferTest {
 
     @BeforeEach
     void setUp() {
-        parser = new ErpSettlementParser();
+        parser = new ErpSettlementParser(null);
     }
 
     // ==================== Transfer 来源类型测试 ====================

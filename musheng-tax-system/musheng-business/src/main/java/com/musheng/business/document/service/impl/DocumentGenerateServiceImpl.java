@@ -14,6 +14,8 @@ import com.musheng.business.fbashipment.entity.FbaShipment;
 import com.musheng.business.fbashipment.entity.FbaShipmentItem;
 import com.musheng.business.fbashipment.mapper.FbaShipmentItemMapper;
 import com.musheng.business.fbashipment.mapper.FbaShipmentMapper;
+import com.musheng.config.marketplace.entity.Marketplace;
+import com.musheng.config.marketplace.mapper.MarketplaceMapper;
 
 import com.musheng.common.context.ShopContext;
 import lombok.extern.slf4j.Slf4j;
@@ -81,6 +83,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     @Autowired
     private DocumentPartyConfigService documentPartyConfigService;
 
+    @Autowired
+    private MarketplaceMapper marketplaceMapper;
     /**
      * 根据选定的FBA货件生成PO采购订单
      *
@@ -100,8 +104,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建货件输入数据（后续可对接 FbaShipmentService 查询真实数据）
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
-        // 从第一个货件获取站点代码，查询交易方配置
-        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        // 以前端用户选择的站点为准，避免因货件数据站点不一致导致脏数据
+        String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
         // 调用生成器
@@ -161,8 +165,8 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         // 构建货件输入数据
         List<ShipmentInput> shipmentInputs = buildShipmentInputs(request.getShipmentIds());
 
-        // 从货件获取站点代码，查询交易方配置
-        String siteCode = resolveSiteCodeFromShipments(request.getShipmentIds());
+        // 以前端用户选择的站点为准，避免因货件数据站点不一致导致脏数据
+        String siteCode = request.getSiteCode();
         DocumentPartyConfig party = documentPartyConfigService.getBySiteCode(siteCode);
 
         // 校验锚点日期不能早于所有货件的最晚PO日期
@@ -195,6 +199,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
         log.info("[GenerateDN] 当前店铺: shopId={}, 锚点日期: {}, 货件数量: {}, 站点: {}",
                 shopId, request.getAnchorDate(), request.getShipmentIds().size(), siteCode);
         dn.setSiteCode(siteCode);
+        dn.setShopId(shopId);
 
         // 持久化DN主表（幂等：重复单据号时返回已有记录）
         try {
@@ -399,28 +404,6 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
     }
 
     /**
-     * 从货件ID列表解析站点代码
-     *
-     * <p>查询第一个货件的 siteCode 字段，用于获取交易方配置。
-     * 若货件无 siteCode 则默认返回 "US"。</p>
-     *
-     * @param shipmentIds 货件ID列表
-     * @return 站点代码
-     * @author wanhua
-     * 10:30 2026年03月22日
-     */
-    private String resolveSiteCodeFromShipments(List<Long> shipmentIds) {
-        if (CollectionUtils.isEmpty(shipmentIds)) {
-            return "US";
-        }
-        FbaShipment shipment = fbaShipmentMapper.selectById(shipmentIds.get(0));
-        if (shipment == null || !org.springframework.util.StringUtils.hasText(shipment.getSiteCode())) {
-            return "US";
-        }
-        return shipment.getSiteCode();
-    }
-
-    /**
      * 根据货件ID列表查询FBA货件数据并构建 ShipmentInput
      *
      * <p>从 t_fba_shipment 和 t_fba_shipment_item 查询真实数据，
@@ -507,6 +490,7 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
 
         List<SettlementInput.SettlementDataItem> items = dataList.stream()
                 .map(data -> SettlementInput.SettlementDataItem.builder()
+                        .transactionDate(data.getPeriodStart()) // 月份起始日，供 SettlementGenerator 按月过滤
                         .siteCode(data.getSiteCode())
                         .msku(data.getMsku())
                         .currency(data.getCurrency())
@@ -515,10 +499,24 @@ public class DocumentGenerateServiceImpl implements DocumentGenerateService {
                         .build())
                 .collect(Collectors.toList());
 
-        log.info("构建 SettlementInput 完成，共 {} 条明细", items.size());
+        // 从 t_marketplace 动态构建站点→货币映射，支持 siteCode 和 currencyCode 两种形式查找
+        LambdaQueryWrapper<Marketplace> mWrapper = new LambdaQueryWrapper<>();
+        mWrapper.eq(Marketplace::getStatus, 1);
+        List<Marketplace> marketplaces = marketplaceMapper.selectList(mWrapper);
+        Map<String, String> siteCurrencyMap = new LinkedHashMap<>();
+        for (Marketplace m : marketplaces) {
+            // siteCode（US/CA/UK/DE）→ currencyCode（USD/CAD/GBP/EUR）
+            if (m.getSiteCode() != null && m.getCurrencyCode() != null) {
+                siteCurrencyMap.put(m.getSiteCode(), m.getCurrencyCode());
+            }
+        }
+
+        log.info("构建 SettlementInput 完成，共 {} 条明细，站点货币映射: {}", items.size(), siteCurrencyMap);
         return SettlementInput.builder()
                 .periodStart(request.getPeriodStart())
                 .periodEnd(request.getPeriodEnd())
+                .selectedSiteCodes(request.getSiteCodes())
+                .siteCurrencyMap(siteCurrencyMap)
                 .items(items)
                 .build();
     }

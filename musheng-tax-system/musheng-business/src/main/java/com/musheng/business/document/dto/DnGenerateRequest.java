@@ -1,6 +1,7 @@
 package com.musheng.business.document.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -23,6 +24,10 @@ import java.util.List;
 @AllArgsConstructor
 @Schema(description = "DN送货单生成请求")
 public class DnGenerateRequest {
+
+    @NotBlank(message = "站点代码不能为空")
+    @Schema(description = "站点代码（US/UK/CA/EU），以前端用户选择为准")
+    private String siteCode;
 
     @NotNull(message = "锚点日期不能为空")
     @Schema(description = "锚点日期")

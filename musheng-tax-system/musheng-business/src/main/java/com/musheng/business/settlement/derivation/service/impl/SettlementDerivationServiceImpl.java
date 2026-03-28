@@ -36,9 +36,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SettlementDerivationServiceImpl implements SettlementDerivationService {
 
-    private static final Map<String, String> SITE_CURRENCY_MAP = Map.of(
-            "US", "USD", "CA", "CAD", "UK", "GBP", "DE", "EUR"
-    );
+    @Autowired
+    private com.musheng.business.common.config.MarketplaceConfigService marketplaceConfigService;
 
     @Autowired
     private SalesDataAggregator salesDataAggregator;
@@ -64,55 +63,122 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
                 costMap.put(input.getSiteCode(), input.getCostCny());
             }
         }
+        List<String> siteCodes = new ArrayList<>(costMap.keySet());
+        if (siteCodes.isEmpty()) {
+            throw new IllegalArgumentException("推导请求必须包含至少一个站点的采购成本，shopId=" + shopId);
+        }
 
-        // 汇总销售数据
-        AggregationResult aggResult = salesDataAggregator.aggregateNetSales(shopId, periodStart, periodEnd);
-        Map<String, Map<String, Integer>> netSalesMap = aggResult.getNetSalesMap();
+        // === Step 1：季度汇总 → 计算单价（按站点+店筛选）===
+        // 单价基于整季度总量计算，与月份无关
+        AggregationResult quarterAgg = salesDataAggregator.aggregateNetSales(
+                shopId, periodStart, periodEnd, siteCodes);
+        Map<String, Map<String, Integer>> quarterNetSalesMap = quarterAgg.getNetSalesMap();
 
-        // 查询周期内各货币平均汇率
+        // 查询整季度各货币平均汇率
+        Map<String, String> siteCurrencyMap = marketplaceConfigService.buildSiteCurrencyMap();
         List<String> currencies = costMap.keySet().stream()
-                .map(SITE_CURRENCY_MAP::get).filter(Objects::nonNull)
+                .map(siteCurrencyMap::get).filter(Objects::nonNull)
                 .distinct().collect(Collectors.toList());
         Map<String, BigDecimal> averageRates = calcAverageRates(currencies, periodStart, periodEnd);
 
-        // 按站点计算推导结果
+        // 按站点计算推导结果（单价，基于季度总量）
         List<SiteDerivationResult> siteResults = new ArrayList<>();
+        Map<String, SiteDerivationResult> siteResultMap = new LinkedHashMap<>();
         for (String siteCode : costMap.keySet()) {
             SiteDerivationResult sr = buildSiteResult(siteCode,
-                    netSalesMap.getOrDefault(siteCode, Collections.emptyMap()), costMap, averageRates);
+                    quarterNetSalesMap.getOrDefault(siteCode, Collections.emptyMap()), costMap, averageRates);
             if (sr != null) {
                 siteResults.add(sr);
+                siteResultMap.put(siteCode, sr);
             }
         }
 
-        // 删旧数据 + 写入新数据
+        // === Step 2：删除该季度内所有旧数据（含已有月份分拆记录）===
         String batchId = UUID.randomUUID().toString();
         int deletedCount = 0;
-        int insertedCount = 0;
-        for (SiteDerivationResult sr : siteResults) {
-            int deleted = settlementImportDataMapper.logicalDeleteByPeriodAndSite(periodStart, periodEnd, sr.getSiteCode());
-            deletedCount += deleted;
-            for (MskuDerivationItem item : sr.getItems()) {
-                SettlementImportData entity = new SettlementImportData();
-                entity.setShopId(shopId);
-                entity.setPeriodStart(periodStart);
-                entity.setPeriodEnd(periodEnd);
-                entity.setSiteCode(sr.getSiteCode());
-                entity.setCurrency(sr.getCurrency());
-                entity.setMsku(item.getMsku());
-                entity.setQuantity(item.getQuantity());
-                entity.setUnitPrice(item.getUnitPrice());
-                entity.setAmount(item.getAmount());
-                entity.setProcurementCostCny(sr.getProcurementCostCny());
-                entity.setAverageExchangeRate(sr.getAverageExchangeRate());
-                entity.setImportBatchId(0L);
-                entity.setSettlementBatchId(batchId);
-                entity.setDelFlag(0);
-                settlementImportDataMapper.insert(entity);
-                insertedCount++;
-            }
+        for (String siteCode : siteResultMap.keySet()) {
+            deletedCount += settlementImportDataMapper.logicalDeleteByPeriodRangeAndSite(
+                    shopId, periodStart, periodEnd, siteCode);
         }
-        log.info("[Derive] shopId={} 推导完成: 删除{}条旧数据, 写入{}条新数据, 批次={}", shopId, deletedCount, insertedCount, batchId);
+
+        // === Step 3：按自然月循环，分月汇总数量并存储（按站点+店筛选）===
+        // 负数量跨月结转，跨季度清零
+        int insertedCount = 0;
+        // carryoverMap: 站点 -> (MSKU -> 结转到下月的负数量)
+        Map<String, Map<String, Integer>> carryoverMap = new HashMap<>();
+
+        LocalDate monthStart = periodStart.withDayOfMonth(1);
+        while (!monthStart.isAfter(periodEnd)) {
+            LocalDate monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+            LocalDate subStart = monthStart.isBefore(periodStart) ? periodStart : monthStart;
+            LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
+
+            // 聚合本月销售数量（按站点+店过滤）
+            AggregationResult monthAgg = salesDataAggregator.aggregateNetSales(
+                    shopId, subStart, subEnd, siteCodes);
+
+            for (Map.Entry<String, SiteDerivationResult> entry : siteResultMap.entrySet()) {
+                String siteCode = entry.getKey();
+                SiteDerivationResult sr = entry.getValue();
+
+                // 本月净销售量（可变副本，用于叠加结转）
+                Map<String, Integer> monthQty = new HashMap<>(
+                        monthAgg.getNetSalesMap().getOrDefault(siteCode, Collections.emptyMap()));
+
+                // 叠加上月结转的负数量
+                Map<String, Integer> prevCarryover = carryoverMap.getOrDefault(siteCode, Collections.emptyMap());
+                for (Map.Entry<String, Integer> co : prevCarryover.entrySet()) {
+                    monthQty.merge(co.getKey(), co.getValue(), Integer::sum);
+                }
+
+                // 计算本月结转到下月的负数量（跨季度在循环结束后自动丢弃）
+                Map<String, Integer> nextCarryover = new HashMap<>();
+                for (Map.Entry<String, Integer> qe : monthQty.entrySet()) {
+                    if (qe.getValue() < 0) {
+                        nextCarryover.put(qe.getKey(), qe.getValue());
+                    }
+                }
+                carryoverMap.put(siteCode, nextCarryover);
+
+                // 构建 MSKU → 单价 映射（来自季度推导结果）
+                Map<String, BigDecimal> unitPriceMap = sr.getItems().stream()
+                        .collect(Collectors.toMap(MskuDerivationItem::getMsku, MskuDerivationItem::getUnitPrice));
+
+                // 写入本月有效数量的记录（数量 > 0）
+                for (Map.Entry<String, Integer> qe : monthQty.entrySet()) {
+                    String msku = qe.getKey();
+                    int qty = qe.getValue();
+                    if (qty <= 0) continue;
+
+                    BigDecimal unitPrice = unitPriceMap.getOrDefault(msku, BigDecimal.ZERO);
+                    BigDecimal amount = unitPrice.multiply(BigDecimal.valueOf(qty))
+                            .setScale(2, RoundingMode.HALF_UP);
+
+                    SettlementImportData entity = new SettlementImportData();
+                    entity.setShopId(shopId);
+                    entity.setPeriodStart(subStart);   // 月份起始，供 SettlementGenerator 按月过滤
+                    entity.setPeriodEnd(subEnd);         // 月份结束
+                    entity.setSiteCode(siteCode);
+                    entity.setCurrency(sr.getCurrency());
+                    entity.setMsku(msku);
+                    entity.setQuantity(qty);
+                    entity.setUnitPrice(unitPrice);
+                    entity.setAmount(amount);
+                    entity.setProcurementCostCny(sr.getProcurementCostCny());
+                    entity.setAverageExchangeRate(sr.getAverageExchangeRate());
+                    entity.setImportBatchId(0L);
+                    entity.setSettlementBatchId(batchId);
+                    entity.setDelFlag(0);
+                    settlementImportDataMapper.insert(entity);
+                    insertedCount++;
+                }
+            }
+
+            monthStart = monthStart.plusMonths(1);
+        }
+
+        log.info("[Derive] shopId={} 推导完成: 删除{}条旧数据, 按月写入{}条新数据, 批次={}",
+                shopId, deletedCount, insertedCount, batchId);
 
         return DerivationResultVO.builder()
                 .startQuarter(request.getStartQuarter()).endQuarter(request.getEndQuarter())
@@ -127,36 +193,133 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
         log.info("[Confirm] 当前店铺: shopId={}, 季度: {} ~ {}, overwrite: {}, 站点数: {}",
                 shopId, request.getStartQuarter(), request.getEndQuarter(),
                 request.isOverwrite(), request.getSiteDataList().size());
+
         LocalDate[] dateRange = parseQuarterRange(request.getStartQuarter(), request.getEndQuarter());
+        LocalDate periodStart = dateRange[0];
+        LocalDate periodEnd = dateRange[1];
+
+        // 收集本次确认涉及的站点，用于按站点过滤销售数据
+        List<String> siteCodes = request.getSiteDataList().stream()
+                .map(SiteConfirmData::getSiteCode)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 无站点数据直接返回
+        if (siteCodes.isEmpty()) {
+            return DerivationConfirmResultVO.builder()
+                    .settlementBatchId(UUID.randomUUID().toString()).recordCount(0).deletedCount(0).build();
+        }
+
+        // 查询季度内各月的原始净销售量，作为按比例拆分的依据
+        // 结构：月份起始日 -> (站点 -> (MSKU -> 原始净数量))
+        List<LocalDate> monthStarts = new ArrayList<>();
+        Map<LocalDate, Map<String, Map<String, Integer>>> monthlyRawMap = new LinkedHashMap<>();
+        LocalDate ms = periodStart.withDayOfMonth(1);
+        while (!ms.isAfter(periodEnd)) {
+            LocalDate me = ms.withDayOfMonth(ms.lengthOfMonth());
+            LocalDate subStart = ms.isBefore(periodStart) ? periodStart : ms;
+            LocalDate subEnd = me.isAfter(periodEnd) ? periodEnd : me;
+            AggregationResult monthRaw = salesDataAggregator.aggregateNetSales(shopId, subStart, subEnd, siteCodes);
+            monthStarts.add(subStart);
+            monthlyRawMap.put(subStart, monthRaw.getNetSalesMap());
+            ms = ms.plusMonths(1);
+        }
+
+        // 删除旧数据（覆盖模式下清除季度范围内所有月份记录）
         String batchId = UUID.randomUUID().toString();
         int deletedCount = 0;
         int recordCount = 0;
-        for (SiteConfirmData siteData : request.getSiteDataList()) {
-            if (request.isOverwrite()) {
-                deletedCount += settlementImportDataMapper.logicalDeleteByPeriodAndSite(
-                        dateRange[0], dateRange[1], siteData.getSiteCode());
-            }
-            for (MskuConfirmItem item : siteData.getItems()) {
-                SettlementImportData entity = new SettlementImportData();
-                entity.setShopId(shopId);
-                entity.setPeriodStart(dateRange[0]);
-                entity.setPeriodEnd(dateRange[1]);
-                entity.setSiteCode(siteData.getSiteCode());
-                entity.setCurrency(siteData.getCurrency());
-                entity.setMsku(item.getMsku());
-                entity.setQuantity(item.getQuantity());
-                entity.setUnitPrice(item.getUnitPrice());
-                entity.setAmount(item.getAmount());
-                entity.setProcurementCostCny(siteData.getProcurementCostCny());
-                entity.setAverageExchangeRate(siteData.getAverageExchangeRate());
-                entity.setImportBatchId(0L);
-                entity.setSettlementBatchId(batchId);
-                entity.setDelFlag(0);
-                settlementImportDataMapper.insert(entity);
-                recordCount++;
+        if (request.isOverwrite()) {
+            for (SiteConfirmData siteData : request.getSiteDataList()) {
+                deletedCount += settlementImportDataMapper.logicalDeleteByPeriodRangeAndSite(
+                        shopId, periodStart, periodEnd, siteData.getSiteCode());
             }
         }
-        log.info("[Confirm] shopId={} 确认完成: batchId={}, 写入{}条, 删除{}条旧数据",
+
+        // 按站点、按 MSKU 将季度确认总量拆分到各月，写入月份记录
+        for (SiteConfirmData siteData : request.getSiteDataList()) {
+            String siteCode = siteData.getSiteCode();
+
+            for (MskuConfirmItem item : siteData.getItems()) {
+                String msku = item.getMsku();
+                int quarterlyQty = item.getQuantity();
+                if (quarterlyQty <= 0) continue;
+
+                // 取各月该站点该 MSKU 的原始净数量（只保留正值，负值月份不参与比例分配）
+                Map<LocalDate, Integer> monthRawQty = new LinkedHashMap<>();
+                for (LocalDate subStart : monthStarts) {
+                    int raw = monthlyRawMap.get(subStart)
+                            .getOrDefault(siteCode, Collections.emptyMap())
+                            .getOrDefault(msku, 0);
+                    if (raw > 0) {
+                        monthRawQty.put(subStart, raw);
+                    }
+                }
+                int rawTotal = monthRawQty.values().stream().mapToInt(Integer::intValue).sum();
+
+                // 按月计算分配量，并处理整除余数（最后一个有效月承接余数）
+                Map<LocalDate, Integer> monthAllocated = new LinkedHashMap<>();
+                if (rawTotal > 0) {
+                    // 按原始销售比例分配
+                    int allocated = 0;
+                    List<LocalDate> validMonths = new ArrayList<>(monthRawQty.keySet());
+                    for (int i = 0; i < validMonths.size() - 1; i++) {
+                        LocalDate subStart = validMonths.get(i);
+                        int portion = (int) Math.round((double) quarterlyQty * monthRawQty.get(subStart) / rawTotal);
+                        monthAllocated.put(subStart, portion);
+                        allocated += portion;
+                    }
+                    // 最后一个月取余数，确保总量精确
+                    LocalDate lastMonth = validMonths.get(validMonths.size() - 1);
+                    monthAllocated.put(lastMonth, quarterlyQty - allocated);
+                } else {
+                    // 无原始销售数据时按月均分，最后一个月承接余数
+                    int base = quarterlyQty / monthStarts.size();
+                    int remainder = quarterlyQty % monthStarts.size();
+                    for (int i = 0; i < monthStarts.size(); i++) {
+                        int portion = base + (i == monthStarts.size() - 1 ? remainder : 0);
+                        if (portion > 0) {
+                            monthAllocated.put(monthStarts.get(i), portion);
+                        }
+                    }
+                }
+
+                // 写入各月记录
+                for (Map.Entry<LocalDate, Integer> alloc : monthAllocated.entrySet()) {
+                    LocalDate subStart = alloc.getKey();
+                    int monthQty = alloc.getValue();
+                    if (monthQty <= 0) continue;
+
+                    // 月份结束日：取该月最后一天，与季度结束日取小
+                    LocalDate monthEnd = subStart.withDayOfMonth(subStart.lengthOfMonth());
+                    LocalDate subEnd = monthEnd.isAfter(periodEnd) ? periodEnd : monthEnd;
+
+                    BigDecimal unitPrice = item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO;
+                    BigDecimal amount = unitPrice.multiply(BigDecimal.valueOf(monthQty))
+                            .setScale(2, RoundingMode.HALF_UP);
+
+                    SettlementImportData entity = new SettlementImportData();
+                    entity.setShopId(shopId);
+                    entity.setPeriodStart(subStart);   // 月份起始，供 SettlementGenerator 按月过滤
+                    entity.setPeriodEnd(subEnd);
+                    entity.setSiteCode(siteCode);
+                    entity.setCurrency(siteData.getCurrency());
+                    entity.setMsku(msku);
+                    entity.setQuantity(monthQty);
+                    entity.setUnitPrice(unitPrice);
+                    entity.setAmount(amount);
+                    entity.setProcurementCostCny(siteData.getProcurementCostCny());
+                    entity.setAverageExchangeRate(siteData.getAverageExchangeRate());
+                    entity.setImportBatchId(0L);
+                    entity.setSettlementBatchId(batchId);
+                    entity.setDelFlag(0);
+                    settlementImportDataMapper.insert(entity);
+                    recordCount++;
+                }
+            }
+        }
+
+        log.info("[Confirm] shopId={} 确认完成（按月拆分）: batchId={}, 写入{}条, 删除{}条旧数据",
                 shopId, batchId, recordCount, deletedCount);
         return DerivationConfirmResultVO.builder()
                 .settlementBatchId(batchId).recordCount(recordCount).deletedCount(deletedCount).build();
@@ -167,14 +330,13 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
         Long shopId = ShopContext.requireShopId();
         log.info("[CheckExisting] 当前店铺: shopId={}, 季度: {} ~ {}", shopId, startQuarter, endQuarter);
         LocalDate[] dateRange = parseQuarterRange(startQuarter, endQuarter);
-        for (String siteCode : SITE_CURRENCY_MAP.keySet()) {
-            List<SettlementImportData> existing =
-                    settlementImportDataMapper.selectByPeriodAndSite(dateRange[0], dateRange[1], siteCode);
-            if (!CollectionUtils.isEmpty(existing)) {
-                return true;
-            }
-        }
-        return false;
+        // 使用范围查询：匹配季度内所有月份分拆的记录
+        LambdaQueryWrapper<SettlementImportData> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SettlementImportData::getShopId, shopId)
+                .ge(SettlementImportData::getPeriodStart, dateRange[0])
+                .le(SettlementImportData::getPeriodStart, dateRange[1])
+                .eq(SettlementImportData::getDelFlag, 0);
+        return settlementImportDataMapper.selectCount(wrapper) > 0;
     }
 
     private LocalDate[] parseQuarterRange(String startQuarter, String endQuarter) {
@@ -331,7 +493,7 @@ public class SettlementDerivationServiceImpl implements SettlementDerivationServ
      */
     private SiteDerivationResult buildSiteResult(String siteCode, Map<String, Integer> mskuSalesMap,
                                                   Map<String, BigDecimal> costMap, Map<String, BigDecimal> averageRates) {
-        String currency = SITE_CURRENCY_MAP.get(siteCode);
+        String currency = marketplaceConfigService.buildSiteCurrencyMap().get(siteCode);
         if (currency == null) { return null; }
         BigDecimal costCny = costMap.getOrDefault(siteCode, BigDecimal.ZERO);
         BigDecimal avgRate = averageRates.get(currency);

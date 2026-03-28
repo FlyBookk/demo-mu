@@ -92,6 +92,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
     private final ImportConfig importConfig;
     private final MarketplaceService marketplaceService;
     private final ShippingDataMapper shippingDataMapper;
+    private final SiteCodeResolver siteCodeResolver;
     
     /** 亚马逊标准订单号正则：XXX-XXXXXXX-XXXXXXX，如 205-0344885-9757952 */
     private static final Pattern ORDER_ID_PATTERN_LOOSE = Pattern.compile("[A-Z0-9]{3}-\\d{7}-\\d{7}");
@@ -388,7 +389,7 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
                 if (headerRow < lines.length) {
                     for (int i = headerRow; i < Math.min(headerRow + 10, lines.length); i++) {
                         String line = lines[i];
-                        String detected = SiteCodeResolver.detectSiteFromLine(line);
+                        String detected = siteCodeResolver.detectSiteFromLine(line);
                         if (detected != null) {
                             detectedSiteCode = detected;
                             break;

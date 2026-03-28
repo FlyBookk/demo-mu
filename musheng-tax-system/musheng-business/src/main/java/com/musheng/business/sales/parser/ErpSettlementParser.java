@@ -1,5 +1,6 @@
 package com.musheng.business.sales.parser;
 
+import com.musheng.business.common.config.MarketplaceConfigService;
 import com.musheng.business.sales.entity.SalesData;
 import com.musheng.common.enums.ErpSourceType;
 import com.musheng.common.enums.SalesSourceType;
@@ -36,6 +37,12 @@ import java.util.regex.Pattern;
 @Slf4j
 @Component
 public class ErpSettlementParser implements SalesDataParser {
+
+    private final MarketplaceConfigService marketplaceConfigService;
+
+    public ErpSettlementParser(MarketplaceConfigService marketplaceConfigService) {
+        this.marketplaceConfigService = marketplaceConfigService;
+    }
 
     /**
      * 亚马逊标准订单号正则（格式：XXX-1234567-1234567）
@@ -626,34 +633,11 @@ public class ErpSettlementParser implements SalesDataParser {
     }
     
     /**
-     * 根据站点代码获取 marketplace 域名
-     * ERP数据中没有 marketplace 字段，需要根据站点代码推断
+     * 根据站点代码获取 marketplace 域名（从 t_marketplace 动态查询）
      */
     private String getMarketplaceBySiteCode(String siteCode) {
-        if (siteCode == null) {
-            return "amazon.com";
-        }
-        return switch (siteCode.toUpperCase()) {
-            case "US" -> "amazon.com";
-            case "CA" -> "amazon.ca";
-            case "MX" -> "amazon.com.mx";
-            case "UK", "GB" -> "amazon.co.uk";
-            case "DE" -> "amazon.de";
-            case "FR" -> "amazon.fr";
-            case "IT" -> "amazon.it";
-            case "ES" -> "amazon.es";
-            case "NL" -> "amazon.nl";
-            case "SE" -> "amazon.se";
-            case "PL" -> "amazon.pl";
-            case "JP" -> "amazon.co.jp";
-            case "AU" -> "amazon.com.au";
-            case "IN" -> "amazon.in";
-            case "AE" -> "amazon.ae";
-            case "SA" -> "amazon.sa";
-            case "BR" -> "amazon.com.br";
-            case "SG" -> "amazon.sg";
-            default -> "amazon.com";
-        };
+        if (siteCode == null) return null;
+        return marketplaceConfigService.getDomainBySiteCode(siteCode);
     }
     
     /**
