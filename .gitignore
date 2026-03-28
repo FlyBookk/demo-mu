@@ -13,4 +13,6 @@ deploy-package/
 .kiro/
 .serena/
 .cursor/
-*/logs/
+logs
+dist
+node_modules
