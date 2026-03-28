@@ -1,13 +1,14 @@
 package com.musheng.business.document.vo;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
 
 /**
  * 单据列表通用视图
@@ -45,4 +46,10 @@ public class DocumentListVO {
 
     @Schema(description = "总金额（结算单和INV有值，PO和DN为null）")
     private BigDecimal totalAmount;
+
+    @Schema(description = "站点代码（US/CA/UK/EU）")
+    private String siteCode;
+
+    @Schema(description = "导出时间（数据创建时间）")
+    private LocalDateTime createTime;
 }
