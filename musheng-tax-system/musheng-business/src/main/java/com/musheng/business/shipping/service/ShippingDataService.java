@@ -73,7 +73,7 @@ public interface ShippingDataService {
      * @param endDate   结束日期(可选)
      * @return 汇总数据
      */
-    Map<String, Object> getSummary(String siteCode, String startDate, String endDate);
+    Map<String, Object> getSummary(String siteCode, String startDate, String endDate, Integer isOwnSite);
 
     /**
      * 导出配送数据到Excel

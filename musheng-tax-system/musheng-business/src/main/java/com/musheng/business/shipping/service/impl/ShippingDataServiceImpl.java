@@ -1030,12 +1030,15 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String siteCode, String startDate, String endDate) {
+    public Map<String, Object> getSummary(String siteCode, String startDate, String endDate, Integer isOwnSite) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ShippingData::getShopId, ShopContext.requireShopId());
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(ShippingData::getSiteCode, siteCode);
+        }
+        if (isOwnSite != null) {
+            wrapper.eq(ShippingData::getIsOwnSite, isOwnSite);
         }
         if (StringUtils.hasText(startDate)) {
             try {
