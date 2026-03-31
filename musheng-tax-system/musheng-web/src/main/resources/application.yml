@@ -10,7 +10,8 @@ server:
 spring:
   application:
     name: musheng-tax-system
-
+#  profiles:
+#    active: dev
   # Database Configuration
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver

@@ -869,7 +869,7 @@ public class ShippingDataServiceImpl implements ShippingDataService {
             LambdaQueryWrapper<ShippingData> siteWrapper = new LambdaQueryWrapper<>();
             siteWrapper.eq(ShippingData::getSiteCode, siteCode)
                     .in(ShippingData::getOrderId, orderIds)
-                    .select(ShippingData::getOrderId, ShippingData::getSiteCode, ShippingData::getTrackingNumber);
+                    .select(ShippingData::getOrderId, ShippingData::getSiteCode, ShippingData::getTrackingNumber, ShippingData::getSku);
 
             List<ShippingData> existing = shippingDataMapper.selectList(siteWrapper);
 
@@ -884,14 +884,21 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     /**
-     * Build unique key for duplicate detection
-     * Format: orderId|siteCode|trackingNumber
+     * 构建去重唯一键
+     * 格式: orderId|siteCode|trackingNumber|sku
+     * 包含 SKU 维度，避免同一订单多商品行被误判为重复
+     *
+     * @param data 配送数据
+     * @return 唯一键字符串
+     * @author wanhua
+     * 15:00 2026年03月30日
      */
     private String buildUniqueKey(ShippingData data) {
         String orderId = data.getOrderId() != null ? data.getOrderId() : "";
         String siteCode = data.getSiteCode() != null ? data.getSiteCode() : "";
         String trackingNumber = data.getTrackingNumber() != null ? data.getTrackingNumber() : "";
-        return orderId + "|" + siteCode + "|" + trackingNumber;
+        String sku = data.getSku() != null ? data.getSku() : "";
+        return orderId + "|" + siteCode + "|" + trackingNumber + "|" + sku;
     }
 
     /**
@@ -1023,12 +1030,15 @@ public class ShippingDataServiceImpl implements ShippingDataService {
     }
 
     @Override
-    public Map<String, Object> getSummary(String siteCode, String startDate, String endDate) {
+    public Map<String, Object> getSummary(String siteCode, String startDate, String endDate, Integer isOwnSite) {
         LambdaQueryWrapper<ShippingData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ShippingData::getShopId, ShopContext.requireShopId());
 
         if (StringUtils.hasText(siteCode)) {
             wrapper.eq(ShippingData::getSiteCode, siteCode);
+        }
+        if (isOwnSite != null) {
+            wrapper.eq(ShippingData::getIsOwnSite, isOwnSite);
         }
         if (StringUtils.hasText(startDate)) {
             try {

@@ -100,8 +100,9 @@ public class ShippingDataController {
     public Result<Map<String, Object>> getSummary(
             @Parameter(description = "站点编码") @RequestParam(required = false) String siteCode,
             @Parameter(description = "开始日期") @RequestParam(required = false) String startDate,
-            @Parameter(description = "结束日期") @RequestParam(required = false) String endDate) {
-        Map<String, Object> summary = shippingDataService.getSummary(siteCode, startDate, endDate);
+            @Parameter(description = "结束日期") @RequestParam(required = false) String endDate,
+            @Parameter(description = "是否本站数据(0-否/1-是)") @RequestParam(required = false) Integer isOwnSite) {
+        Map<String, Object> summary = shippingDataService.getSummary(siteCode, startDate, endDate, isOwnSite);
         return Result.success(summary);
     }
 

@@ -549,6 +549,7 @@ async function fetchSummary() {
   try {
     const params = {
       siteCode: searchForm.siteCode,
+      isOwnSite: searchForm.isOwnSite,
       startDate: searchDateRange.value?.[0]?.format('YYYY-MM-DD'),
       endDate: searchDateRange.value?.[1]?.format('YYYY-MM-DD')
     }
