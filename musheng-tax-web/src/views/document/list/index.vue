@@ -38,8 +38,8 @@
                 style="width: 100%"
                 @change="handleSearch"
               >
-                <a-select-option v-for="site in siteOptions" :key="site" :value="site">
-                  {{ site }}
+                <a-select-option v-for="site in siteOptions" :key="site.siteCode" :value="site.siteCode">
+                  {{ site.siteCode }}
                 </a-select-option>
               </a-select>
             </a-form-item>
@@ -155,6 +155,8 @@ import {
 } from '@/api/document'
 import type { DocumentListVO } from '@/types/document'
 import { DocumentTypeOptions } from '@/types/document'
+import { getEnabledMarketplaces } from '@/api/marketplace'
+import type { Marketplace } from '@/types/marketplace'
 import DocumentDetailModal from '@/components/business/document/DocumentDetailModal.vue'
 
 // 类型映射
@@ -171,8 +173,8 @@ const typeColorMap: Record<string, string> = {
   INV: 'purple'
 }
 
-// 站点选项（固定枚举）
-const siteOptions = ['US', 'CA', 'UK', 'EU']
+// 站点选项（从后端获取）
+const siteOptions = ref<Marketplace[]>([])
 
 // 搜索
 const searchForm = reactive({
@@ -278,7 +280,9 @@ async function handleExport(record: DocumentListVO) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  const res = await getEnabledMarketplaces()
+  siteOptions.value = res.data || []
   fetchData()
 })
 </script>
