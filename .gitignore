@@ -17,3 +17,6 @@ logs
 dist
 node_modules
 musheng-tax-web/dist.zip
+target
+docs
+scripts
