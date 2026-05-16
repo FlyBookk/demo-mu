@@ -35,6 +35,12 @@
             <artifactId>musheng-business</artifactId>
         </dependency>
 
+        <!-- TikTok Module -->
+        <dependency>
+            <groupId>com.musheng</groupId>
+            <artifactId>musheng-tiktok</artifactId>
+        </dependency>
+
         <!-- Sa-Token (required in web module for SaHolder to work) -->
         <dependency>
             <groupId>cn.dev33</groupId>

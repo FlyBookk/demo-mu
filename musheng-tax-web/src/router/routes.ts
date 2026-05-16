@@ -447,6 +447,146 @@ export const routes: RouteRecordRaw[] = [
             }
           }
         ]
+      },
+
+      // ========== TikTok 商品管理 ==========
+      {
+        path: 'tiktok/product',
+        name: 'TiktokProduct',
+        redirect: '/tiktok/product/list',
+        meta: {
+          title: '商品管理',
+          icon: 'TagOutlined',
+          platform: 'TIKTOK'
+        },
+        children: [
+          {
+            path: 'list',
+            name: 'TiktokProductList',
+            component: () => import('@/views/tiktok/product/index.vue'),
+            meta: { title: '商品列表', platform: 'TIKTOK' }
+          },
+          {
+            path: 'import',
+            name: 'TiktokProductImport',
+            component: () => import('@/views/tiktok/product/import.vue'),
+            meta: { title: '对照表导入', platform: 'TIKTOK' }
+          }
+        ]
+      },
+
+      // ========== TikTok FBT货件 ==========
+      {
+        path: 'tiktok/shipment',
+        name: 'TiktokShipment',
+        redirect: '/tiktok/shipment/list',
+        meta: {
+          title: 'FBT货件',
+          icon: 'InboxOutlined',
+          platform: 'TIKTOK'
+        },
+        children: [
+          {
+            path: 'list',
+            name: 'TiktokShipmentList',
+            component: () => import('@/views/tiktok/shipment/index.vue'),
+            meta: { title: '货件列表', platform: 'TIKTOK' }
+          },
+          {
+            path: 'import',
+            name: 'TiktokShipmentImport',
+            component: () => import('@/views/tiktok/shipment/import.vue'),
+            meta: { title: '货件导入', platform: 'TIKTOK' }
+          }
+        ]
+      },
+
+      // ========== TikTok 结算数据 ==========
+      {
+        path: 'tiktok/settlement',
+        name: 'TiktokSettlement',
+        redirect: '/tiktok/settlement/orders',
+        meta: {
+          title: '结算数据',
+          icon: 'DollarOutlined',
+          platform: 'TIKTOK'
+        },
+        children: [
+          {
+            path: 'import',
+            name: 'TiktokSettlementImport',
+            component: () => import('@/views/tiktok/settlement/import.vue'),
+            meta: { title: '结算单导入', platform: 'TIKTOK' }
+          },
+          {
+            path: 'orders',
+            name: 'TiktokSettlementOrders',
+            component: () => import('@/views/tiktok/settlement/orders.vue'),
+            meta: { title: '订单明细', platform: 'TIKTOK' }
+          }
+        ]
+      },
+
+      // ========== TikTok 单据管理 ==========
+      {
+        path: 'tiktok/document',
+        name: 'TiktokDocument',
+        redirect: '/tiktok/document/list',
+        meta: {
+          title: '单据管理',
+          icon: 'FileTextOutlined',
+          platform: 'TIKTOK'
+        },
+        children: [
+          {
+            path: 'derivation',
+            name: 'TiktokDerivation',
+            component: () => import('@/views/tiktok/document/derivation.vue'),
+            meta: { title: '结算推导', platform: 'TIKTOK' }
+          },
+          {
+            path: 'msku-list',
+            name: 'TiktokMskuList',
+            component: () => import('@/views/tiktok/document/msku-list.vue'),
+            meta: { title: 'MSKU列表', platform: 'TIKTOK' }
+          },
+          {
+            path: 'list',
+            name: 'TiktokDocumentList',
+            component: () => import('@/views/tiktok/document/index.vue'),
+            meta: { title: '单据列表', platform: 'TIKTOK' }
+          },
+          {
+            path: 'generate',
+            name: 'TiktokDocumentGenerate',
+            component: () => import('@/views/tiktok/document/generate.vue'),
+            meta: { title: 'PO/DN生成', platform: 'TIKTOK' }
+          },
+          {
+            path: 'settlement-generate',
+            name: 'TiktokSettlementGenerate',
+            component: () => import('@/views/tiktok/document/settlement-generate.vue'),
+            meta: { title: '结算单/INV生成', platform: 'TIKTOK' }
+          },
+          {
+            path: 'party-config',
+            name: 'TiktokPartyConfig',
+            component: () => import('@/views/tiktok/party-config/index.vue'),
+            meta: { title: '交易方配置', platform: 'TIKTOK' }
+          }
+        ]
+      },
+
+      // ========== TikTok 报税汇总 ==========
+      {
+        path: 'tiktok/report',
+        name: 'TiktokReport',
+        component: () => import('@/views/tiktok/report/index.vue'),
+        meta: {
+          title: '报税汇总',
+          icon: 'BarChartOutlined',
+          platform: 'TIKTOK'
+        }
       }
     ]
   },

@@ -62,6 +62,27 @@ public class DataCleanServiceImpl implements DataCleanService {
                 "结算单/INV", "清理结算单和INV单据",
                 List.of("t_document_settlement_item", "t_document_settlement",
                         "t_document_inv_item", "t_document_inv")));
+
+        // ========== TikTok 模块 ==========
+
+        MODULE_DEFS.put("tk_product", new ModuleDef(
+                "TK商品库", "清理TK SKU对照表",
+                List.of("t_tiktok_product")));
+
+        MODULE_DEFS.put("tk_shipment", new ModuleDef(
+                "TK FBT货件", "清理TK货件及明细",
+                List.of("t_tiktok_shipment_item", "t_tiktok_shipment")));
+
+        MODULE_DEFS.put("tk_settlement", new ModuleDef(
+                "TK结算数据", "清理TK结算汇总及订单明细",
+                List.of("t_tiktok_settlement_order", "t_tiktok_settlement")));
+
+        MODULE_DEFS.put("tk_document", new ModuleDef(
+                "TK单据", "清理TK PO/DN/结算单/INV",
+                List.of("t_tiktok_document_po_item", "t_tiktok_document_po",
+                        "t_tiktok_document_dn_item", "t_tiktok_document_dn",
+                        "t_tiktok_document_settlement_item", "t_tiktok_document_settlement",
+                        "t_tiktok_document_inv_item", "t_tiktok_document_inv")));
     }
 
     @Override
