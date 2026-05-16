@@ -137,6 +137,12 @@ public class TiktokDocumentQueryServiceImpl implements TiktokDocumentQueryServic
                 .orderByAsc(TiktokDocumentInvItem::getLineNo));
     }
 
+    @Override
+    public List<TiktokDocumentInv> getInvBySettlementId(Long settlementId) {
+        return invMapper.selectList(new LambdaQueryWrapper<TiktokDocumentInv>()
+                .eq(TiktokDocumentInv::getSettlementId, settlementId));
+    }
+
     // ==================== 私有方法 ====================
 
     private List<TiktokDocumentListVO> queryPoList(Long shopId, TiktokDocumentQueryRequest req) {

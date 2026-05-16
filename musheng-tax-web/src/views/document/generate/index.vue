@@ -50,6 +50,11 @@
             style="margin-bottom: 8px"
           />
           <a-spin :spinning="shipmentLoading">
+            <div v-if="shipmentList.length > 0" style="margin-bottom: 8px">
+              <a-button size="small" @click="selectedShipmentIds = shipmentList.map(s => s.id)">全选</a-button>
+              <a-button size="small" style="margin-left: 8px" @click="selectedShipmentIds = []">取消全选</a-button>
+              <span style="margin-left: 12px; color: #1890ff; font-size: 13px">已选 {{ selectedShipmentIds.length }} / {{ shipmentList.length }}</span>
+            </div>
             <a-checkbox-group v-model:value="selectedShipmentIds" style="width: 100%">
               <div v-if="shipmentList.length === 0 && !shipmentLoading && selectedSite" style="color: #999; padding: 8px 0">
                 当前站点和时间范围内暂无货件数据

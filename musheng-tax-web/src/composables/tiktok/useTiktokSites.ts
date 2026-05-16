@@ -19,7 +19,7 @@ export function useTiktokSites() {
       sites.value = res.data || res || []
       siteCodes.value = sites.value.map(s => s.siteCode)
       if (siteCodes.value.length > 0 && !currentSite.value) {
-        currentSite.value = siteCodes.value[0]
+        currentSite.value = siteCodes.value.includes('US') ? 'US' : siteCodes.value[0]
       }
     } finally {
       loading.value = false

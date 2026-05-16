@@ -4,7 +4,7 @@
       <h3>TK 订单明细</h3>
       <a-space wrap>
         <a-select v-model:value="siteCode" placeholder="选择站点" style="width: 140px" @change="loadData">
-          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
+          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
         </a-select>
         <a-select v-model:value="filters.type" placeholder="类型" style="width: 160px" allow-clear>
           <a-select-option value="Order">Order</a-select-option>
@@ -15,11 +15,20 @@
         <a-date-picker v-model:value="filters.startDate" placeholder="开始日期" value-format="YYYY-MM-DD" />
         <a-date-picker v-model:value="filters.endDate" placeholder="结束日期" value-format="YYYY-MM-DD" />
         <a-button type="primary" @click="loadData" :disabled="!siteCode">查询</a-button>
+        <a-button :type="filters.unmappedOnly ? 'primary' : 'default'" danger :ghost="!filters.unmappedOnly" @click="filters.unmappedOnly = !filters.unmappedOnly; loadData()" :disabled="!siteCode">
+          {{ filters.unmappedOnly ? '显示全部' : '仅未映射' }}
+        </a-button>
       </a-space>
     </div>
     <a-alert v-if="!siteCode" message="请先选择站点" type="info" show-icon style="margin-bottom: 16px" />
     <a-table v-else :columns="columns" :data-source="list" :loading="loading" :pagination="pagination" @change="handleTableChange" row-key="id" size="small" :scroll="{ x: 1400 }"
-             :custom-row="(record: any) => ({ onClick: () => showDetail(record) })" :row-class-name="() => 'clickable-row'">
+             :custom-row="(record: any) => ({ onClick: () => showDetail(record) })" :row-class-name="(record: any) => record.msku ? 'clickable-row' : 'clickable-row unmapped-row'">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.dataIndex === 'msku'">
+          <span v-if="record.msku">{{ record.msku }}</span>
+          <a-tag v-else color="orange" size="small">未映射</a-tag>
+        </template>
+      </template>
     </a-table>
 
     <!-- 详情抽屉 -->
@@ -74,7 +83,7 @@ import { useTiktokSites } from '@/composables/tiktok/useTiktokSites'
 
 const { sites, currentSite } = useTiktokSites()
 const siteCode = ref('')
-const filters = reactive({ type: undefined as string | undefined, msku: '', startDate: '', endDate: '' })
+const filters = reactive({ type: undefined as string | undefined, msku: '', startDate: '', endDate: '', unmappedOnly: false })
 const list = ref<TiktokSettlementOrder[]>([])
 const loading = ref(false)
 const pagination = ref({ current: 1, pageSize: 20, total: 0, showSizeChanger: true, showQuickJumper: true, showTotal: (total: number) => `共 ${total} 条` })
@@ -109,8 +118,12 @@ async function loadData() {
       current: pagination.value.current, size: pagination.value.pageSize
     })
     const data = res.data || res
-    list.value = data.records || []
-    pagination.value.total = data.total || 0
+    let records = data.records || []
+    if (filters.unmappedOnly) {
+      records = records.filter((r: any) => !r.msku)
+    }
+    list.value = records
+    pagination.value.total = filters.unmappedOnly ? records.length : (data.total || 0)
   } finally { loading.value = false }
 }
 
@@ -125,4 +138,5 @@ function fmt(val: any) { return val != null ? Number(val).toFixed(2) : '-' }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
 :deep(.clickable-row) { cursor: pointer; }
 :deep(.clickable-row:hover td) { background: #e6f7ff !important; }
+:deep(.unmapped-row td) { background: #fff7e6 !important; }
 </style>

@@ -33,7 +33,10 @@
     <!-- 步骤四：推导计算 -->
     <a-card title="④ 推导计算" style="margin-top: 16px" class="step-card">
       <a-button type="primary" :loading="deriving" :disabled="!canDerive" @click="handleDerive">
-        开始推导（自动覆盖旧数据）
+        预览推导结果
+      </a-button>
+      <a-button style="margin-left: 12px" @click="$router.push('/tiktok/document/settlement-generate')">
+        去生成结算单/INV
       </a-button>
 
       <template v-if="derivationResult.length > 0">
@@ -67,7 +70,12 @@ async function fetchMarketplaces() {
   try {
     const res = await getEnabledMarketplaces()
     marketplaceOptions.value = res.data || []
-  } finally { sitesLoading.value = false }
+  } finally {
+    sitesLoading.value = false
+    if (!selectedSiteCode.value && marketplaceOptions.value.length > 0) {
+      selectedSiteCode.value = marketplaceOptions.value.find(m => m.siteCode === 'US')?.siteCode || marketplaceOptions.value[0].siteCode
+    }
+  }
 }
 
 function handleSiteChange() { derivationResult.value = []; resultSummary.value = '' }

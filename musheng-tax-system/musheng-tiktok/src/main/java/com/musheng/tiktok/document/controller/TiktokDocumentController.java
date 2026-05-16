@@ -124,8 +124,8 @@ public class TiktokDocumentController {
     @Operation(summary = "生成DN（按锚点+21天周期分组，可能生成多份）")
     @PostMapping("/dn/generate")
     public Result<List<TiktokDocumentDn>> generateDn(@RequestBody GenerateDnRequest req) {
-        log.info("生成TK DN，站点: {}，锚点: {}，货件数: {}", req.getSiteCode(), req.getAnchorDate(), req.getShipmentIds().size());
-        return Result.success(generateService.generateDn(req.getSiteCode(), req.getShipmentIds(), req.getAnchorDate()));
+        log.info("生成TK DN，站点: {}，锚点: {}，poId: {}，货件数: {}", req.getSiteCode(), req.getAnchorDate(), req.getPoId(), req.getShipmentIds() != null ? req.getShipmentIds().size() : 0);
+        return Result.success(generateService.generateDn(req.getSiteCode(), req.getShipmentIds(), req.getAnchorDate(), req.getPoId()));
     }
 
     @Operation(summary = "生成Settlement+INV（按月拆分，可能生成多份）")
@@ -139,6 +139,18 @@ public class TiktokDocumentController {
     @PostMapping("/inv/generate/{settlementId}")
     public Result<TiktokDocumentInv> generateInv(@PathVariable Long settlementId) {
         return Result.success(generateService.generateInv(settlementId));
+    }
+
+    @Operation(summary = "根据结算单ID列表查询关联的INV")
+    @PostMapping("/inv/by-settlements")
+    public Result<List<TiktokDocumentInv>> getInvBySettlements(@RequestBody List<Long> settlementIds) {
+        Long shopId = com.musheng.common.context.ShopContext.requireShopId();
+        List<TiktokDocumentInv> invs = new java.util.ArrayList<>();
+        for (Long sid : settlementIds) {
+            var list = queryService.getInvBySettlementId(sid);
+            if (list != null) invs.addAll(list);
+        }
+        return Result.success(invs);
     }
 
     // ==================== 导出API ====================
@@ -205,6 +217,8 @@ public class TiktokDocumentController {
         private List<String> shipmentIds;
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         private LocalDate anchorDate;
+        /** 关联PO主键（传入时自动从PO明细提取货件） */
+        private Long poId;
     }
 
     @Data

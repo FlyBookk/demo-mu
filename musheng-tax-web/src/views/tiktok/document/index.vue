@@ -18,7 +18,7 @@
         </a-form-item>
         <a-form-item>
           <a-select v-model:value="searchForm.siteCode" placeholder="站点" allow-clear style="width: 100px" @change="handleSearch">
-            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
+            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item>

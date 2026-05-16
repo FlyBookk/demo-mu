@@ -30,11 +30,12 @@ public interface TiktokDocumentGenerateService {
      * 生成DN（按锚点+21天周期分组，可能生成多份）
      *
      * @param siteCode 站点代码
-     * @param shipmentIds 选中的货件ID列表
+     * @param shipmentIds 选中的货件ID列表（与poId二选一）
      * @param anchorDate 锚点日期
+     * @param poId 关联PO主键（传入时自动从PO明细提取货件）
      * @return 生成的DN列表
      */
-    List<TiktokDocumentDn> generateDn(String siteCode, List<String> shipmentIds, LocalDate anchorDate);
+    List<TiktokDocumentDn> generateDn(String siteCode, List<String> shipmentIds, LocalDate anchorDate, Long poId);
 
     /**
      * 生成Settlement+INV（按月拆分为3份，每份对应一份INV）

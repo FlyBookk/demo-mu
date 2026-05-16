@@ -231,7 +231,7 @@ export function generateTiktokPo(data: { siteCode: string; shipmentIds: string[]
   return request.post<any>(`${BASE}/document/po/generate`, data)
 }
 
-export function generateTiktokDn(data: { siteCode: string; shipmentIds: string[]; anchorDate?: string }) {
+export function generateTiktokDn(data: { siteCode: string; shipmentIds: string[]; anchorDate?: string; poId?: number }) {
   return request.post<any>(`${BASE}/document/dn/generate`, data)
 }
 
@@ -241,6 +241,10 @@ export function generateTiktokSettlement(data: { siteCode: string; quarter: stri
 
 export function generateTiktokInv(settlementId: number) {
   return request.post<any>(`${BASE}/document/inv/generate/${settlementId}`)
+}
+
+export function getInvBySettlements(settlementIds: number[]) {
+  return request.post<any[]>(`${BASE}/document/inv/by-settlements`, settlementIds)
 }
 
 // 导出
@@ -258,16 +262,32 @@ export function exportTiktokInv(id: number) {
 }
 
 export function batchExportPo(ids: number[]) {
-  return request.post(`${BASE}/document/export/po/batch`, ids, { responseType: 'blob' })
+  return request.post(`${BASE}/document/export/po/batch`, ids, { responseType: 'blob' }).then((res: any) => {
+    const blob = res instanceof Blob ? res : new Blob([res])
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'TK-PO批量.zip'; a.click(); URL.revokeObjectURL(url)
+  })
 }
 export function batchExportDn(ids: number[]) {
-  return request.post(`${BASE}/document/export/dn/batch`, ids, { responseType: 'blob' })
+  return request.post(`${BASE}/document/export/dn/batch`, ids, { responseType: 'blob' }).then((res: any) => {
+    const blob = res instanceof Blob ? res : new Blob([res])
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'TK-DN批量.zip'; a.click(); URL.revokeObjectURL(url)
+  })
 }
 export function batchExportSettlement(ids: number[]) {
-  return request.post(`${BASE}/document/export/settlement/batch`, ids, { responseType: 'blob' })
+  return request.post(`${BASE}/document/export/settlement/batch`, ids, { responseType: 'blob' }).then((res: any) => {
+    const blob = res instanceof Blob ? res : new Blob([res])
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'TK-结算单批量.zip'; a.click(); URL.revokeObjectURL(url)
+  })
 }
 export function batchExportInv(ids: number[]) {
-  return request.post(`${BASE}/document/export/inv/batch`, ids, { responseType: 'blob' })
+  return request.post(`${BASE}/document/export/inv/batch`, ids, { responseType: 'blob' }).then((res: any) => {
+    const blob = res instanceof Blob ? res : new Blob([res])
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'TK-INV批量.zip'; a.click(); URL.revokeObjectURL(url)
+  })
 }
 
 // ========== 交易方配置 ==========

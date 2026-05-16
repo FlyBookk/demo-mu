@@ -59,4 +59,9 @@ public interface TiktokDocumentQueryService {
      * INV明细列表
      */
     List<TiktokDocumentInvItem> getInvItems(Long invId);
+
+    /**
+     * 根据结算单ID查询关联的INV
+     */
+    List<TiktokDocumentInv> getInvBySettlementId(Long settlementId);
 }

@@ -155,11 +155,26 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public List<TiktokDocumentDn> generateDn(String siteCode, List<String> shipmentIds, LocalDate anchorDate) {
+    public List<TiktokDocumentDn> generateDn(String siteCode, List<String> shipmentIds, LocalDate anchorDate, Long poId) {
         Long shopId = ShopContext.requireShopId();
         TiktokPartyConfig config = partyConfigService.getBySiteCode(siteCode);
         if (anchorDate == null) {
-            throw new RuntimeException("锚点日期不能为空");
+            throw new com.musheng.common.exception.BusinessException("锚点日期不能为空");
+        }
+
+        // 当传入 poId 时，从 PO 明细提取对应货件
+        if (poId != null) {
+            List<TiktokDocumentPoItem> poItems = poItemMapper.selectList(
+                    new LambdaQueryWrapper<TiktokDocumentPoItem>()
+                            .eq(TiktokDocumentPoItem::getPoId, poId)
+                            .eq(TiktokDocumentPoItem::getShopId, shopId));
+            shipmentIds = poItems.stream()
+                    .map(TiktokDocumentPoItem::getShipmentNo)
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+        if (shipmentIds == null || shipmentIds.isEmpty()) {
+            throw new com.musheng.common.exception.BusinessException("货件列表不能为空");
         }
 
         // 1. 查询货件并按 creationTime 排序
@@ -259,7 +274,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
     public List<TiktokDocumentSettlement> generateSettlement(String siteCode, String quarter, BigDecimal costAmount) {
         Long shopId = ShopContext.requireShopId();
         if (costAmount == null || costAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("请输入有效的采购成本");
+            throw new com.musheng.common.exception.BusinessException("请输入有效的采购成本");
         }
         TiktokPartyConfig config = partyConfigService.getBySiteCode(siteCode);
 
@@ -267,6 +282,27 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
         LocalDate[] range = parseQuarter(quarter);
         LocalDate periodStart = range[0];
         LocalDate periodEnd = range[1];
+
+        // 幂等：删除该季度已有的结算单和INV（覆盖旧数据）
+        List<TiktokDocumentSettlement> existingSettlements = docSettlementMapper.selectList(
+                new LambdaQueryWrapper<TiktokDocumentSettlement>()
+                        .eq(TiktokDocumentSettlement::getShopId, shopId)
+                        .eq(TiktokDocumentSettlement::getSiteCode, siteCode)
+                        .ge(TiktokDocumentSettlement::getPeriodStart, periodStart)
+                        .le(TiktokDocumentSettlement::getPeriodEnd, periodEnd));
+        for (TiktokDocumentSettlement es : existingSettlements) {
+            // 删除关联的INV及其明细
+            List<TiktokDocumentInv> invs = invMapper.selectList(new LambdaQueryWrapper<TiktokDocumentInv>()
+                    .eq(TiktokDocumentInv::getSettlementId, es.getId()));
+            for (TiktokDocumentInv inv : invs) {
+                invItemMapper.delete(new LambdaQueryWrapper<TiktokDocumentInvItem>().eq(TiktokDocumentInvItem::getInvId, inv.getId()));
+                invMapper.deleteById(inv.getId());
+            }
+            // 删除结算单明细和主表
+            docSettlementItemMapper.delete(new LambdaQueryWrapper<TiktokDocumentSettlementItem>()
+                    .eq(TiktokDocumentSettlementItem::getSettlementId, es.getId()));
+            docSettlementMapper.deleteById(es.getId());
+        }
 
         // 查询该季度所有Order明细
         List<TiktokSettlementOrder> orders = settlementOrderMapper.selectList(
@@ -319,7 +355,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
                     .filter(m -> !priceMap.containsKey(m) || priceMap.get(m).compareTo(BigDecimal.ZERO) == 0)
                     .toList();
             if (!missingPrice.isEmpty()) {
-                throw new RuntimeException("以下MSKU缺少零售价: " + String.join(", ", missingPrice));
+                throw new com.musheng.common.exception.BusinessException("以下MSKU缺少零售价: " + String.join(", ", missingPrice));
             }
 
             // 计算本月加权零售价总和（用于分摊成本）
@@ -347,7 +383,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
         }
 
         if (results.isEmpty()) {
-            throw new RuntimeException("该季度(" + quarter + ")站点(" + siteCode + ")无有效结算数据");
+            throw new com.musheng.common.exception.BusinessException("该季度(" + quarter + ")站点(" + siteCode + ")无有效结算数据");
         }
         return results;
     }
@@ -411,7 +447,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
         Long shopId = ShopContext.requireShopId();
         TiktokDocumentSettlement settlement = docSettlementMapper.selectById(settlementId);
         if (settlement == null || !shopId.equals(settlement.getShopId())) {
-            throw new RuntimeException("结算单不存在或无权操作");
+            throw new com.musheng.common.exception.BusinessException("结算单不存在或无权操作");
         }
         TiktokPartyConfig config = partyConfigService.getBySiteCode(settlement.getSiteCode());
         return generateInvInternal(settlement, config, shopId, settlement.getSiteCode());
@@ -477,7 +513,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
                     .eq(TiktokShipment::getSiteCode, siteCode)
                     .eq(TiktokShipment::getShipmentId, sid));
             if (s == null) {
-                throw new RuntimeException("货件不存在或无权操作: " + sid);
+                throw new com.musheng.common.exception.BusinessException("货件不存在或无权操作: " + sid);
             }
             result.add(s);
         }
