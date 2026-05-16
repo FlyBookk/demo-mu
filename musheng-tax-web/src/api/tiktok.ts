@@ -123,7 +123,7 @@ export function importTiktokSettlement(file: File, siteCode: string) {
   })
 }
 
-export function getTiktokSettlementOrders(params: { siteCode: string; type?: string; msku?: string; startDate?: string; endDate?: string; current?: number; size?: number }) {
+export function getTiktokSettlementOrders(params: { siteCode: string; type?: string; msku?: string; startDate?: string; endDate?: string; unmappedOnly?: boolean; current?: number; size?: number }) {
   return request.get<PageResult<TiktokSettlementOrder>>(`${BASE}/settlement/orders`, params)
 }
 

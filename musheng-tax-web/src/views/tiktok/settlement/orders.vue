@@ -115,15 +115,12 @@ async function loadData() {
       siteCode: siteCode.value,
       type: filters.type, msku: filters.msku || undefined,
       startDate: filters.startDate || undefined, endDate: filters.endDate || undefined,
+      unmappedOnly: filters.unmappedOnly || undefined,
       current: pagination.value.current, size: pagination.value.pageSize
     })
     const data = res.data || res
-    let records = data.records || []
-    if (filters.unmappedOnly) {
-      records = records.filter((r: any) => !r.msku)
-    }
-    list.value = records
-    pagination.value.total = filters.unmappedOnly ? records.length : (data.total || 0)
+    list.value = data.records || []
+    pagination.value.total = data.total || 0
   } finally { loading.value = false }
 }
 

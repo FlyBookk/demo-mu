@@ -294,7 +294,7 @@ public class TiktokSettlementService {
     /**
      * 结算明细分页查询
      */
-    public Page<TiktokSettlementOrder> listOrders(String siteCode, String type, String msku, String startDate, String endDate, Integer current, Integer size) {
+    public Page<TiktokSettlementOrder> listOrders(String siteCode, String type, String msku, String startDate, String endDate, Boolean unmappedOnly, Integer current, Integer size) {
         Long shopId = ShopContext.requireShopId();
         LambdaQueryWrapper<TiktokSettlementOrder> wrapper = new LambdaQueryWrapper<TiktokSettlementOrder>()
                 .eq(TiktokSettlementOrder::getShopId, shopId)
@@ -303,6 +303,7 @@ public class TiktokSettlementService {
         if (StringUtils.hasText(msku)) wrapper.like(TiktokSettlementOrder::getMsku, msku);
         if (StringUtils.hasText(startDate)) wrapper.ge(TiktokSettlementOrder::getStatementDate, LocalDate.parse(startDate));
         if (StringUtils.hasText(endDate)) wrapper.le(TiktokSettlementOrder::getStatementDate, LocalDate.parse(endDate));
+        if (Boolean.TRUE.equals(unmappedOnly)) wrapper.and(w -> w.isNull(TiktokSettlementOrder::getMsku).or().eq(TiktokSettlementOrder::getMsku, ""));
         wrapper.orderByDesc(TiktokSettlementOrder::getStatementDate);
         return orderMapper.selectPage(new Page<>(current, size), wrapper);
     }

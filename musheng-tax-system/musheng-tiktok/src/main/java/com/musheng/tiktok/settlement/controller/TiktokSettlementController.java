@@ -73,9 +73,10 @@ public class TiktokSettlementController {
             @RequestParam(required = false) String msku,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) Boolean unmappedOnly,
             @RequestParam(required = false, defaultValue = "1") Integer current,
             @RequestParam(required = false, defaultValue = "20") Integer size) {
-        Page<TiktokSettlementOrder> page = settlementService.listOrders(siteCode, type, msku, startDate, endDate, current, size);
+        Page<TiktokSettlementOrder> page = settlementService.listOrders(siteCode, type, msku, startDate, endDate, unmappedOnly, current, size);
         return Result.success(PageResult.of(page.getRecords(), page.getTotal(), current, size));
     }
 
