@@ -166,17 +166,50 @@
       <!-- 运营口径 -->
       <a-card title="运营口径" style="margin-top: 16px">
         <a-descriptions :column="4" bordered size="small">
-          <a-descriptions-item label="净收入">${{ fmt(opSummary.netRevenue) }}</a-descriptions-item>
-          <a-descriptions-item label="佣金">${{ fmt(opSummary.commission) }}</a-descriptions-item>
-          <a-descriptions-item label="物流">${{ fmt(opSummary.logistics) }}</a-descriptions-item>
-          <a-descriptions-item label="联盟">${{ fmt(opSummary.affiliate) }}</a-descriptions-item>
-          <a-descriptions-item label="促销">${{ fmt(opSummary.promotion) }}</a-descriptions-item>
-          <a-descriptions-item label="税费">${{ fmt(opSummary.tax) }}</a-descriptions-item>
-          <a-descriptions-item label="其他">${{ fmt(opSummary.other) }}</a-descriptions-item>
-          <a-descriptions-item label="订单利润"><strong>${{ fmt(opSummary.orderProfit) }}</strong></a-descriptions-item>
-          <a-descriptions-item label="调整收入">${{ fmt(opSummary.adjustmentIncome) }}</a-descriptions-item>
-          <a-descriptions-item label="调整支出">${{ fmt(opSummary.adjustmentExpense) }}</a-descriptions-item>
-          <a-descriptions-item label="净利润"><strong style="color:#52c41a">${{ fmt(opSummary.netProfit) }}</strong></a-descriptions-item>
+          <a-descriptions-item label="净收入">
+            <div>${{ fmt(opSummary.netRevenue) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.netRevenue) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="佣金">
+            <div>${{ fmt(opSummary.commission) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.commission) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="物流">
+            <div>${{ fmt(opSummary.logistics) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.logistics) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="联盟">
+            <div>${{ fmt(opSummary.affiliate) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.affiliate) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="促销">
+            <div>${{ fmt(opSummary.promotion) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.promotion) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="税费">
+            <div>${{ fmt(opSummary.tax) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.tax) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="其他">
+            <div>${{ fmt(opSummary.other) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.other) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="订单利润">
+            <div><strong>${{ fmt(opSummary.orderProfit) }}</strong></div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.orderProfit) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="调整收入">
+            <div>${{ fmt(opSummary.adjustmentIncome) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.adjustmentIncome) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="调整支出">
+            <div>${{ fmt(opSummary.adjustmentExpense) }}</div>
+            <div class="rmb-sub">¥{{ fmt(Number(opSummary.adjustmentExpense) * exchangeRate) }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="净利润">
+            <div><strong style="color:#52c41a">${{ fmt(opSummary.netProfit) }}</strong></div>
+            <div class="rmb-sub" style="color:#52c41a">¥{{ fmt(Number(opSummary.netProfit) * exchangeRate) }}</div>
+          </a-descriptions-item>
           <a-descriptions-item label="利润率"><strong>{{ ((opSummary.marginRate || 0) * 100).toFixed(2) }}%</strong></a-descriptions-item>
         </a-descriptions>
       </a-card>
@@ -290,5 +323,6 @@ onMounted(() => { quarter.value = quarterOptions.length > 1 ? quarterOptions[1] 
   .cell-dual { display: flex; flex-direction: column; line-height: 1.6; }
   .val-usd { font-weight: 500; color: #333; }
   .val-rmb { font-size: 12px; color: #999; }
+  .rmb-sub { font-size: 12px; color: #999; margin-top: 2px; }
 }
 </style>
