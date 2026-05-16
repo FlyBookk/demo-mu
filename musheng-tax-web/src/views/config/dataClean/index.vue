@@ -107,7 +107,13 @@ async function fetchModules() {
   loading.value = true
   try {
     const res = await getCleanModules()
-    modules.value = res.data || []
+    const all: DataCleanModule[] = res.data || []
+    // 按当前平台过滤：tk_ 开头的是 TK 模块，其余是亚马逊模块
+    const currentPlatform = localStorage.getItem('platform') || 'AMAZON'
+    modules.value = all.filter(m => {
+      if (currentPlatform === 'TIKTOK') return m.moduleCode.startsWith('tk_')
+      return !m.moduleCode.startsWith('tk_')
+    })
   } catch (error) {
     console.error('获取清理模块失败:', error)
   } finally {

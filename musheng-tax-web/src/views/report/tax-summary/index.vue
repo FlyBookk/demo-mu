@@ -160,7 +160,20 @@
 
     <!-- 平台支出与采购成本（按图片公式） -->
     <div class="stat-section">
-      <div class="stat-section-label">平台支出与采购成本</div>
+      <div class="stat-section-label">
+        平台支出与采购成本
+        <span style="font-size:13px; font-weight:normal; color:#666; margin-left:16px; display:inline-flex; align-items:center">
+          利润设置：
+          <a-radio-group v-model:value="profitMode" size="small" style="margin: 0 8px">
+            <a-radio-button value="percent">百分比</a-radio-button>
+            <a-radio-button value="fixed">固定金额</a-radio-button>
+          </a-radio-group>
+          <a-input-number v-if="profitMode === 'percent'" v-model:value="profitPercent" :min="0" :max="100" :precision="1" size="small" style="width: 80px" />
+          <span v-if="profitMode === 'percent'" style="margin-left: 4px">%</span>
+          <span v-if="profitMode === 'fixed'" style="margin-right: 4px">¥</span>
+          <a-input-number v-if="profitMode === 'fixed'" v-model:value="profitFixed" :min="0" :precision="2" size="small" style="width: 120px" />
+        </span>
+      </div>
       <a-row :gutter="16" class="stat-row">
         <a-col :span="6">
           <a-card class="stat-card highlight-card">
@@ -177,13 +190,13 @@
         <a-col :span="6">
           <a-card class="stat-card highlight-card">
             <a-statistic
-              title="4%利润⑩=③×4%"
+              :title="profitMode === 'percent' ? `${profitPercent}%利润⑩=③×${profitPercent}%` : '固定利润⑩'"
               :value="Math.abs(totalStats.profit4PercentCny ?? 0)"
               :precision="2"
               :prefix="'¥'"
               :value-style="{ color: '#52c41a', fontWeight: 'bold' }"
             />
-            <div class="stat-desc">收入净额的4%</div>
+            <div class="stat-desc">{{ profitMode === 'percent' ? `收入净额的${profitPercent}%` : '自定义固定金额' }}</div>
           </a-card>
         </a-col>
         <a-col :span="6">
@@ -290,6 +303,9 @@ const availableQuarters = ref<string[]>([])
 // ============= 数据 =============
 const loading = ref(false)
 const exporting = ref(false)
+const profitMode = ref<'percent' | 'fixed'>('percent')
+const profitPercent = ref<number>(4)
+const profitFixed = ref<number>(0)
 
 const summaryData = ref<(TaxReportSummary & { key: string })[]>([])
 
@@ -308,8 +324,8 @@ const totalStats = computed(() => {
   // 按公式计算
   // ⑨平台支出合计 = ④消费税 + ⑤佣金服务费 + ⑥广告费 + ⑦其他费用
   const platformExpensesCny = Math.abs(consumptionTaxCny) + Math.abs(totalCommissionFeeCny) + Math.abs(advertisingCostCny) + Math.abs(totalOtherFeeCny)
-  // ⑩4%利润 = ③收入净额 × 4%
-  const profit4PercentCny = netRevenueCny * 0.04
+  // ⑩利润 = 百分比或固定金额
+  const profit4PercentCny = profitMode.value === 'percent' ? netRevenueCny * (profitPercent.value || 0) / 100 : (profitFixed.value || 0)
   // ⑪采购成本 = ③ − ⑨ − ⑩
   const procurementCostCny = netRevenueCny - platformExpensesCny - profit4PercentCny
 

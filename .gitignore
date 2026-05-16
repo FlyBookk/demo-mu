@@ -11,9 +11,13 @@ deploy-package/
 
 .claude/
 .kiro/
-.serena/
+.serena
 .cursor/
 logs
 dist
 node_modules
 musheng-tax-web/dist.zip
+target
+docs
+scripts
+yuanyang.html

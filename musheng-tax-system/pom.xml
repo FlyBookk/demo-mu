@@ -17,6 +17,7 @@
         <module>musheng-system</module>
         <module>musheng-config</module>
         <module>musheng-business</module>
+        <module>musheng-tiktok</module>
         <module>musheng-web</module>
     </modules>
 
@@ -77,6 +78,11 @@
             <dependency>
                 <groupId>com.musheng</groupId>
                 <artifactId>musheng-business</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.musheng</groupId>
+                <artifactId>musheng-tiktok</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

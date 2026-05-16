@@ -45,6 +45,8 @@
         </div>
 
         <div class="header-right">
+          <!-- 平台切换器 -->
+          <PlatformSwitcher style="margin-right: 12px" />
           <!-- 店铺选择器 -->
           <ShopSelector class="shop-selector-wrapper" />
           
@@ -161,6 +163,7 @@ import { message, Form } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/modules/auth'
 import { useAppStore } from '@/stores/modules/app'
 import ShopSelector from '@/components/business/ShopSelector/index.vue'
+import PlatformSwitcher from '@/components/business/PlatformSwitcher/index.vue'
 import { changePassword, updateProfile } from '@/api/auth'
 import type { UpdateProfileParams, ChangePasswordParams } from '@/types/auth'
 
@@ -177,6 +180,15 @@ const collapsed = computed({
 
 // 选中的菜单
 const selectedKeys = ref<string[]>([])
+
+// 平台状态
+const platform = ref(localStorage.getItem('platform') || 'AMAZON')
+// 监听平台切换事件
+if (typeof window !== 'undefined') {
+  window.addEventListener('platform-change', (e: any) => {
+    platform.value = e.detail
+  })
+}
 
 // 展开的菜单
 const openKeys = ref<string[]>([])
@@ -210,8 +222,14 @@ const menuItems = computed<ItemType[]>(() => {
         { key: 'Currency', label: '货币管理' },
         { key: 'Marketplace', label: '站点管理' },
         { key: 'Shop', label: '店铺管理' },
-        { key: 'TransactionType', label: '交易类型映射' },
-        { key: 'FieldMapping', label: '字段映射模板' },
+        ...(platform.value === 'AMAZON' ? [
+          { key: 'TransactionType', label: '交易类型映射(AMZ)' },
+          { key: 'FieldMapping', label: '字段映射模板(AMZ)' },
+          { key: 'DocumentPartyConfig', label: '交易方配置(AMZ)' },
+        ] : []),
+        ...(platform.value === 'TIKTOK' ? [
+          { key: 'TiktokPartyConfig', label: '交易方配置' },
+        ] : []),
         { key: 'ImportRecord', label: '导入记录' },
         { key: 'DataClean', label: '数据清理' },
         { key: 'ExportSetting', label: '导出设置' }
@@ -262,8 +280,7 @@ const menuItems = computed<ItemType[]>(() => {
         { key: 'DocumentList', label: '单据列表' },
         { key: 'DocumentGenerate', label: 'PO/DN生成' },
         { key: 'SettlementGenerate', label: '结算单/INV生成' },
-        { key: 'MskuList', label: 'MSKU列表' },
-        { key: 'DocumentPartyConfig', label: '交易方配置' }
+        { key: 'MskuList', label: 'MSKU列表' }
       ]
     },
     {
@@ -285,9 +302,77 @@ const menuItems = computed<ItemType[]>(() => {
     }
   ]
 
+  // ========== TikTok 菜单 ==========
+  const tiktokItems: ItemType[] = [
+    {
+      key: 'TiktokProduct',
+      icon: () => h(InboxOutlined),
+      label: '商品管理',
+      children: [
+        { key: 'TiktokProductList', label: '商品列表' },
+        { key: 'TiktokProductImport', label: '对照表导入' }
+      ]
+    },
+    {
+      key: 'TiktokShipment',
+      icon: () => h(InboxOutlined),
+      label: 'FBT货件',
+      children: [
+        { key: 'TiktokShipmentList', label: '货件列表' },
+        { key: 'TiktokShipmentImport', label: '货件导入' }
+      ]
+    },
+    {
+      key: 'TiktokSettlement',
+      icon: () => h(DollarOutlined),
+      label: '结算数据',
+      children: [
+        { key: 'TiktokSettlementImport', label: '结算单导入' },
+        { key: 'TiktokSettlementOrders', label: '订单明细' }
+      ]
+    },
+    {
+      key: 'TiktokDocument',
+      icon: () => h(FileTextOutlined),
+      label: '单据管理',
+      children: [
+        { key: 'TiktokDerivation', label: '结算推导' },
+        { key: 'TiktokMskuList', label: 'MSKU列表' },
+        { key: 'TiktokDocumentList', label: '单据列表' },
+        { key: 'TiktokDocumentGenerate', label: 'PO/DN生成' },
+        { key: 'TiktokSettlementGenerate', label: '结算单/INV生成' }
+      ]
+    },
+    {
+      key: 'TiktokReport',
+      icon: () => h(BarChartOutlined),
+      label: '报税汇总'
+    }
+  ]
+
+  // Amazon 专属菜单（销售/配送/FBA/广告/报税）
+  const amazonOnlyKeys = ['Sales', 'Shipping', 'FbaShipment', 'Document', 'Advertising', 'Report']
+  // TikTok 专属菜单
+  const tiktokOnlyKeys = ['TiktokProduct', 'TiktokShipment', 'TiktokSettlement', 'TiktokDocument', 'TiktokReport']
+
+  // 按平台过滤
+  let filteredItems = items.filter(item => {
+    const key = (item as any).key as string
+    if (platform.value === 'TIKTOK') {
+      return !amazonOnlyKeys.includes(key)
+    }
+    return !tiktokOnlyKeys.includes(key)
+  })
+
+  // TikTok 模式下插入 TK 菜单（在汇率管理后面）
+  if (platform.value === 'TIKTOK') {
+    const rateIdx = filteredItems.findIndex(i => (i as any).key === 'Rate')
+    filteredItems.splice(rateIdx + 1, 0, ...tiktokItems)
+  }
+
   // 管理员显示系统管理菜单
   if (authStore.isAdmin) {
-    items.push({
+    filteredItems.push({
       key: 'System',
       icon: () => h(ToolOutlined),
       label: '系统管理',
@@ -299,7 +384,7 @@ const menuItems = computed<ItemType[]>(() => {
     })
   }
 
-  return items
+  return filteredItems
 })
 
 // 面包屑
