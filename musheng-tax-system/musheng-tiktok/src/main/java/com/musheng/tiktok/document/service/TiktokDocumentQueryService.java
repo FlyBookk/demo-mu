@@ -64,4 +64,9 @@ public interface TiktokDocumentQueryService {
      * 根据结算单ID查询关联的INV
      */
     List<TiktokDocumentInv> getInvBySettlementId(Long settlementId);
+
+    /**
+     * 结算单MSKU季度汇总（多月合并）
+     */
+    List<java.util.Map<String, Object>> getSettlementMskuSummary(String siteCode, java.time.LocalDate startDate, java.time.LocalDate endDate);
 }

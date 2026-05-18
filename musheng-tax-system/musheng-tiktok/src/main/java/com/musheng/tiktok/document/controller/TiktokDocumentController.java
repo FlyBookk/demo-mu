@@ -112,6 +112,15 @@ public class TiktokDocumentController {
         return Result.success(result);
     }
 
+    @Operation(summary = "结算单MSKU季度汇总（多月合并）")
+    @GetMapping("/settlement/msku-summary")
+    public Result<List<Map<String, Object>>> settlementMskuSummary(
+            @RequestParam String siteCode,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return Result.success(queryService.getSettlementMskuSummary(siteCode, startDate, endDate));
+    }
+
     // ==================== 生成API ====================
 
     @Operation(summary = "生成PO（按创建时间分组，可能生成多份）")

@@ -143,6 +143,50 @@ public class TiktokDocumentQueryServiceImpl implements TiktokDocumentQueryServic
                 .eq(TiktokDocumentInv::getSettlementId, settlementId));
     }
 
+    @Override
+    public List<java.util.Map<String, Object>> getSettlementMskuSummary(String siteCode, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        Long shopId = ShopContext.requireShopId();
+        // 查询时间范围内的所有结算单
+        List<TiktokDocumentSettlement> settlements = settlementMapper.selectList(
+                new LambdaQueryWrapper<TiktokDocumentSettlement>()
+                        .eq(TiktokDocumentSettlement::getShopId, shopId)
+                        .eq(TiktokDocumentSettlement::getSiteCode, siteCode)
+                        .ge(TiktokDocumentSettlement::getPeriodStart, startDate)
+                        .le(TiktokDocumentSettlement::getPeriodEnd, endDate));
+        if (settlements.isEmpty()) return java.util.Collections.emptyList();
+
+        // 查询所有明细
+        List<Long> ids = settlements.stream().map(TiktokDocumentSettlement::getId).toList();
+        List<TiktokDocumentSettlementItem> allItems = settlementItemMapper.selectList(
+                new LambdaQueryWrapper<TiktokDocumentSettlementItem>()
+                        .eq(TiktokDocumentSettlementItem::getShopId, shopId)
+                        .in(TiktokDocumentSettlementItem::getSettlementId, ids));
+
+        // 按 MSKU 汇总
+        java.util.Map<String, int[]> qtyMap = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.math.BigDecimal> amtMap = new java.util.LinkedHashMap<>();
+        for (TiktokDocumentSettlementItem item : allItems) {
+            String msku = item.getMsku();
+            qtyMap.computeIfAbsent(msku, k -> new int[]{0})[0] += (item.getQuantity() != null ? item.getQuantity() : 0);
+            amtMap.merge(msku, item.getAmount() != null ? item.getAmount() : java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        }
+
+        // 组装结果
+        List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        for (String msku : qtyMap.keySet()) {
+            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("msku", msku);
+            row.put("quantity", qtyMap.get(msku)[0]);
+            row.put("amount", amtMap.get(msku));
+            row.put("unitPrice", qtyMap.get(msku)[0] > 0
+                    ? amtMap.get(msku).divide(java.math.BigDecimal.valueOf(qtyMap.get(msku)[0]), 4, java.math.RoundingMode.HALF_UP)
+                    : java.math.BigDecimal.ZERO);
+            result.add(row);
+        }
+        result.sort((a, b) -> ((String) a.get("msku")).compareTo((String) b.get("msku")));
+        return result;
+    }
+
     // ==================== 私有方法 ====================
 
     private List<TiktokDocumentListVO> queryPoList(Long shopId, TiktokDocumentQueryRequest req) {

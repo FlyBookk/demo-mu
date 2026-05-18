@@ -33,11 +33,9 @@
     <!-- 步骤四：推导计算 -->
     <a-card title="④ 推导计算" style="margin-top: 16px" class="step-card">
       <a-button type="primary" :loading="deriving" :disabled="!canDerive" @click="handleDerive">
-        预览推导结果
+        推导
       </a-button>
-      <a-button style="margin-left: 12px" @click="$router.push('/tiktok/document/settlement-generate')">
-        去生成结算单/INV
-      </a-button>
+
 
       <template v-if="derivationResult.length > 0">
         <a-divider />

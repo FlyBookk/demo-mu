@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getTiktokDocumentList, getTiktokSettlementDetail } from '@/api/tiktok'
+import { getTiktokDocumentList, getTiktokSettlementMskuSummary } from '@/api/tiktok'
 import { getEnabledMarketplaces } from '@/api/marketplace'
 import type { Marketplace } from '@/types/marketplace'
 
@@ -113,19 +113,24 @@ async function handleSearch() {
     const endMonth = parseInt(qn) * 3
     const endDate = `${year}-${String(endMonth).padStart(2, '0')}-${endMonth === 2 ? '28' : (endMonth === 4 || endMonth === 6 || endMonth === 9 || endMonth === 11) ? '30' : '31'}`
 
-    // 查该站点+季度范围的结算单
-    const listRes: any = await getTiktokDocumentList({
-      documentType: 'SETTLEMENT', siteCode: queryParams.siteCode,
-      startDate, endDate, pageNum: 1, pageSize: 1
-    })
-    const records = (listRes.data || listRes).records || []
-    if (records.length === 0) return
+    // 调用季度 MSKU 汇总接口
+    const res: any = await getTiktokSettlementMskuSummary({ siteCode: queryParams.siteCode, startDate, endDate })
+    const data = res.data || res || []
+    if (data.length === 0) return
 
-    // 取第一份结算单的详情
-    const detailRes: any = await getTiktokSettlementDetail(records[0].id)
-    const detail = detailRes.data || detailRes
-    settlement.value = detail.settlement
-    items.value = detail.items || []
+    // 组装汇总数据
+    let totalQty = 0, totalAmt = 0
+    const rows = data.map((item: any, idx: number) => {
+      totalQty += item.quantity || 0
+      totalAmt += Number(item.amount) || 0
+      return { lineNo: idx + 1, msku: item.msku, quantity: item.quantity, unitPrice: item.unitPrice, amount: item.amount }
+    })
+    items.value = rows
+    settlement.value = {
+      documentNo: `${queryParams.siteCode} ${formatQuarter(queryParams.quarter)} 汇总`,
+      periodStart: startDate, periodEnd: endDate,
+      totalQuantity: totalQty, totalAmount: totalAmt
+    }
   } finally { loading.value = false }
 }
 
