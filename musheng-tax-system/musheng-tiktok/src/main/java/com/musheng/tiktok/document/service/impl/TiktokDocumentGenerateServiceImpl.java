@@ -541,30 +541,63 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
                 (a, b) -> a));
     }
 
+    /**
+     * 按 MSKU 聚合净结算数量
+     * 逻辑：按 statementId + orderId + skuId 分组去重，判断每组是销售还是退款
+     * - 有销售行 且 无退款行 → 净数量 = +quantity
+     * - 有退款行 且 无销售行 → 净数量 = -quantity（跨期纯退款）
+     * - 既有销售又有退款 → 净数量 = 0（同期退货抵消）
+     */
     private Map<String, Integer> aggregateMskuQty(List<TiktokSettlementOrder> orders) {
-        Map<String, int[]> raw = new LinkedHashMap<>();
+        // 按 statementId + orderId + skuId 分组，记录每组的特征
+        // key = statementId|orderId|skuId, value = [hasSale, hasRefund, quantity, msku]
+        Map<String, int[]> groupFlags = new LinkedHashMap<>();
+        Map<String, String> groupMsku = new LinkedHashMap<>();
+
         for (TiktokSettlementOrder o : orders) {
             String msku = o.getMsku();
             if (msku == null || msku.isEmpty()) continue;
+            String groupKey = o.getStatementId() + "|" + o.getOrderId() + "|" + o.getSkuId();
+
             BigDecimal subtotal = o.getSubtotalAfterDiscount() != null ? o.getSubtotalAfterDiscount() : BigDecimal.ZERO;
             BigDecimal refund = o.getRefundAfterDiscount() != null ? o.getRefundAfterDiscount() : BigDecimal.ZERO;
-            // 混合行跳过
-            if (subtotal.compareTo(BigDecimal.ZERO) > 0 && refund.compareTo(BigDecimal.ZERO) < 0) continue;
+            BigDecimal revenue = o.getTotalRevenue() != null ? o.getTotalRevenue() : BigDecimal.ZERO;
             int q = o.getQuantity() != null ? o.getQuantity() : 0;
-            raw.computeIfAbsent(msku, k -> new int[]{0, 0});
-            int[] qty = raw.get(msku);
-            if (subtotal.compareTo(BigDecimal.ZERO) == 0 && refund.compareTo(BigDecimal.ZERO) < 0) {
-                qty[1] += q;
-            } else {
-                qty[0] += q;
+
+            int[] flags = groupFlags.computeIfAbsent(groupKey, k -> new int[]{0, 0, 0});
+            groupMsku.putIfAbsent(groupKey, msku);
+            // 记录最大 quantity（同组各行 quantity 相同，取 max 保险）
+            if (q > flags[2]) flags[2] = q;
+            // 判断是否有销售行
+            if (subtotal.compareTo(BigDecimal.ZERO) > 0 || revenue.compareTo(BigDecimal.ZERO) > 0) {
+                flags[0] = 1;
+            }
+            // 判断是否有退款行
+            if (refund.compareTo(BigDecimal.ZERO) < 0 || revenue.compareTo(BigDecimal.ZERO) < 0) {
+                flags[1] = 1;
             }
         }
-        // 转为净数量，过滤掉<=0的
+
+        // 按 MSKU 汇总净数量
         Map<String, Integer> result = new LinkedHashMap<>();
-        for (Map.Entry<String, int[]> e : raw.entrySet()) {
-            int net = e.getValue()[0] - e.getValue()[1];
-            if (net > 0) result.put(e.getKey(), net);
+        for (Map.Entry<String, int[]> e : groupFlags.entrySet()) {
+            String msku = groupMsku.get(e.getKey());
+            int[] flags = e.getValue();
+            int hasSale = flags[0], hasRefund = flags[1], qty = flags[2];
+
+            int netQty;
+            if (hasSale == 1 && hasRefund == 0) {
+                netQty = qty;  // 纯销售
+            } else if (hasRefund == 1 && hasSale == 0) {
+                netQty = -qty; // 跨期纯退款
+            } else {
+                continue; // 销售+退款抵消 或 纯费用行，不计入
+            }
+            result.merge(msku, netQty, Integer::sum);
         }
+
+        // 过滤掉 <= 0 的
+        result.entrySet().removeIf(e -> e.getValue() <= 0);
         return result;
     }
 

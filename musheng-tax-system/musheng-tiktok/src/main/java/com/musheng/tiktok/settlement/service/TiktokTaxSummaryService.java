@@ -161,9 +161,9 @@ public class TiktokTaxSummaryService {
         BigDecimal fbt = BigDecimal.ZERO;
         BigDecimal refundAdmin = BigDecimal.ZERO;
         BigDecimal returnShip = BigDecimal.ZERO;
-        int orderCount = 0;
-
         // 先 SUM（保留正负号），最后再取绝对值
+        // 订单笔数：按 statementId+orderId 去重，且该组有销售行无退款行才计入
+        java.util.Map<String, int[]> orderFlags = new java.util.HashMap<>();
         for (TiktokSettlementOrder o : orders) {
             revenue = revenue.add(safe(o.getSubtotalAfterDiscount()));
             refundAfter = refundAfter.add(safe(o.getRefundAfterDiscount()));
@@ -174,8 +174,20 @@ public class TiktokTaxSummaryService {
             fbt = fbt.add(safe(o.getFbtFulfillmentFee()));
             refundAdmin = refundAdmin.add(safe(o.getRefundAdminFee()));
             returnShip = returnShip.add(safe(o.getActualReturnShippingFee()));
-            if (safe(o.getSubtotalAfterDiscount()).compareTo(BigDecimal.ZERO) > 0) orderCount++;
+            // 按 statementId+orderId 分组判断销售/退款
+            String key = o.getStatementId() + "|" + o.getOrderId();
+            int[] flags = orderFlags.computeIfAbsent(key, k -> new int[]{0, 0});
+            if (safe(o.getSubtotalAfterDiscount()).compareTo(BigDecimal.ZERO) > 0
+                    || safe(o.getTotalRevenue()).compareTo(BigDecimal.ZERO) > 0) {
+                flags[0] = 1;
+            }
+            if (safe(o.getRefundAfterDiscount()).compareTo(BigDecimal.ZERO) < 0
+                    || safe(o.getTotalRevenue()).compareTo(BigDecimal.ZERO) < 0) {
+                flags[1] = 1;
+            }
         }
+        int orderCount = (int) orderFlags.values().stream()
+                .filter(f -> f[0] == 1 && f[1] == 0).count();
 
         // 公式：|SUM(x)| — 先求和再取绝对值
         MonthTaxSummary m = new MonthTaxSummary();
