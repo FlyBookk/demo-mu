@@ -222,6 +222,10 @@ export function getTiktokSettlementDetail(id: number) {
   return request.get<any>(`${BASE}/document/settlement/${id}`)
 }
 
+export function getTiktokSettlementMskuSummary(params: { siteCode: string; startDate: string; endDate: string }) {
+  return request.get<any[]>(`${BASE}/document/settlement/msku-summary`, params)
+}
+
 export function getTiktokInvDetail(id: number) {
   return request.get<any>(`${BASE}/document/inv/${id}`)
 }
@@ -263,28 +267,28 @@ export function exportTiktokInv(id: number) {
 
 export function batchExportPo(ids: number[]) {
   return request.post(`${BASE}/document/export/po/batch`, ids, { responseType: 'blob' }).then((res: any) => {
-    const blob = res instanceof Blob ? res : new Blob([res])
+    const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'TK-PO批量.zip'; a.click(); URL.revokeObjectURL(url)
   })
 }
 export function batchExportDn(ids: number[]) {
   return request.post(`${BASE}/document/export/dn/batch`, ids, { responseType: 'blob' }).then((res: any) => {
-    const blob = res instanceof Blob ? res : new Blob([res])
+    const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'TK-DN批量.zip'; a.click(); URL.revokeObjectURL(url)
   })
 }
 export function batchExportSettlement(ids: number[]) {
   return request.post(`${BASE}/document/export/settlement/batch`, ids, { responseType: 'blob' }).then((res: any) => {
-    const blob = res instanceof Blob ? res : new Blob([res])
+    const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'TK-结算单批量.zip'; a.click(); URL.revokeObjectURL(url)
   })
 }
 export function batchExportInv(ids: number[]) {
   return request.post(`${BASE}/document/export/inv/batch`, ids, { responseType: 'blob' }).then((res: any) => {
-    const blob = res instanceof Blob ? res : new Blob([res])
+    const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'TK-INV批量.zip'; a.click(); URL.revokeObjectURL(url)
   })
