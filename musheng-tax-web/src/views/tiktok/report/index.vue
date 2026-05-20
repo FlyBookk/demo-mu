@@ -116,22 +116,22 @@
           <a-col :span="8">
             <a-card class="stat-card highlight-card">
               <div class="stat-title">平台支出合计⑨=④+⑤+⑥+⑦</div>
-              <div class="stat-val orange">¥{{ fmt(stats.platformExpenses) }}</div>
-              <div class="stat-desc">代扣税+佣金服务费+推广费+其他费用</div>
+              <div class="stat-val orange">${{ fmt(stats.platformExpensesUsd) }}</div>
+              <div class="stat-desc">¥{{ fmt(stats.platformExpenses) }}</div>
             </a-card>
           </a-col>
           <a-col :span="8">
             <a-card class="stat-card highlight-card">
-              <div class="stat-title">{{ profitLabel }}</div>
-              <div class="stat-val green">¥{{ fmt(stats.profit) }}</div>
-              <div class="stat-desc">{{ profitDesc }}</div>
+              <div class="stat-title">利润⑩（{{ profitMode === 'percent' ? `净额×${profitPercent}%` : '固定金额' }}）</div>
+              <div class="stat-val green">${{ fmt(stats.profitUsd) }}</div>
+              <div class="stat-desc">¥{{ fmt(stats.profit) }}</div>
             </a-card>
           </a-col>
           <a-col :span="8">
             <a-card class="stat-card highlight-card">
-              <div class="stat-title">采购成本⑪=③−⑨−⑩</div>
-              <div class="stat-val blue">¥{{ fmt(stats.procurementCost) }}</div>
-              <div class="stat-desc">收入净额−平台支出−利润</div>
+              <div class="stat-title">采购成本⑪（③−⑨−⑩）</div>
+              <div class="stat-val blue">${{ fmt(stats.procurementCostUsd) }}</div>
+              <div class="stat-desc">¥{{ fmt(stats.procurementCost) }}</div>
             </a-card>
           </a-col>
         </a-row>
@@ -225,10 +225,8 @@ import { useTiktokSites } from '@/composables/tiktok/useTiktokSites'
 const { sites, currentSite } = useTiktokSites()
 const quarter = ref('')
 const siteCode = ref('')
-const exchangeRate = ref<number>(7.1)
-const profitMode = ref<'percent' | 'fixed'>('percent')
-const profitPercent = ref<number>(4)
-const profitFixed = ref<number>(0)
+const exchangeRate = ref<number | null>(null)
+
 const loading = ref(false)
 const taxSummary = ref<QuarterTaxSummary | null>(null)
 const opSummary = ref<QuarterOperationSummary | null>(null)
@@ -245,27 +243,41 @@ const quarterOptions = (() => {
 
 function formatQ(q: string) { const [y, qn] = q.split('-Q'); return `${y}年Q${qn}` }
 
-// 计算汇总统计（RMB）
+const profitMode = ref<'percent' | 'fixed'>('percent')
+const profitPercent = ref<number>(4)
+const profitFixed = ref<number>(0)
+
+
+
+// 计算汇总统计（原币 + RMB）
 const stats = computed(() => {
-  if (!taxSummary.value || !opSummary.value) return { revenue: 0, refund: 0, netRevenue: 0, serviceFee: 0, otherFee: 0, tax: 0, promotion: 0, orderCount: 0, platformExpenses: 0, profit: 0, procurementCost: 0 }
+  if (!taxSummary.value || !opSummary.value) return { revenue: 0, refund: 0, netRevenue: 0, serviceFee: 0, otherFee: 0, tax: 0, promotion: 0, orderCount: 0, platformExpenses: 0, platformExpensesUsd: 0, profit: 0, profitUsd: 0, procurementCost: 0, procurementCostUsd: 0 }
   const rate = exchangeRate.value || 1
-  const revenue = Number(taxSummary.value.totalRevenueUsd) * rate
-  const refund = Number(taxSummary.value.totalRefundUsd) * rate
+  const revenueUsd = Number(taxSummary.value.totalRevenueUsd)
+  const refundUsd = Number(taxSummary.value.totalRefundUsd)
+  const revenue = revenueUsd * rate
+  const refund = refundUsd * rate
   const netRevenue = revenue - refund
+  const netRevenueUsd = revenueUsd - refundUsd
   const serviceFee = Number(taxSummary.value.totalServiceFeeUsd) * rate
+  const serviceFeeUsd = Number(taxSummary.value.totalServiceFeeUsd)
   const tax = Math.abs(Number(opSummary.value.tax)) * rate
+  const taxUsd = Math.abs(Number(opSummary.value.tax))
   const promotion = Math.abs(Number(opSummary.value.promotion)) * rate
+  const promotionUsd = Math.abs(Number(opSummary.value.promotion))
   const otherFee = Math.abs(Number(opSummary.value.other)) * rate
-  const orderCount = taxSummary.value.months?.reduce((s, m) => s + m.orderCount, 0) || 0
+  const otherFeeUsd = Math.abs(Number(opSummary.value.other))
+  const orderCount = taxSummary.value.months?.reduce((s: number, m: any) => s + m.orderCount, 0) || 0
   const platformExpenses = tax + serviceFee + promotion + otherFee
+  const platformExpensesUsd = taxUsd + serviceFeeUsd + promotionUsd + otherFeeUsd
   // 利润：百分比或固定金额
   const profit = profitMode.value === 'percent' ? netRevenue * (profitPercent.value || 0) / 100 : (profitFixed.value || 0)
+  const profitUsd = profitMode.value === 'percent' ? netRevenueUsd * (profitPercent.value || 0) / 100 : (rate > 0 ? (profitFixed.value || 0) / rate : 0)
+  // 采购成本 = 净额 - 平台支出 - 利润
   const procurementCost = netRevenue - platformExpenses - profit
-  return { revenue, refund, netRevenue, serviceFee, otherFee, tax, promotion, orderCount, platformExpenses, profit, procurementCost }
+  const procurementCostUsd = netRevenueUsd - platformExpensesUsd - profitUsd
+  return { revenue, refund, netRevenue, serviceFee, otherFee, tax, promotion, orderCount, platformExpenses, platformExpensesUsd, profit, profitUsd, procurementCost, procurementCostUsd }
 })
-
-const profitLabel = computed(() => profitMode.value === 'percent' ? `${profitPercent.value}%利润⑩=③×${profitPercent.value}%` : '固定利润⑩')
-const profitDesc = computed(() => profitMode.value === 'percent' ? `收入净额的${profitPercent.value}%` : '自定义固定金额')
 
 const taxColumns = [
   { title: '月份', dataIndex: 'month', width: 100 },
@@ -282,10 +294,15 @@ async function loadData() {
   if (!quarter.value || !siteCode.value) return
   loading.value = true
   try {
-    const params: any = { quarter: quarter.value, siteCode: siteCode.value, exchangeRate: exchangeRate.value }
+    const params: any = { quarter: quarter.value, siteCode: siteCode.value }
+    if (exchangeRate.value) params.exchangeRate = exchangeRate.value
     const [taxRes, opRes]: any[] = await Promise.all([getTiktokTaxSummary(params), getTiktokOperationSummary(params)])
     taxSummary.value = taxRes.data || taxRes
     opSummary.value = opRes.data || opRes
+    // 用后端返回的实际执行汇率更新显示
+    if (taxSummary.value?.exchangeRate) {
+      exchangeRate.value = Number(taxSummary.value.exchangeRate)
+    }
   } finally { loading.value = false }
 }
 
@@ -305,6 +322,7 @@ onMounted(() => { quarter.value = quarterOptions.length > 1 ? quarterOptions[1] 
     .stat-row { margin-bottom: 0; }
   }
   .rate-badge { font-size: 13px; font-weight: normal; color: #1890ff; background: #e6f7ff; padding: 2px 10px; border-radius: 4px; margin-left: 12px; }
+
   .profit-setting { font-size: 13px; font-weight: normal; color: #666; margin-left: 16px; display: inline-flex; align-items: center; }
   .stat-card { text-align: center; padding: 16px 8px;
     .stat-title { font-size: 13px; color: #666; margin-bottom: 8px; }
