@@ -232,6 +232,7 @@ const taxSummary = ref<QuarterTaxSummary | null>(null)
 const opSummary = ref<QuarterOperationSummary | null>(null)
 
 watch(currentSite, (val) => { if (val && !siteCode.value) { siteCode.value = val } })
+watch([siteCode, quarter], () => { exchangeRate.value = null })
 
 const quarterOptions = (() => {
   const opts: string[] = []
