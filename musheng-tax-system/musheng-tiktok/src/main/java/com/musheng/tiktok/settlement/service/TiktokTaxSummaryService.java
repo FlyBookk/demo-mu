@@ -99,6 +99,7 @@ public class TiktokTaxSummaryService {
         summary.setExchangeRate(exchangeRate);
 
         BigDecimal revenue = BigDecimal.ZERO, refund = BigDecimal.ZERO;
+        BigDecimal orderSettlement = BigDecimal.ZERO;
         BigDecimal commission = BigDecimal.ZERO, logistics = BigDecimal.ZERO;
         BigDecimal affiliate = BigDecimal.ZERO, promotion = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO, other = BigDecimal.ZERO;
@@ -108,6 +109,8 @@ public class TiktokTaxSummaryService {
             if ("Order".equals(o.getType())) {
                 revenue = revenue.add(safe(o.getSubtotalAfterDiscount()));
                 refund = refund.add(safe(o.getRefundAfterDiscount()));
+                orderSettlement = orderSettlement.add(safe(o.getTotalSettlementAmount()));
+                // 费用明细（仅用于拆分展示，不用于汇总计算）
                 commission = commission.add(safe(o.getCommissionFee()));
                 logistics = logistics.add(safe(o.getLogisticsFee()));
                 affiliate = affiliate.add(safe(o.getAffiliateFee()));
@@ -121,18 +124,20 @@ public class TiktokTaxSummaryService {
             }
         }
 
+        // 新公式：Total Fees = Order行settlement总额 - 净收入（与 Reports 对齐）
         BigDecimal netRevenue = revenue.add(refund);
-        BigDecimal orderProfit = netRevenue.add(commission).add(logistics).add(affiliate).add(promotion).add(tax).add(other);
-        BigDecimal netProfit = orderProfit.add(adjustIncome).add(adjustExpense);
+        BigDecimal totalFees = orderSettlement.subtract(netRevenue);
+        BigDecimal netProfit = netRevenue.add(totalFees).add(adjustIncome).add(adjustExpense);
 
         summary.setNetRevenue(netRevenue);
+        summary.setTotalFees(totalFees);
         summary.setCommission(commission);
         summary.setLogistics(logistics);
         summary.setAffiliate(affiliate);
         summary.setPromotion(promotion);
         summary.setTax(tax);
         summary.setOther(other);
-        summary.setOrderProfit(orderProfit);
+        summary.setOrderProfit(orderSettlement);
         summary.setAdjustmentIncome(adjustIncome);
         summary.setAdjustmentExpense(adjustExpense);
         summary.setNetProfit(netProfit);
@@ -271,12 +276,16 @@ public class TiktokTaxSummaryService {
         private String siteCode;
         private BigDecimal exchangeRate;
         private BigDecimal netRevenue;
+        /** Total Fees = Order行settlement总额 - 净收入（与 Reports 对齐） */
+        private BigDecimal totalFees;
+        /** 费用明细（仅用于拆分展示） */
         private BigDecimal commission;
         private BigDecimal logistics;
         private BigDecimal affiliate;
         private BigDecimal promotion;
         private BigDecimal tax;
         private BigDecimal other;
+        /** Order行的settlement总额 */
         private BigDecimal orderProfit;
         private BigDecimal adjustmentIncome;
         private BigDecimal adjustmentExpense;
