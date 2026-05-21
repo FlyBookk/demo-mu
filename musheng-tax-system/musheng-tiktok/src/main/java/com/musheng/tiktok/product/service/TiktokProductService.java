@@ -77,21 +77,46 @@ public class TiktokProductService {
         Long shopId = ShopContext.requireShopId();
         int[] counts = {0, 0}; // [新增, 更新]
 
+        // 先读取表头行，建立 title → colIndex 映射
+        final Map<String, Integer> colMap = new java.util.HashMap<>();
+        final boolean[] headerParsed = {false};
+
         EasyExcel.read(file.getInputStream())
                 .sheet(0)
                 .headRowNumber(0)
                 .registerReadListener(new PageReadListener<Map<Integer, String>>(rows -> {
                     for (Map<Integer, String> row : rows) {
-                        // 跳过前5行（表头+说明）
-                        String productId = row.get(0);
-                        if (!StringUtils.hasText(productId) || "product_id".equals(productId)
-                                || "V3".equals(productId) || "商品 ID".equals(productId)
-                                || "必填".equals(productId) || "不可编辑".equals(productId)) {
+                        // 解析表头行（第一行包含 product_id）
+                        if (!headerParsed[0]) {
+                            String first = row.get(0);
+                            if ("product_id".equals(first)) {
+                                for (Map.Entry<Integer, String> e : row.entrySet()) {
+                                    if (StringUtils.hasText(e.getValue())) {
+                                        colMap.put(e.getValue().trim().toLowerCase(), e.getKey());
+                                    }
+                                }
+                                headerParsed[0] = true;
+                            }
                             continue;
                         }
 
-                        String skuId = row.get(3);
-                        String msku = row.get(24); // Y列 = index 24
+                        // 跳过说明行
+                        String productId = row.get(colMap.getOrDefault("product_id", 0));
+                        if (!StringUtils.hasText(productId) || productId.startsWith("V")
+                                || "商品 ID".equals(productId) || "必填".equals(productId)
+                                || "不可编辑".equals(productId)) {
+                            continue;
+                        }
+
+                        int colSkuId = colMap.getOrDefault("sku_id", 3);
+                        int colMsku = colMap.getOrDefault("seller_sku", 8);
+                        int colName = colMap.getOrDefault("product_name", 2);
+                        int colCategory = colMap.getOrDefault("category", 1);
+                        int colVariation = colMap.getOrDefault("variation_value", 4);
+                        int colPrice = colMap.getOrDefault("price", 5);
+
+                        String skuId = row.get(colSkuId);
+                        String msku = row.get(colMsku);
                         if (!StringUtils.hasText(skuId) || !StringUtils.hasText(msku)) {
                             continue;
                         }
@@ -104,30 +129,28 @@ public class TiktokProductService {
                                         .eq(TiktokProduct::getSkuId, skuId));
 
                         if (existing != null) {
-                            // 更新
                             existing.setMsku(msku);
                             existing.setProductId(productId);
-                            existing.setProductName(row.getOrDefault(2, ""));
-                            existing.setCategory(row.getOrDefault(1, ""));
-                            existing.setVariationValue(row.getOrDefault(4, ""));
-                            String priceStr = row.get(5);
+                            existing.setProductName(row.getOrDefault(colName, ""));
+                            existing.setCategory(row.getOrDefault(colCategory, ""));
+                            existing.setVariationValue(row.getOrDefault(colVariation, ""));
+                            String priceStr = row.get(colPrice);
                             if (StringUtils.hasText(priceStr)) {
                                 try { existing.setPrice(new BigDecimal(priceStr)); } catch (Exception ignored) {}
                             }
                             productMapper.updateById(existing);
                             counts[1]++;
                         } else {
-                            // 新增
                             TiktokProduct product = new TiktokProduct();
                             product.setShopId(shopId);
                             product.setSiteCode(siteCode);
                             product.setProductId(productId);
                             product.setSkuId(skuId);
                             product.setMsku(msku);
-                            product.setProductName(row.getOrDefault(2, ""));
-                            product.setCategory(row.getOrDefault(1, ""));
-                            product.setVariationValue(row.getOrDefault(4, ""));
-                            String priceStr = row.get(5);
+                            product.setProductName(row.getOrDefault(colName, ""));
+                            product.setCategory(row.getOrDefault(colCategory, ""));
+                            product.setVariationValue(row.getOrDefault(colVariation, ""));
+                            String priceStr = row.get(colPrice);
                             if (StringUtils.hasText(priceStr)) {
                                 try { product.setPrice(new BigDecimal(priceStr)); } catch (Exception ignored) {}
                             }

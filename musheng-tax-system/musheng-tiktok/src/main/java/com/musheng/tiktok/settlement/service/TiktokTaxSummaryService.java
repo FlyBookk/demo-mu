@@ -50,6 +50,8 @@ public class TiktokTaxSummaryService {
         BigDecimal totalRevenue = BigDecimal.ZERO;
         BigDecimal totalRefund = BigDecimal.ZERO;
         BigDecimal totalServiceFee = BigDecimal.ZERO;
+        BigDecimal totalAffiliateFee = BigDecimal.ZERO;
+        BigDecimal totalPromotionFee = BigDecimal.ZERO;
 
         // 按月拆分
         LocalDate monthStart = start;
@@ -62,6 +64,8 @@ public class TiktokTaxSummaryService {
 
             totalRevenue = totalRevenue.add(monthSummary.getRevenueUsd());
             totalRefund = totalRefund.add(monthSummary.getRefundUsd());
+            totalAffiliateFee = totalAffiliateFee.add(monthSummary.getAffiliateFeeUsd());
+            totalPromotionFee = totalPromotionFee.add(monthSummary.getPromotionFeeUsd());
 
             monthStart = monthStart.plusMonths(1);
         }
@@ -73,9 +77,13 @@ public class TiktokTaxSummaryService {
         result.setTotalRevenueUsd(totalRevenue);
         result.setTotalRefundUsd(totalRefund);
         result.setTotalServiceFeeUsd(totalServiceFee);
+        result.setTotalAffiliateFeeUsd(totalAffiliateFee);
+        result.setTotalPromotionFeeUsd(totalPromotionFee);
         result.setTotalRevenueRmb(totalRevenue.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         result.setTotalRefundRmb(totalRefund.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         result.setTotalServiceFeeRmb(totalServiceFee.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
+        result.setTotalAffiliateFeeRmb(totalAffiliateFee.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
+        result.setTotalPromotionFeeRmb(totalPromotionFee.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         return result;
     }
 
@@ -102,7 +110,8 @@ public class TiktokTaxSummaryService {
         BigDecimal orderSettlement = BigDecimal.ZERO;
         BigDecimal commission = BigDecimal.ZERO, logistics = BigDecimal.ZERO;
         BigDecimal affiliate = BigDecimal.ZERO, promotion = BigDecimal.ZERO;
-        BigDecimal tax = BigDecimal.ZERO, other = BigDecimal.ZERO;
+        BigDecimal returnShipping = BigDecimal.ZERO;
+        BigDecimal sellerDiscount = BigDecimal.ZERO;
         BigDecimal adjustIncome = BigDecimal.ZERO, adjustExpense = BigDecimal.ZERO;
 
         for (TiktokSettlementOrder o : all) {
@@ -110,13 +119,13 @@ public class TiktokTaxSummaryService {
                 revenue = revenue.add(safe(o.getSubtotalAfterDiscount()));
                 refund = refund.add(safe(o.getRefundAfterDiscount()));
                 orderSettlement = orderSettlement.add(safe(o.getTotalSettlementAmount()));
-                // 费用明细（仅用于拆分展示，不用于汇总计算）
-                commission = commission.add(safe(o.getCommissionFee()));
-                logistics = logistics.add(safe(o.getLogisticsFee()));
+                // 费用明细（与 TK 卖家中心对齐）
+                commission = commission.add(safe(o.getReferralFee())).add(safe(o.getRefundAdminFee()));
+                logistics = logistics.add(safe(o.getSellerShippingFee()));
+                returnShipping = returnShipping.add(safe(o.getActualReturnShippingFee()));
                 affiliate = affiliate.add(safe(o.getAffiliateFee()));
                 promotion = promotion.add(safe(o.getPromotionFee()));
-                tax = tax.add(safe(o.getTaxFee()));
-                other = other.add(safe(o.getOtherFee()));
+                sellerDiscount = sellerDiscount.add(safe(o.getSellerDiscount())).add(safe(o.getRefundOfSellerDiscount()));
             } else {
                 BigDecimal amt = safe(o.getTotalSettlementAmount());
                 if (amt.compareTo(BigDecimal.ZERO) > 0) adjustIncome = adjustIncome.add(amt);
@@ -133,10 +142,10 @@ public class TiktokTaxSummaryService {
         summary.setTotalFees(totalFees);
         summary.setCommission(commission);
         summary.setLogistics(logistics);
+        summary.setReturnShipping(returnShipping);
         summary.setAffiliate(affiliate);
         summary.setPromotion(promotion);
-        summary.setTax(tax);
-        summary.setOther(other);
+        summary.setSellerDiscount(sellerDiscount);
         summary.setOrderProfit(orderSettlement);
         summary.setAdjustmentIncome(adjustIncome);
         summary.setAdjustmentExpense(adjustExpense);
@@ -166,6 +175,8 @@ public class TiktokTaxSummaryService {
         BigDecimal fbt = BigDecimal.ZERO;
         BigDecimal refundAdmin = BigDecimal.ZERO;
         BigDecimal returnShip = BigDecimal.ZERO;
+        BigDecimal affiliateFee = BigDecimal.ZERO;
+        BigDecimal promotionFee = BigDecimal.ZERO;
         // 先 SUM（保留正负号），最后再取绝对值
         // 订单笔数：按 statementId+orderId 去重，且该组有销售行无退款行才计入
         java.util.Map<String, int[]> orderFlags = new java.util.HashMap<>();
@@ -179,6 +190,8 @@ public class TiktokTaxSummaryService {
             fbt = fbt.add(safe(o.getFbtFulfillmentFee()));
             refundAdmin = refundAdmin.add(safe(o.getRefundAdminFee()));
             returnShip = returnShip.add(safe(o.getActualReturnShippingFee()));
+            affiliateFee = affiliateFee.add(safe(o.getAffiliateFee()));
+            promotionFee = promotionFee.add(safe(o.getPromotionFee()));
             // 按 statementId+orderId 分组判断销售/退款
             String key = o.getStatementId() + "|" + o.getOrderId();
             int[] flags = orderFlags.computeIfAbsent(key, k -> new int[]{0, 0});
@@ -200,9 +213,13 @@ public class TiktokTaxSummaryService {
         m.setRevenueUsd(revenue);
         m.setRefundUsd(refundAfter.abs().subtract(refundOfDisc.abs()).add(returnReimb));
         m.setServiceFeeUsd(referral.abs().add(sellerShip.abs().max(fbt.abs())).add(refundAdmin.abs()).add(returnShip.abs()));
+        m.setAffiliateFeeUsd(affiliateFee.abs());
+        m.setPromotionFeeUsd(promotionFee.abs());
         m.setRevenueRmb(m.getRevenueUsd().multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         m.setRefundRmb(m.getRefundUsd().multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         m.setServiceFeeRmb(m.getServiceFeeUsd().multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
+        m.setAffiliateFeeRmb(m.getAffiliateFeeUsd().multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
+        m.setPromotionFeeRmb(m.getPromotionFeeUsd().multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP));
         m.setOrderCount(orderCount);
         return m;
     }
@@ -256,6 +273,13 @@ public class TiktokTaxSummaryService {
         private BigDecimal totalRefundRmb;
         private BigDecimal totalServiceFeeUsd;
         private BigDecimal totalServiceFeeRmb;
+        private BigDecimal totalAffiliateFeeUsd;
+        private BigDecimal totalAffiliateFeeRmb;
+        private BigDecimal totalPromotionFeeUsd;
+        private BigDecimal totalPromotionFeeRmb;
+        // TODO: 广告费⑥ - 待对接广告数据模块（TikTok Ads 投放费用），当前结算单中不包含此数据
+        // private BigDecimal totalAdFeeUsd;
+        // private BigDecimal totalAdFeeRmb;
     }
 
     @Data
@@ -267,6 +291,10 @@ public class TiktokTaxSummaryService {
         private BigDecimal refundRmb;
         private BigDecimal serviceFeeUsd;
         private BigDecimal serviceFeeRmb;
+        private BigDecimal affiliateFeeUsd;
+        private BigDecimal affiliateFeeRmb;
+        private BigDecimal promotionFeeUsd;
+        private BigDecimal promotionFeeRmb;
         private int orderCount;
     }
 
@@ -278,13 +306,14 @@ public class TiktokTaxSummaryService {
         private BigDecimal netRevenue;
         /** Total Fees = Order行settlement总额 - 净收入（与 Reports 对齐） */
         private BigDecimal totalFees;
-        /** 费用明细（仅用于拆分展示） */
+        /** 费用明细（与 TK 卖家中心对齐，仅展示用） */
         private BigDecimal commission;
         private BigDecimal logistics;
+        private BigDecimal returnShipping;
         private BigDecimal affiliate;
         private BigDecimal promotion;
-        private BigDecimal tax;
-        private BigDecimal other;
+        /** 商品折扣（不计入费用合计，因收入端已扣除） */
+        private BigDecimal sellerDiscount;
         /** Order行的settlement总额 */
         private BigDecimal orderProfit;
         private BigDecimal adjustmentIncome;
