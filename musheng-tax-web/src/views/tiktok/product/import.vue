@@ -9,6 +9,14 @@
           </a-select>
         </a-form-item>
       </a-form>
+      <a-alert type="info" show-icon style="margin-bottom: 16px">
+        <template #message>
+          <span>请导入<strong>所有商品</strong>（包含已下架的），只要曾经产生过销售的 SKU 都需要导入。</span>
+        </template>
+        <template #description>
+          缺少 SKU 映射会导致结算单无法关联商品，影响 MSKU 推导及结算单/INV 的输出。在 TK 卖家中心导出时请选择"全部商品"而非仅"在售商品"。
+        </template>
+      </a-alert>
       <a-upload-dragger :custom-request="handleUpload" :show-upload-list="false" accept=".xlsx,.xls" :disabled="!siteCode">
         <p class="ant-upload-drag-icon"><inbox-outlined /></p>
         <p class="ant-upload-text">点击或拖拽上传 SKU 对照表</p>
