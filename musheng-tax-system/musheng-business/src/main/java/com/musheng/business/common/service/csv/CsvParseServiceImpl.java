@@ -46,6 +46,27 @@ public class CsvParseServiceImpl implements CsvParseService {
     );
 
     /**
+     * French header keywords for detection
+     */
+    private static final List<String> FR_HEADER_KEYWORDS = List.of(
+            "date/heure", "type", "sku", "marketplace", "ventes de produits"
+    );
+
+    /**
+     * Italian header keywords for detection
+     */
+    private static final List<String> IT_HEADER_KEYWORDS = List.of(
+            "data/ora:", "tipo", "sku", "marketplace", "vendite"
+    );
+
+    /**
+     * Spanish header keywords for detection
+     */
+    private static final List<String> ES_HEADER_KEYWORDS = List.of(
+            "fecha y hora", "tipo", "sku", "web de amazon", "ventas de productos"
+    );
+
+    /**
      * Chinese shipping data header keywords for detection
      */
     private static final List<String> CN_SHIPPING_HEADER_KEYWORDS = List.of(
@@ -187,6 +208,27 @@ public class CsvParseServiceImpl implements CsvParseService {
                 return i;
             }
 
+            // Check French headers
+            boolean allFrMatch = FR_HEADER_KEYWORDS.stream()
+                    .allMatch(k -> lineStr.contains(k.toLowerCase()));
+            if (allFrMatch) {
+                return i;
+            }
+
+            // Check Italian headers
+            boolean allItMatch = IT_HEADER_KEYWORDS.stream()
+                    .allMatch(k -> lineStr.contains(k.toLowerCase()));
+            if (allItMatch) {
+                return i;
+            }
+
+            // Check Spanish headers
+            boolean allEsMatch = ES_HEADER_KEYWORDS.stream()
+                    .allMatch(k -> lineStr.contains(k.toLowerCase()));
+            if (allEsMatch) {
+                return i;
+            }
+
             // Check Chinese shipping headers
             boolean allCnMatch = CN_SHIPPING_HEADER_KEYWORDS.stream()
                     .allMatch(k -> lineStr.contains(k.toLowerCase()));
@@ -211,6 +253,15 @@ public class CsvParseServiceImpl implements CsvParseService {
         String headerStr = String.join(",", headers).toLowerCase();
         if (headerStr.contains("datum/uhrzeit") || headerStr.contains("bestellnummer")) {
             return "DE";
+        }
+        if (headerStr.contains("date/heure") || headerStr.contains("ventes de produits")) {
+            return "FR";
+        }
+        if (headerStr.contains("data/ora:") || headerStr.contains("vendite")) {
+            return "IT";
+        }
+        if (headerStr.contains("fecha y hora") || headerStr.contains("ventas de productos")) {
+            return "ES";
         }
         if (headerStr.contains("亚马逊订单编号") || headerStr.contains("配送日期")) {
             return "CN";
@@ -365,8 +416,8 @@ public class CsvParseServiceImpl implements CsvParseService {
 
         String processed = value.trim();
 
-        // German format: comma as decimal separator
-        if ("DE".equals(siteCode)) {
+        // European format (DE/FR/IT/ES): comma as decimal separator, dot as thousand separator
+        if ("DE".equals(siteCode) || "FR".equals(siteCode) || "IT".equals(siteCode) || "ES".equals(siteCode)) {
             processed = processed.replace(".", "").replace(",", ".");
         } else {
             // English format: comma as thousand separator

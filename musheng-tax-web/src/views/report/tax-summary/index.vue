@@ -21,7 +21,7 @@
               :key="marketplace.siteCode"
               :value="marketplace.siteCode"
             >
-              {{ marketplace.siteCode }} - {{ marketplace.siteName }}
+              {{ marketplace.siteCode }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -229,7 +229,6 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'siteCode'">
             <a-tag color="blue">{{ record.siteCode }}</a-tag>
-            <span style="margin-left: 8px">{{ record.siteName }}</span>
           </template>
           <template v-else-if="column.key === 'totalRevenueCny'">
             <span :class="['amount', (record.totalRevenueCny ?? 0) >= 0 ? 'positive' : 'negative']">{{ formatAmountWithSign(record.totalRevenueCny) }}</span>

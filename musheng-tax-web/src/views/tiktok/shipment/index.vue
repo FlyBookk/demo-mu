@@ -4,7 +4,7 @@
       <h3>TK FBT货件列表</h3>
       <a-space>
         <a-select v-model:value="siteCode" placeholder="选择站点" style="width: 140px" @change="loadData">
-          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
+          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
         </a-select>
         <a-input-search v-model:value="keyword" placeholder="搜索货件单号/仓库" style="width: 260px" @search="loadData" :disabled="!siteCode" />
         <a-range-picker v-model:value="dateRange" :disabled="!siteCode" @change="loadData" style="width: 240px" value-format="YYYY-MM-DD" />

@@ -5,7 +5,7 @@
       <a-form layout="inline" style="margin-bottom: 16px">
         <a-form-item label="站点" required>
           <a-select v-model:value="siteCode" placeholder="请选择站点" style="width: 160px">
-            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
+            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>

@@ -11,7 +11,7 @@
         <a-form-item label="站点">
           <a-select v-model:value="queryParams.siteCode" placeholder="请选择站点" style="width: 140px" @change="handleSearch">
             <a-select-option v-for="m in marketplaceOptions" :key="m.siteCode" :value="m.siteCode">
-              {{ m.siteCode }} - {{ m.siteName }}
+              {{ m.siteCode }}
             </a-select-option>
           </a-select>
         </a-form-item>

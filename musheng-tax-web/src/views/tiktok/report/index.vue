@@ -10,7 +10,7 @@
       <a-form layout="inline">
         <a-form-item label="站点">
           <a-select v-model:value="siteCode" placeholder="选择站点" style="width: 140px">
-            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
+            <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="季度">

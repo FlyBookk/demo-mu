@@ -9,7 +9,7 @@
     <a-card title="① 选择站点" class="step-card">
       <a-select v-model:value="selectedSiteCode" placeholder="请选择站点" :loading="sitesLoading" style="width: 200px" @change="handleSiteChange">
         <a-select-option v-for="m in marketplaceOptions" :key="m.siteCode" :value="m.siteCode">
-          {{ m.siteCode }} - {{ m.siteName }}
+          {{ m.siteCode }}
         </a-select-option>
       </a-select>
     </a-card>

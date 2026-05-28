@@ -915,15 +915,22 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
      */
     private String[] getCommonFieldNames(String targetField) {
         return switch (targetField) {
-            case "order_id" -> new String[]{"order id", "order-id", "orderid", "bestellnummer"};
-            case "date_time" -> new String[]{"date/time", "date", "datetime", "datum/uhrzeit"};
-            case "transaction_type" -> new String[]{"type", "transaction type", "typ"};
-            case "settlement_id" -> new String[]{"settlement id", "settlementid", "abrechnungsnummer"};
+            case "order_id" -> new String[]{"order id", "order-id", "orderid", "bestellnummer",
+                    "numéro de la commande", "numero ordine", "número de pedido"};
+            case "date_time", "transaction_date" -> new String[]{"date/time", "date", "datetime", "datum/uhrzeit",
+                    "date/heure", "data/ora:", "fecha y hora"};
+            case "transaction_type" -> new String[]{"type", "transaction type", "typ", "tipo"};
+            case "settlement_id" -> new String[]{"settlement id", "settlementid", "abrechnungsnummer",
+                    "numéro de versement", "numero pagamento", "identificador de pago"};
             case "sku" -> new String[]{"sku", "asin"};
-            case "description" -> new String[]{"description", "product name", "beschreibung"};
-            case "quantity" -> new String[]{"quantity", "qty", "menge"};
-            case "total" -> new String[]{"total", "sum", "gesamt"};
-            case "product_sales" -> new String[]{"product sales", "productsales"};
+            case "description" -> new String[]{"description", "product name", "beschreibung",
+                    "descrizione", "descripción"};
+            case "quantity" -> new String[]{"quantity", "qty", "menge", "quantité", "quantità", "cantidad"};
+            case "fulfillment" -> new String[]{"fulfillment", "fulfilment", "versand",
+                    "traitement", "gestione", "gestión logística"};
+            case "total" -> new String[]{"total", "sum", "gesamt", "totale"};
+            case "product_sales" -> new String[]{"product sales", "productsales", "umsätze",
+                    "ventes de produits", "vendite", "ventas de productos"};
             case "shipping_credits" -> new String[]{"shipping credits", "shippingcredits"};
             default -> new String[]{targetField};
         };
@@ -943,14 +950,41 @@ public class SalesDataImportServiceImpl implements SalesDataImportService {
 
         if (template != null && template.getMappingConfig() != null) {
             try {
+                // 尝试解析为旧格式 Map<String, String>
                 return objectMapper.readValue(template.getMappingConfig(),
                         new TypeReference<Map<String, String>>() {});
             } catch (Exception e) {
-                log.warn("Failed to parse field mapping config", e);
+                // 尝试解析为新格式 [{"source":"xxx","target":"yyy"}]
+                try {
+                    List<Map<String, String>> mappingList = objectMapper.readValue(
+                            template.getMappingConfig(),
+                            new TypeReference<List<Map<String, String>>>() {});
+                    Map<String, String> result = new HashMap<>();
+                    for (Map<String, String> item : mappingList) {
+                        String target = item.get("target");
+                        String source = item.get("source");
+                        if (target != null && source != null) {
+                            // 将 camelCase target 转换为 snake_case（与 getMappedValue 中的 key 对齐）
+                            String snakeTarget = camelToSnake(target);
+                            result.put(snakeTarget, source);
+                        }
+                    }
+                    return result;
+                } catch (Exception ex) {
+                    log.warn("Failed to parse field mapping config as array: {}", ex.getMessage());
+                }
             }
         }
 
         return new HashMap<>();
+    }
+
+    /**
+     * 驼峰转下划线（如 productSales → product_sales）
+     */
+    private String camelToSnake(String camelCase) {
+        if (camelCase == null) return null;
+        return camelCase.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
     /**

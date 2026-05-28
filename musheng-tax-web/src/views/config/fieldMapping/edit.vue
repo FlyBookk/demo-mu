@@ -260,7 +260,7 @@ const loadMarketplaces = async () => {
     const response = await getEnabledMarketplaces()
     const list = response.data || [] // API 返回 { code, message, data }
     siteOptions.value = list.map((m: any) => ({
-      label: `${m.siteCode} - ${m.siteName}`,
+      label: m.siteCode,
       value: m.siteCode
     }))
   } catch (error) {

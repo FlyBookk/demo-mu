@@ -19,7 +19,7 @@
           :key="m.siteCode"
           :value="m.siteCode"
         >
-          {{ m.siteCode }} - {{ m.siteName }}
+          {{ m.siteCode }}
         </a-select-option>
       </a-select>
     </a-card>

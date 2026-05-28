@@ -21,6 +21,9 @@ import java.util.regex.Pattern;
  * - 美国站: Jul 1, 2025 12:01:49 AM PDT
  * - 德国站: 01.07.2025 00:01:49 UTC
  * - 英国站: 1 Jul 2025 00:01:49 BST
+ * - 法国站: 30 sept. 2025 22:08:28 UTC（法语月份缩写带点）
+ * - 意大利站: 30 set 2025 22:21:05 UTC（意大利语月份缩写）
+ * - 西班牙站: 2 oct 2025 4:53:16 UTC（西班牙语月份缩写）
  * - ERP数据: 2025-09-30 23:59:08
  * - ISO格式: 2025-07-01T12:01:49
  * - 中文格式: 2025年07月01日 12:01:49
@@ -188,10 +191,12 @@ public class DateConverter {
             }
         }
 
-        // 英国/欧洲 Amazon 格式: 30 Jun 2025 23:01:46 UTC, 1 Sept 2025 03:28:04 UTC（dd MMM yyyy HH:mm:ss）
-        // 月份支持 3-4 字母缩写：Jun, Jul, Sept, June, July 等
-        // 按字面值解析，不做时区转换
-        if (processed.matches("^\\d{1,2}\\s+[A-Za-z]{3,4}\\s+\\d{4}\\s+\\d{1,2}:\\d{2}:\\d{2}.*")) {
+        // 欧洲 Amazon 格式: 30 Jun 2025 23:01:46 UTC, 1 Sept 2025 03:28:04 UTC
+        // 法语: 30 sept. 2025 22:08:28 UTC（月份缩写可带点号）
+        // 意大利语: 30 set 2025 22:21:05 UTC
+        // 西班牙语: 2 oct 2025 4:53:16 UTC
+        // 月份支持多语言缩写（含特殊字符如 é, û）
+        if (processed.matches("^\\d{1,2}\\s+[A-Za-z\\u00C0-\\u017F]{3,5}\\.?\\s+\\d{4}\\s+\\d{1,2}:\\d{2}:\\d{2}.*")) {
             try {
                 String[] parts = processed.split("\\s+");
                 if (parts.length >= 4) {
@@ -247,8 +252,8 @@ public class DateConverter {
             }
         }
         
-        // 英国格式: 1 Jul 2025 00:01:49 BST
-        if (processed.matches("^\\d{1,2}\\s+[A-Za-z]{3}\\s+\\d{4}.*")) {
+        // 英国格式: 1 Jul 2025 00:01:49 BST（已被上面的欧洲格式覆盖，此处作为兜底）
+        if (processed.matches("^\\d{1,2}\\s+[A-Za-z\\u00C0-\\u017F]{3,5}\\.?\\s+\\d{4}.*")) {
             try {
                 // 手动解析英国格式
                 String[] parts = processed.split("\\s+");
@@ -314,23 +319,42 @@ public class DateConverter {
     }
     
     /**
-     * 解析月份英文缩写（支持 3-4 字母：Jun, Jul, Sept, June, July 等）
+     * 解析月份缩写（支持英语/法语/意大利语/西班牙语）
+     * 
+     * 英语: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+     * 法语: janv, févr, mars, avr, mai, juin, juil, août, sept, oct, nov, déc
+     * 意大利语: gen, feb, mar, apr, mag, giu, lug, ago, set, ott, nov, dic
+     * 西班牙语: ene, feb, mar, abr, may, jun, jul, ago, sept, oct, nov, dic
      */
     private static int parseMonth(String monthStr) {
         if (monthStr == null || monthStr.length() < 3) return 1;
-        String lower = monthStr.toLowerCase();
-        if (lower.startsWith("jan")) return 1;
-        if (lower.startsWith("feb")) return 2;
+        // 移除末尾的点号（法语缩写如 sept.）
+        String lower = monthStr.toLowerCase().replaceAll("\\.$", "");
+        
+        // 一月: jan, janv, gen, ene
+        if (lower.startsWith("jan") || lower.equals("gen") || lower.equals("ene")) return 1;
+        // 二月: feb, févr
+        if (lower.startsWith("feb") || lower.startsWith("fév")) return 2;
+        // 三月: mar, mars
         if (lower.startsWith("mar")) return 3;
-        if (lower.startsWith("apr")) return 4;
-        if (lower.startsWith("may")) return 5;
-        if (lower.startsWith("jun")) return 6;
-        if (lower.startsWith("jul")) return 7;
-        if (lower.startsWith("aug")) return 8;
-        if (lower.startsWith("sep")) return 9;
-        if (lower.startsWith("oct")) return 10;
+        // 四月: apr, avr, abr
+        if (lower.startsWith("apr") || lower.startsWith("avr") || lower.equals("abr")) return 4;
+        // 五月: may, mai, mag
+        if (lower.startsWith("may") || lower.equals("mai") || lower.equals("mag")) return 5;
+        // 六月: jun, juin, giu
+        if (lower.startsWith("jun") || lower.equals("juin") || lower.equals("giu")) return 6;
+        // 七月: jul, juil, lug
+        if (lower.startsWith("jul") || lower.equals("juil") || lower.equals("lug")) return 7;
+        // 八月: aug, août, ago
+        if (lower.startsWith("aug") || lower.equals("août") || lower.equals("ago")) return 8;
+        // 九月: sep, sept, set
+        if (lower.startsWith("sep") || lower.equals("set")) return 9;
+        // 十月: oct, ott
+        if (lower.startsWith("oct") || lower.equals("ott")) return 10;
+        // 十一月: nov
         if (lower.startsWith("nov")) return 11;
-        if (lower.startsWith("dec")) return 12;
+        // 十二月: dec, déc, dic
+        if (lower.startsWith("dec") || lower.startsWith("déc") || lower.equals("dic")) return 12;
         return 1;
     }
     

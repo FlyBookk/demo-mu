@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Set;
 
 /**
  * 数字转换器
@@ -14,13 +15,18 @@ import java.math.RoundingMode;
  * 
  * 格式说明：
  * - 英文格式（US/UK/CA）: 1,234.56 （逗号为千位分隔符，点为小数点）
- * - 德文格式（DE）: 1.234,56 （点为千位分隔符，逗号为小数点）
+ * - 欧洲格式（DE/FR/IT/ES）: 1.234,56 （点为千位分隔符，逗号为小数点）
  * 
  * @author BACKEND_AGENT
  * @since 2026-01-21
  */
 @Slf4j
 public class NumberConverter {
+    
+    /**
+     * 使用逗号作为小数点的欧洲站点集合
+     */
+    private static final Set<String> COMMA_DECIMAL_SITES = Set.of("DE", "FR", "IT", "ES");
     
     /**
      * 解析数字字符串为BigDecimal
@@ -45,8 +51,8 @@ public class NumberConverter {
         }
         
         try {
-            // 德国站使用逗号作为小数点
-            if ("DE".equalsIgnoreCase(siteCode)) {
+            // 欧洲站点（DE/FR/IT/ES）使用逗号作为小数点
+            if (siteCode != null && COMMA_DECIMAL_SITES.contains(siteCode.toUpperCase())) {
                 return parseGerman(trimmed);
             } else {
                 return parseEnglish(trimmed);
@@ -73,7 +79,7 @@ public class NumberConverter {
     }
     
     /**
-     * 解析德文格式数字
+     * 解析欧洲格式数字（DE/FR/IT/ES）
      * 格式: 1.234,56 或 1234,56
      */
     private static BigDecimal parseGerman(String numberStr) {

@@ -25,7 +25,6 @@
             @click="formState.siteCode = site.code"
           >
             <div class="site-code">{{ site.code }}</div>
-            <div class="site-name">{{ site.name }}</div>
           </div>
         </div>
       </div>

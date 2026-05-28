@@ -34,7 +34,7 @@
               :key="m.siteCode"
               :value="m.siteCode"
             >
-              {{ m.siteCode }} - {{ m.siteName }}
+              {{ m.siteCode }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -218,7 +218,7 @@ function filterOption(input: string, option: any) {
   const m = marketplaceOptions.value.find(x => x.siteCode === option.value)
   if (!m) return false
   const s = input.toLowerCase()
-  return m.siteCode.toLowerCase().includes(s) || m.siteName.toLowerCase().includes(s)
+  return m.siteCode.toLowerCase().includes(s)
 }
 
 function handleSiteChange(siteCode: string) {

@@ -32,7 +32,7 @@
             <a-radio-group v-model:value="selectedSiteCode" style="width: 100%" @change="handleSiteChange">
               <a-row :gutter="16">
                 <a-col v-for="m in marketplaceOptions" :key="m.siteCode" :span="6">
-                  <a-radio :value="m.siteCode">{{ m.siteCode }} - {{ m.siteName }}</a-radio>
+                  <a-radio :value="m.siteCode">{{ m.siteCode }}</a-radio>
                 </a-col>
               </a-row>
             </a-radio-group>

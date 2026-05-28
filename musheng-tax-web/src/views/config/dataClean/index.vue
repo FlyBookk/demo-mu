@@ -66,7 +66,7 @@
                 :key="marketplace.siteCode"
                 :value="marketplace.siteCode"
               >
-                {{ marketplace.siteCode }} - {{ marketplace.siteName }}
+                {{ marketplace.siteCode }}
               </a-select-option>
             </a-select>
             <div class="site-hint">

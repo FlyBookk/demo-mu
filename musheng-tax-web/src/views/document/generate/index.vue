@@ -238,7 +238,7 @@ async function fetchSiteOptions() {
   try {
     const res = await getEnabledMarketplaces() as any
     const list: Marketplace[] = res?.data ?? res ?? []
-    siteOptions.value = list.map(m => ({ label: `${m.siteCode} - ${m.siteName}`, value: m.siteCode }))
+    siteOptions.value = list.map(m => ({ label: m.siteCode, value: m.siteCode }))
   } catch {
     siteOptions.value = []
   }

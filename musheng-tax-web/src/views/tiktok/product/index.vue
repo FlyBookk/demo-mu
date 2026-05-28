@@ -4,7 +4,7 @@
       <h3>TK 商品管理</h3>
       <a-space>
         <a-select v-model:value="siteCode" placeholder="选择站点" style="width: 140px" @change="loadData">
-          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
+          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
         </a-select>
         <a-input-search v-model:value="keyword" placeholder="搜索MSKU/商品名/SKU ID" style="width: 280px" @search="loadData" :disabled="!siteCode" />
         <a-button :type="onlyUnmapped ? 'primary' : 'default'" @click="onlyUnmapped = !onlyUnmapped; loadData()" :disabled="!siteCode">

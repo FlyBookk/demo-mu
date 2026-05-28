@@ -4,7 +4,7 @@
       <h3>TK 订单明细</h3>
       <a-space wrap>
         <a-select v-model:value="siteCode" placeholder="选择站点" style="width: 140px" @change="loadData">
-          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }} - {{ s.siteName }}</a-select-option>
+          <a-select-option v-for="s in sites" :key="s.siteCode" :value="s.siteCode">{{ s.siteCode }}</a-select-option>
         </a-select>
         <a-select v-model:value="filters.type" placeholder="类型" style="width: 160px" allow-clear>
           <a-select-option value="Order">Order</a-select-option>
