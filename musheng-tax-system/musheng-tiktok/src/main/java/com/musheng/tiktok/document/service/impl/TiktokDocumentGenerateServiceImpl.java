@@ -114,6 +114,7 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
                                 .eq(TiktokShipmentItem::getSiteCode, siteCode)
                                 .eq(TiktokShipmentItem::getShipmentId, shipment.getShipmentId()));
                 String address = buildAddress(shipment);
+                boolean firstItemOfShipment = true;
                 for (TiktokShipmentItem item : items) {
                     TiktokDocumentPoItem poItem = new TiktokDocumentPoItem();
                     poItem.setShopId(shopId);
@@ -122,7 +123,8 @@ public class TiktokDocumentGenerateServiceImpl implements TiktokDocumentGenerate
                     poItem.setShipmentNo(shipment.getShipmentId());
                     poItem.setMsku(item.getMsku());
                     poItem.setQuantity(item.getQuantityReceived() != null ? item.getQuantityReceived() : 0);
-                    poItem.setFbtAddress(sortOrder == 0 ? address : "");
+                    poItem.setFbtAddress(firstItemOfShipment ? address : "");
+                    firstItemOfShipment = false;
                     poItem.setSortOrder(++sortOrder);
                     poItemMapper.insert(poItem);
                     totalQty += poItem.getQuantity();
