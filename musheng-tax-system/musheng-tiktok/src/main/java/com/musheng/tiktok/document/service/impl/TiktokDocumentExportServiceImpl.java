@@ -77,12 +77,6 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet(SHEET_NAME_PO);
 
-            // 列宽
-            sheet.setColumnWidth(0, (int) (21.5 * 256));
-            sheet.setColumnWidth(1, (int) (49.75 * 256));
-            sheet.setColumnWidth(2, (int) (26.27 * 256));
-            sheet.setColumnWidth(3, (int) (46.5 * 256));
-
             // 字体
             XSSFFont fontCompany = wb.createFont();
             fontCompany.setFontName("微软雅黑");
@@ -184,6 +178,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(totalRow, 2, String.valueOf(totalQty), csCenterBorder);
             createCell(totalRow, 3, "", csCenterBorder);
 
+            // 自适应列宽（最小宽度：No#=18, Description=30, Q'ty=10, FBT Address=30）
+            autoFitColumns(sheet, 4, new double[]{18, 30, 10, 30});
+
             wb.write(os);
         }
     }
@@ -227,14 +224,6 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
     private void writeDnExcel(OutputStream os, TiktokDocumentDn dn, List<TiktokDocumentDnItem> items) throws IOException {
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet(SHEET_NAME_DN);
-
-            // 列宽
-            sheet.setColumnWidth(0, (int) (7.83 * 256));
-            sheet.setColumnWidth(1, (int) (18.75 * 256));
-            sheet.setColumnWidth(2, (int) (27.93 * 256));
-            sheet.setColumnWidth(3, (int) (20.98 * 256));
-            sheet.setColumnWidth(4, (int) (21.5 * 256));
-            sheet.setColumnWidth(5, (int) (16.63 * 256));
 
             // 字体
             XSSFFont fontTitle = wb.createFont();
@@ -386,6 +375,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(signRow2, 0, "送貨單位及經手人(Shipping company and the person in charge of the delivery):", csNote);
             sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 3));
 
+            // 自适应列宽（最小宽度：No=6, 产品名=18, col2=18, 数量=10, 货件编号=20, col5=12）
+            autoFitColumns(sheet, 6, new double[]{6, 18, 18, 10, 20, 12});
+
             wb.write(os);
         }
     }
@@ -410,14 +402,6 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
     private void writeSettlementExcel(OutputStream os, TiktokDocumentSettlement s, List<TiktokDocumentSettlementItem> items) throws IOException {
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet(SHEET_NAME_SETTLEMENT);
-
-            // 列宽
-            sheet.setColumnWidth(0, (int) (23.0 * 256));
-            sheet.setColumnWidth(1, (int) (57.63 * 256));
-            sheet.setColumnWidth(2, (int) (17.88 * 256));
-            sheet.setColumnWidth(3, (int) (16.25 * 256));
-            sheet.setColumnWidth(4, (int) (19.38 * 256));
-            sheet.setColumnWidth(5, (int) (15.5 * 256));
 
             // 字体
             XSSFFont fontCompany = wb.createFont();
@@ -599,6 +583,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(confirmRow, 0, "卖方确认（SELLER confirms）：", csSign);
             createCell(confirmRow, 2, "买方确认（Buyer confirms）:", csSign);
 
+            // 自适应列宽（最小宽度：标签=24, Description=30, Currency=12, Unit price=12, Q'ty=10, Amount=14）
+            autoFitColumns(sheet, 6, new double[]{24, 30, 12, 12, 10, 14});
+
             wb.write(os);
         }
     }
@@ -623,16 +610,6 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
     private void writeInvExcel(OutputStream os, TiktokDocumentInv inv, List<TiktokDocumentInvItem> items) throws IOException {
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet(SHEET_NAME_INV);
-
-            // 列宽
-            sheet.setColumnWidth(0, (int) (16.75 * 256));
-            sheet.setColumnWidth(1, (int) (10.25 * 256));
-            sheet.setColumnWidth(2, (int) (12.38 * 256));
-            sheet.setColumnWidth(3, (int) (7.75 * 256));
-            sheet.setColumnWidth(4, (int) (12.0 * 256));
-            sheet.setColumnWidth(5, (int) (11.75 * 256));
-            sheet.setColumnWidth(6, (int) (11.38 * 256));
-            sheet.setColumnWidth(7, (int) (21.38 * 256));
 
             // 字体
             XSSFFont fontCompany24 = wb.createFont();
@@ -864,6 +841,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
                 rowIdx++;
             }
 
+            // 自适应列宽（最小宽度：No=14, desc=10, col2=10, col3=8, col4=10, Qty=10, UnitPrice=10, Total=18）
+            autoFitColumns(sheet, 8, new double[]{14, 10, 10, 8, 10, 10, 10, 18});
+
             wb.write(os);
         }
     }
@@ -1008,5 +988,104 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
         Cell cell = row.createCell(col);
         cell.setCellValue(value);
         cell.setCellStyle(style);
+    }
+
+    /**
+     * 自适应列宽：遍历所有行计算最大内容宽度，跳过合并单元格区域
+     *
+     * @param sheet      工作表
+     * @param numColumns 列数
+     * @param minWidths  每列最小宽度（字符数），null则不限制
+     */
+    private void autoFitColumns(Sheet sheet, int numColumns, double[] minWidths) {
+        // 收集所有合并区域，用于判断某个单元格是否在合并区域内（非首列）
+        List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+
+        for (int col = 0; col < numColumns; col++) {
+            double maxWidth = minWidths != null && col < minWidths.length ? minWidths[col] : 8.0;
+
+            for (int rowIdx = 0; rowIdx <= sheet.getLastRowNum(); rowIdx++) {
+                Row row = sheet.getRow(rowIdx);
+                if (row == null) continue;
+                Cell cell = row.getCell(col);
+                if (cell == null) continue;
+
+                // 跳过合并区域中非首列的单元格
+                if (isInMergedRegionNotFirstCol(mergedRegions, rowIdx, col)) continue;
+
+                String value = cell.getStringCellValue();
+                if (value == null || value.isEmpty()) continue;
+
+                // 计算内容宽度：中文字符算2个宽度单位，英文算1个
+                double contentWidth = calculateStringWidth(value);
+
+                // 如果单元格在合并区域中，按合并的列数分摊宽度
+                int mergedColSpan = getMergedColSpan(mergedRegions, rowIdx, col);
+                if (mergedColSpan > 1) {
+                    contentWidth = contentWidth / mergedColSpan;
+                }
+
+                // 字体大小补偿：微软雅黑等中文字体比Excel默认字体宽约30%
+                contentWidth = contentWidth * 1.35;
+
+                if (contentWidth > maxWidth) {
+                    maxWidth = contentWidth;
+                }
+            }
+
+            // 加2字符padding，转换为POI宽度单位（1字符=256单位）
+            int width = (int) ((maxWidth + 2) * 256);
+            // 上限防止列过宽
+            if (width > 80 * 256) width = 80 * 256;
+            sheet.setColumnWidth(col, width);
+        }
+    }
+
+    /**
+     * 计算字符串显示宽度：中文/全角字符算2，其他算1
+     */
+    private double calculateStringWidth(String value) {
+        // 处理多行内容，取最长行
+        String[] lines = value.split("\n");
+        double maxLineWidth = 0;
+        for (String line : lines) {
+            double lineWidth = 0;
+            for (char c : line.toCharArray()) {
+                if (c >= '\u4e00' && c <= '\u9fff' || c >= '\u3000' && c <= '\u303f'
+                        || c >= '\uff00' && c <= '\uffef') {
+                    lineWidth += 2;
+                } else {
+                    lineWidth += 1;
+                }
+            }
+            if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
+        }
+        return maxLineWidth;
+    }
+
+    /**
+     * 判断单元格是否在合并区域中且不是该区域的首列
+     */
+    private boolean isInMergedRegionNotFirstCol(List<CellRangeAddress> regions, int row, int col) {
+        for (CellRangeAddress region : regions) {
+            if (row >= region.getFirstRow() && row <= region.getLastRow()
+                    && col > region.getFirstColumn() && col <= region.getLastColumn()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 获取单元格所在合并区域的列跨度，不在合并区域返回1
+     */
+    private int getMergedColSpan(List<CellRangeAddress> regions, int row, int col) {
+        for (CellRangeAddress region : regions) {
+            if (row >= region.getFirstRow() && row <= region.getLastRow()
+                    && col >= region.getFirstColumn() && col <= region.getLastColumn()) {
+                return region.getLastColumn() - region.getFirstColumn() + 1;
+            }
+        }
+        return 1;
     }
 }
