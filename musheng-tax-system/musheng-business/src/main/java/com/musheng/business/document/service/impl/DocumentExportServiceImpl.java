@@ -192,12 +192,14 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csCompany.setFont(fontCompany);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             // 样式：地址（14pt居中）
             CellStyle csAddress = wb.createCellStyle();
             csAddress.setFont(fontAddress);
             csAddress.setAlignment(HorizontalAlignment.CENTER);
             csAddress.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csAddress);
 
             // 样式：普通居中（12pt）
             CellStyle csCenter = wb.createCellStyle();
@@ -231,8 +233,17 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             createCell(row3, 1, "Purchase Order", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(2, 2, 1, 3));
 
-            // A1:A3合并
+            // A1:A3合并（先创建A1单元格带样式，避免合并区域出现虚线）
+            createCell(row1, 0, "", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(0, 2, 0, 0));
+
+            // 样式：地址列（带自动换行，防止列过宽）
+            CellStyle csAddressWrap = wb.createCellStyle();
+            csAddressWrap.setFont(fontNormal);
+            csAddressWrap.setAlignment(HorizontalAlignment.CENTER);
+            csAddressWrap.setVerticalAlignment(VerticalAlignment.CENTER);
+            csAddressWrap.setWrapText(true);
+            setBorders(csAddressWrap);
 
             // Row4: Purchasing object / 买方名称（B4:D4合并）
             Row row4 = sheet.createRow(rowIdx++);
@@ -253,9 +264,9 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             Row row6 = sheet.createRow(rowIdx++);
             row6.setHeightInPoints(23f);
             createCell(row6, 0, "No#", csCenterBorder);
-            createCell(row6, 1, "Description", csCenterBorder);
+            createCell(row6, 1, "Description", csAddressWrap);
             createCell(row6, 2, "Q'ty", csCenterBorder);
-            createCell(row6, 3, "Address", csCenterBorder);
+            createCell(row6, 3, "Address", csAddressWrap);
 
             // 数据行
             int dataStartRow = rowIdx;
@@ -263,10 +274,10 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 Row dataRow = sheet.createRow(rowIdx);
                 dataRow.setHeightInPoints(23f);
                 createCell(dataRow, 0, safe(item.getShipmentNo()), csCenterBorder);
-                createCell(dataRow, 1, safe(item.getMsku()), csCenterBorder);
+                // Description和Address列使用自动换行样式，防止内容被截断
+                createCell(dataRow, 1, safe(item.getMsku()), csAddressWrap);
                 createCell(dataRow, 2, String.valueOf(item.getQuantity()), csCenterBorder);
-                // FBA地址仅货件首行填写，其余行留空但有边框
-                createCell(dataRow, 3, safe(item.getFbaAddress()), csCenterBorder);
+                createCell(dataRow, 3, safe(item.getFbaAddress()), csAddressWrap);
                 rowIdx++;
             }
 
@@ -288,15 +299,25 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 addImage(wb, sheet, IMG_COMPANY_LOGO, 0, 76200, 0, 19050, 0, 1571625, 2, 457200);
             }
 
-            // 自动调整列宽以适应内容
-            autoFitColumns(sheet, 4);
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csCenterBorder);
+
+            // 自适应列宽（最小宽度：No#=18, Description=30, Q'ty=10, Address=30）
+            autoFitColumns(sheet, 4, new double[]{16, 28, 10, 30});
+            // Address列限制最大宽度40字符，超出部分自动换行
+            int addressColWidth = sheet.getColumnWidth(3);
+            if (addressColWidth > 40 * 256) {
+                sheet.setColumnWidth(3, 40 * 256);
+            }
+            // 调整包含地址的行高，为换行文本留出空间
+            autoSizeContentRows(sheet, items, dataStartRow);
 
             wb.write(os);
         }
     }
 
     /**
-     * 合并PO地址列 - 同一货件编号的地址只在首行显示，其余行合并
+     * 自动调整含地址列的换行行高 - 同一货件编号的地址只在首行显示，其余行合并
      *
      * @param sheet 工作表
      * @param items PO明细列表
@@ -328,6 +349,37 @@ public class DocumentExportServiceImpl implements DocumentExportService {
         }
     }
 
+
+    /**
+     * 自动调整含地址列的换行行高：根据地址文本长度和列宽估算需要几行，
+     * 对于内容较长的地址行适当增加行高
+     */
+    private void autoSizeContentRows(Sheet sheet, List<DocumentPoItem> items, int dataStartRow) {
+        double descColChars = sheet.getColumnWidth(1) / 256.0;
+        double addrColChars = sheet.getColumnWidth(3) / 256.0;
+        if (descColChars < 20) descColChars = 20;
+        if (addrColChars < 20) addrColChars = 20;
+        for (int i = 0; i < items.size(); i++) {
+            Row row = sheet.getRow(dataStartRow + i);
+            if (row == null) continue;
+            int maxLines = 1;
+            // Description列换行估算
+            String desc = items.get(i).getMsku();
+            if (desc != null && !desc.isEmpty()) {
+                int lines = (int) Math.ceil(calculateStringWidth(desc) / (descColChars * 0.7));
+                if (lines > maxLines) maxLines = lines;
+            }
+            // Address列换行估算
+            String addr = items.get(i).getFbaAddress();
+            if (addr != null && !addr.isEmpty()) {
+                int lines = (int) Math.ceil(calculateStringWidth(addr) / (addrColChars * 0.7));
+                if (lines > maxLines) maxLines = lines;
+            }
+            if (maxLines > 1) {
+                row.setHeightInPoints(Math.max(row.getHeightInPoints(), maxLines * 23f));
+            }
+        }
+    }
 
     // ==================== 导出DN ====================
 
@@ -434,21 +486,25 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csTitle.setFont(fontTitle);
             csTitle.setAlignment(HorizontalAlignment.CENTER);
             csTitle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csTitle);
 
             CellStyle csBold12Left = wb.createCellStyle();
             csBold12Left.setFont(fontBold12);
             csBold12Left.setAlignment(HorizontalAlignment.LEFT);
             csBold12Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold12Left);
 
             CellStyle csBold12Center = wb.createCellStyle();
             csBold12Center.setFont(fontBold12);
             csBold12Center.setAlignment(HorizontalAlignment.CENTER);
             csBold12Center.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold12Center);
 
             CellStyle csBold12Right = wb.createCellStyle();
             csBold12Right.setFont(fontBold12);
             csBold12Right.setAlignment(HorizontalAlignment.RIGHT);
             csBold12Right.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold12Right);
 
             CellStyle csBold12CenterBorder = wb.createCellStyle();
             csBold12CenterBorder.setFont(fontBold12);
@@ -473,11 +529,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csNote.setAlignment(HorizontalAlignment.LEFT);
             csNote.setVerticalAlignment(VerticalAlignment.CENTER);
             csNote.setWrapText(true);
+            setBorders(csNote);
 
             CellStyle csSign = wb.createCellStyle();
             csSign.setFont(fontNote10);
             csSign.setAlignment(HorizontalAlignment.LEFT);
             csSign.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csSign);
 
             int rowIdx = 0;
 
@@ -589,8 +647,11 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                         1440000, 1440000);
             }
 
-            // 自动调整列宽以适应内容
-            autoFitColumns(sheet, 6);
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal12CenterBorder);
+
+            // 自适应列宽（最小宽度：No=6, 产品名=18, col2=18, 数量=10, 备注=20, col5=12）
+            autoFitColumns(sheet, 6, new double[]{5, 15, 15, 8, 16, 10});
 
             wb.write(os);
         }
@@ -710,11 +771,13 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csCompany.setFont(fontCompany);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             CellStyle csAddr = wb.createCellStyle();
             csAddr.setFont(fontAddr);
             csAddr.setAlignment(HorizontalAlignment.CENTER);
             csAddr.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csAddr);
 
             CellStyle csBold12LeftBorder = wb.createCellStyle();
             csBold12LeftBorder.setFont(fontBold12);
@@ -738,26 +801,31 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csNormal12Left.setFont(fontNormal12);
             csNormal12Left.setAlignment(HorizontalAlignment.LEFT);
             csNormal12Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal12Left);
 
             CellStyle csNormal12Right = wb.createCellStyle();
             csNormal12Right.setFont(fontNormal12);
             csNormal12Right.setAlignment(HorizontalAlignment.RIGHT);
             csNormal12Right.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal12Right);
 
             CellStyle csNormal12Center = wb.createCellStyle();
             csNormal12Center.setFont(fontNormal12);
             csNormal12Center.setAlignment(HorizontalAlignment.CENTER);
             csNormal12Center.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal12Center);
 
             CellStyle csSign = wb.createCellStyle();
             csSign.setFont(fontSign14);
             csSign.setAlignment(HorizontalAlignment.LEFT);
             csSign.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csSign);
 
             CellStyle csBold14Left = wb.createCellStyle();
             csBold14Left.setFont(fontBold14);
             csBold14Left.setAlignment(HorizontalAlignment.LEFT);
             csBold14Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold14Left);
 
             int rowIdx = 0;
 
@@ -779,7 +847,8 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             createCell(row3, 1, "Statement of Account", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(2, 2, 1, 5));
 
-            // A1:A3合并
+            // A1:A3合并（先创建A1单元格带样式，避免合并区域出现虚线）
+            createCell(row1, 0, "", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(0, 2, 0, 0));
 
             // Row4: Purchasing object / 卖方名称（B4:F4合并）
@@ -857,13 +926,16 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             Row noteRow = sheet.createRow(rowIdx);
             noteRow.setHeightInPoints(41f);
             createCell(noteRow, 0, "注：经签章即表明对以上数据核对无异议", csBold14Left);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 5));
             rowIdx += 2;
 
             // 卖方确认 / 买方确认
             Row confirmRow = sheet.createRow(rowIdx);
             confirmRow.setHeightInPoints(41f);
             createCell(confirmRow, 0, "卖方确认（SELLER confirms）：", csSign);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 1));
             createCell(confirmRow, 2, "买方确认（Buyer confirms）:", csSign);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 2, 5));
 
             // 确保签章跨越的行都存在且有足够行高（标准样本每行41pt）
             for (int r = rowIdx + 1; r <= rowIdx + 3; r++) {
@@ -874,8 +946,12 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 paddingRow.setHeightInPoints(41f);
             }
 
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal12CenterBorder);
+
             // 列宽自适应（在嵌入印章之前调用，印章使用 oneCellAnchor 定位，尺寸不受列宽影响）
-            autoFitColumns(sheet, 6);
+            // 最小宽度：No#=7, Description=26, Currency=10, Unit price=12, Q'ty=8, Amount=12
+            autoFitColumns(sheet, 6, new double[]{7, 26, 10, 12, 8, 12});
 
             // 嵌入图片 - 慕声红章2.1×2.1cm（小章），香港蓝章4×4cm（大章）
             if (isStampEnabled()) {
@@ -1033,37 +1109,44 @@ public class DocumentExportServiceImpl implements DocumentExportService {
             csCompany.setFont(fontCompany24);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             CellStyle csAddrCenter = wb.createCellStyle();
             csAddrCenter.setFont(fontAddr9);
             csAddrCenter.setAlignment(HorizontalAlignment.CENTER);
             csAddrCenter.setVerticalAlignment(VerticalAlignment.CENTER);
             csAddrCenter.setWrapText(true);
+            setBorders(csAddrCenter);
 
             CellStyle csTitle = wb.createCellStyle();
             csTitle.setFont(fontTitle20);
             csTitle.setAlignment(HorizontalAlignment.CENTER);
             csTitle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csTitle);
 
             CellStyle csBold10 = wb.createCellStyle();
             csBold10.setFont(fontBold10);
             csBold10.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold10);
 
             CellStyle csBold10Left = wb.createCellStyle();
             csBold10Left.setFont(fontBold10);
             csBold10Left.setAlignment(HorizontalAlignment.LEFT);
             csBold10Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold10Left);
 
             CellStyle csNormal10Left = wb.createCellStyle();
             csNormal10Left.setFont(fontNormal10);
             csNormal10Left.setAlignment(HorizontalAlignment.LEFT);
             csNormal10Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal10Left);
 
             CellStyle csNormal9Left = wb.createCellStyle();
             csNormal9Left.setFont(fontNormal9);
             csNormal9Left.setAlignment(HorizontalAlignment.LEFT);
             csNormal9Left.setVerticalAlignment(VerticalAlignment.CENTER);
             csNormal9Left.setWrapText(true);
+            setBorders(csNormal9Left);
 
             CellStyle csBold10CenterBorder = wb.createCellStyle();
             csBold10CenterBorder.setFont(fontBold10);
@@ -1232,8 +1315,12 @@ public class DocumentExportServiceImpl implements DocumentExportService {
                 paddingRow.setHeightInPoints(28f);
             }
 
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal10CenterBorder);
+
             // 列宽自适应（INV 有8列 A-H）
-            autoFitColumns(sheet, 8);
+            // 最小宽度：No.=5, Desc=12, col2=8, col3=7, col4=8, Qty=10, UnitPrice=10, Total=14
+            autoFitColumns(sheet, 8, new double[]{5, 12, 8, 7, 8, 10, 10, 14});
 
             // 嵌入印章图片 - 慕声红章2.1×2.1cm = 756000 EMU
             if (isStampEnabled()) {
@@ -1683,6 +1770,31 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     }
 
     /**
+     * 填补合并区域内所有缺失的单元格并应用边框样式，
+     * 同时关闭默认网格线，避免未设置边框的单元格显示虚线
+     *
+     * @param sheet 工作表
+     * @param style 应用于缺失单元格的边框样式
+     */
+    private void fillMissingMergeCells(Sheet sheet, CellStyle style) {
+        sheet.setDisplayGridlines(false);
+        for (CellRangeAddress region : sheet.getMergedRegions()) {
+            for (int r = region.getFirstRow(); r <= region.getLastRow(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) {
+                    row = sheet.createRow(r);
+                }
+                for (int c = region.getFirstColumn(); c <= region.getLastColumn(); c++) {
+                    if (row.getCell(c) == null) {
+                        Cell cell = row.createCell(c);
+                        cell.setCellStyle(style);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * 设置单元格四边边框为细线
      *
      * @param style 单元格样式
@@ -1697,26 +1809,109 @@ public class DocumentExportServiceImpl implements DocumentExportService {
     }
 
     /**
-     * 自动调整列宽以适应内容，附加额外padding防止截断
+     * 自动调整列宽：遍历所有行计算最大内容宽度，跳过合并单元格区域
      *
-     * @param sheet 工作表
-     * @param columnCount 列数
+     * @param sheet      工作表
+     * @param numColumns 列数
+     * @param minWidths  每列最小宽度（字符数），null则不限制
      * @author wanhua
-     * 10:30 2026年03月02日
+     * 10:30 2026年05月29日
      */
-    private void autoFitColumns(Sheet sheet, int columnCount) {
-        for (int i = 0; i < columnCount; i++) {
-            int originalWidth = sheet.getColumnWidth(i);
-            try {
-                sheet.autoSizeColumn(i);
-            } catch (Exception e) {
-                // autoSizeColumn可能因字体环境缺失而失败，保留原始宽度
-                continue;
+    private void autoFitColumns(Sheet sheet, int numColumns, double[] minWidths) {
+        List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+        for (int col = 0; col < numColumns; col++) {
+            double maxWidth = minWidths != null && col < minWidths.length ? minWidths[col] : 8.0;
+            for (int rowIdx = 0; rowIdx <= sheet.getLastRowNum(); rowIdx++) {
+                Row row = sheet.getRow(rowIdx);
+                if (row == null) continue;
+                Cell cell = row.getCell(col);
+                if (cell == null) continue;
+                if (isInMergedRegionNotFirstCol(mergedRegions, rowIdx, col)) continue;
+                String value = getCellStringValue(cell);
+                if (value == null || value.isEmpty()) continue;
+                double contentWidth = calculateStringWidth(value);
+                int mergedColSpan = getMergedColSpan(mergedRegions, rowIdx, col);
+                if (mergedColSpan > 1) {
+                    contentWidth = contentWidth / mergedColSpan;
+                }
+                // 中文字体补偿约15%
+                contentWidth = contentWidth * 1.15;
+                if (contentWidth > maxWidth) maxWidth = contentWidth;
             }
-            int autoWidth = sheet.getColumnWidth(i);
-            // 取autoSize和原始宽度的较大值，再加20%的padding，确保文本完整展示
-            int finalWidth = Math.max(originalWidth, (int) (autoWidth * 1.2));
-            sheet.setColumnWidth(i, finalWidth);
+            // 加1字符padding，上限38字符防止列过宽导致打印超幅
+            int width = (int) ((maxWidth + 1) * 256);
+            if (width > 38 * 256) width = 38 * 256;
+            sheet.setColumnWidth(col, width);
+        }
+    }
+
+    /**
+     * 计算字符串显示宽度：中文/全角字符算2，其他算1，多行取最长行
+     */
+    private double calculateStringWidth(String value) {
+        String[] lines = value.split("\n");
+        double maxLineWidth = 0;
+        for (String line : lines) {
+            double lineWidth = 0;
+            for (char c : line.toCharArray()) {
+                if (c >= '一' && c <= '鿿' || c >= '　' && c <= '〿'
+                        || c >= '＀' && c <= '￯') {
+                    lineWidth += 2;
+                } else {
+                    lineWidth += 1;
+                }
+            }
+            if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
+        }
+        return maxLineWidth;
+    }
+
+    /**
+     * 判断单元格是否在合并区域中且不是该区域的首列
+     */
+    private boolean isInMergedRegionNotFirstCol(List<CellRangeAddress> regions, int row, int col) {
+        for (CellRangeAddress region : regions) {
+            if (row >= region.getFirstRow() && row <= region.getLastRow()
+                    && col > region.getFirstColumn() && col <= region.getLastColumn()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 获取单元格所在合并区域的列跨度，不在合并区域返回1
+     */
+    private int getMergedColSpan(List<CellRangeAddress> regions, int row, int col) {
+        for (CellRangeAddress region : regions) {
+            if (row >= region.getFirstRow() && row <= region.getLastRow()
+                    && col >= region.getFirstColumn() && col <= region.getLastColumn()) {
+                return region.getLastColumn() - region.getFirstColumn() + 1;
+            }
+        }
+        return 1;
+    }
+
+    /**
+     * 安全获取单元格字符串值，处理各种单元格类型
+     */
+    private String getCellStringValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                return String.valueOf((long) cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                try {
+                    return cell.getStringCellValue();
+                } catch (Exception e) {
+                    return String.valueOf(cell.getNumericCellValue());
+                }
+            default:
+                return "";
         }
     }
 

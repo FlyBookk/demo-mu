@@ -96,17 +96,26 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csCompany.setFont(fontCompany);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             CellStyle csAddress = wb.createCellStyle();
             csAddress.setFont(fontAddress);
             csAddress.setAlignment(HorizontalAlignment.CENTER);
             csAddress.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csAddress);
 
             CellStyle csCenterBorder = wb.createCellStyle();
             csCenterBorder.setFont(fontNormal);
             csCenterBorder.setAlignment(HorizontalAlignment.CENTER);
             csCenterBorder.setVerticalAlignment(VerticalAlignment.CENTER);
             setBorders(csCenterBorder);
+
+            CellStyle csContentWrap = wb.createCellStyle();
+            csContentWrap.setFont(fontNormal);
+            csContentWrap.setAlignment(HorizontalAlignment.CENTER);
+            csContentWrap.setVerticalAlignment(VerticalAlignment.CENTER);
+            csContentWrap.setWrapText(true);
+            setBorders(csContentWrap);
 
             int rowIdx = 0;
 
@@ -127,7 +136,8 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(row3, 1, "Purchase Order", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(2, 2, 1, 3));
 
-            // A1:A3合并
+            // A1:A3合并（先创建A1单元格带样式，避免合并区域出现虚线）
+            createCell(row1, 0, "", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(0, 2, 0, 0));
 
             // Row4: Purchasing object / 卖方名称（B4:D4合并）
@@ -149,9 +159,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             Row row6 = sheet.createRow(rowIdx++);
             row6.setHeightInPoints(23f);
             createCell(row6, 0, "No#", csCenterBorder);
-            createCell(row6, 1, "Description", csCenterBorder);
+            createCell(row6, 1, "Description", csContentWrap);
             createCell(row6, 2, "Q'ty", csCenterBorder);
-            createCell(row6, 3, "FBT Address", csCenterBorder);
+            createCell(row6, 3, "FBT Address", csContentWrap);
 
             // 数据行
             int dataStartRow = rowIdx;
@@ -159,9 +169,9 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
                 Row dataRow = sheet.createRow(rowIdx);
                 dataRow.setHeightInPoints(23f);
                 createCell(dataRow, 0, safe(item.getShipmentNo()), csCenterBorder);
-                createCell(dataRow, 1, safe(item.getMsku()), csCenterBorder);
+                createCell(dataRow, 1, safe(item.getMsku()), csContentWrap);
                 createCell(dataRow, 2, String.valueOf(item.getQuantity()), csCenterBorder);
-                createCell(dataRow, 3, safe(item.getFbtAddress()), csCenterBorder);
+                createCell(dataRow, 3, safe(item.getFbtAddress()), csContentWrap);
                 rowIdx++;
             }
 
@@ -178,8 +188,11 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(totalRow, 2, String.valueOf(totalQty), csCenterBorder);
             createCell(totalRow, 3, "", csCenterBorder);
 
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csCenterBorder);
+
             // 自适应列宽（最小宽度：No#=18, Description=30, Q'ty=10, FBT Address=30）
-            autoFitColumns(sheet, 4, new double[]{18, 30, 10, 30});
+            autoFitColumns(sheet, 4, new double[]{16, 28, 10, 30});
 
             wb.write(os);
         }
@@ -249,11 +262,13 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csTitle.setFont(fontTitle);
             csTitle.setAlignment(HorizontalAlignment.CENTER);
             csTitle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csTitle);
 
             CellStyle csBold12Center = wb.createCellStyle();
             csBold12Center.setFont(fontBold12);
             csBold12Center.setAlignment(HorizontalAlignment.CENTER);
             csBold12Center.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold12Center);
 
             CellStyle csBold12CenterBorder = wb.createCellStyle();
             csBold12CenterBorder.setFont(fontBold12);
@@ -278,6 +293,7 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csNote.setAlignment(HorizontalAlignment.LEFT);
             csNote.setVerticalAlignment(VerticalAlignment.CENTER);
             csNote.setWrapText(true);
+            setBorders(csNote);
 
             int rowIdx = 0;
 
@@ -375,8 +391,11 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(signRow2, 0, "送貨單位及經手人(Shipping company and the person in charge of the delivery):", csNote);
             sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 3));
 
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal12CenterBorder);
+
             // 自适应列宽（最小宽度：No=6, 产品名=18, col2=18, 数量=10, 货件编号=20, col5=12）
-            autoFitColumns(sheet, 6, new double[]{6, 18, 18, 10, 20, 12});
+            autoFitColumns(sheet, 6, new double[]{5, 15, 15, 8, 16, 10});
 
             wb.write(os);
         }
@@ -432,11 +451,13 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csCompany.setFont(fontCompany);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             CellStyle csAddr = wb.createCellStyle();
             csAddr.setFont(fontAddr);
             csAddr.setAlignment(HorizontalAlignment.CENTER);
             csAddr.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csAddr);
 
             CellStyle csBold12LeftBorder = wb.createCellStyle();
             csBold12LeftBorder.setFont(fontBold12);
@@ -460,11 +481,13 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csNormal12Center.setFont(fontNormal12);
             csNormal12Center.setAlignment(HorizontalAlignment.CENTER);
             csNormal12Center.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal12Center);
 
             CellStyle csBold14Left = wb.createCellStyle();
             csBold14Left.setFont(fontBold14);
             csBold14Left.setAlignment(HorizontalAlignment.LEFT);
             csBold14Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold14Left);
 
             CellStyle csSign = wb.createCellStyle();
             XSSFFont fontSign14 = wb.createFont();
@@ -474,6 +497,7 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csSign.setFont(fontSign14);
             csSign.setAlignment(HorizontalAlignment.LEFT);
             csSign.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csSign);
 
             int rowIdx = 0;
 
@@ -495,7 +519,8 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             createCell(row3, 1, "Statement of Account", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(2, 2, 1, 5));
 
-            // A1:A3合并
+            // A1:A3合并（先创建A1单元格带样式，避免合并区域出现虚线）
+            createCell(row1, 0, "", csCompany);
             sheet.addMergedRegion(new CellRangeAddress(0, 2, 0, 0));
 
             // Row4: Purchasing object / 卖方名称（B4:F4合并）
@@ -575,16 +600,22 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             Row noteRow = sheet.createRow(rowIdx);
             noteRow.setHeightInPoints(41f);
             createCell(noteRow, 0, "注：经签章即表明对以上数据核对无异议", csBold14Left);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 5));
             rowIdx += 2;
 
             // 卖方确认 / 买方确认
             Row confirmRow = sheet.createRow(rowIdx);
             confirmRow.setHeightInPoints(41f);
             createCell(confirmRow, 0, "卖方确认（SELLER confirms）：", csSign);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, 1));
             createCell(confirmRow, 2, "买方确认（Buyer confirms）:", csSign);
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 2, 5));
+
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal12CenterBorder);
 
             // 自适应列宽（最小宽度：标签=24, Description=30, Currency=12, Unit price=12, Q'ty=10, Amount=14）
-            autoFitColumns(sheet, 6, new double[]{24, 30, 12, 12, 10, 14});
+            autoFitColumns(sheet, 6, new double[]{7, 26, 10, 12, 8, 12});
 
             wb.write(os);
         }
@@ -653,37 +684,44 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
             csCompany.setFont(fontCompany24);
             csCompany.setAlignment(HorizontalAlignment.CENTER);
             csCompany.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csCompany);
 
             CellStyle csAddrCenter = wb.createCellStyle();
             csAddrCenter.setFont(fontAddr9);
             csAddrCenter.setAlignment(HorizontalAlignment.CENTER);
             csAddrCenter.setVerticalAlignment(VerticalAlignment.CENTER);
             csAddrCenter.setWrapText(true);
+            setBorders(csAddrCenter);
 
             CellStyle csTitle = wb.createCellStyle();
             csTitle.setFont(fontTitle20);
             csTitle.setAlignment(HorizontalAlignment.CENTER);
             csTitle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csTitle);
 
             CellStyle csBold10 = wb.createCellStyle();
             csBold10.setFont(fontBold10);
             csBold10.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold10);
 
             CellStyle csBold10Left = wb.createCellStyle();
             csBold10Left.setFont(fontBold10);
             csBold10Left.setAlignment(HorizontalAlignment.LEFT);
             csBold10Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csBold10Left);
 
             CellStyle csNormal10Left = wb.createCellStyle();
             csNormal10Left.setFont(fontNormal10);
             csNormal10Left.setAlignment(HorizontalAlignment.LEFT);
             csNormal10Left.setVerticalAlignment(VerticalAlignment.CENTER);
+            setBorders(csNormal10Left);
 
             CellStyle csNormal9Left = wb.createCellStyle();
             csNormal9Left.setFont(fontNormal9);
             csNormal9Left.setAlignment(HorizontalAlignment.LEFT);
             csNormal9Left.setVerticalAlignment(VerticalAlignment.CENTER);
             csNormal9Left.setWrapText(true);
+            setBorders(csNormal9Left);
 
             CellStyle csBold10CenterBorder = wb.createCellStyle();
             csBold10CenterBorder.setFont(fontBold10);
@@ -841,8 +879,11 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
                 rowIdx++;
             }
 
+            // 填补合并区域中缺失的单元格，避免虚线
+            fillMissingMergeCells(sheet, csNormal10CenterBorder);
+
             // 自适应列宽（最小宽度：No=14, desc=10, col2=10, col3=8, col4=10, Qty=10, UnitPrice=10, Total=18）
-            autoFitColumns(sheet, 8, new double[]{14, 10, 10, 8, 10, 10, 10, 18});
+            autoFitColumns(sheet, 8, new double[]{5, 12, 8, 7, 8, 10, 10, 14});
 
             wb.write(os);
         }
@@ -984,10 +1025,51 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
         style.setBorderRight(BorderStyle.THIN);
     }
 
+    private void fillMissingMergeCells(Sheet sheet, CellStyle style) {
+        sheet.setDisplayGridlines(false);
+        for (CellRangeAddress region : sheet.getMergedRegions()) {
+            for (int r = region.getFirstRow(); r <= region.getLastRow(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) {
+                    row = sheet.createRow(r);
+                }
+                for (int c = region.getFirstColumn(); c <= region.getLastColumn(); c++) {
+                    if (row.getCell(c) == null) {
+                        Cell cell = row.createCell(c);
+                        cell.setCellStyle(style);
+                    }
+                }
+            }
+        }
+    }
+
     private void createCell(Row row, int col, String value, CellStyle style) {
         Cell cell = row.createCell(col);
         cell.setCellValue(value);
         cell.setCellStyle(style);
+    }
+
+    /**
+     * 安全获取单元格字符串值，处理各种单元格类型
+     */
+    private String getCellStringValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                return String.valueOf((long) cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                try {
+                    return cell.getStringCellValue();
+                } catch (Exception e) {
+                    return String.valueOf(cell.getNumericCellValue());
+                }
+            default:
+                return "";
+        }
     }
 
     /**
@@ -1013,7 +1095,7 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
                 // 跳过合并区域中非首列的单元格
                 if (isInMergedRegionNotFirstCol(mergedRegions, rowIdx, col)) continue;
 
-                String value = cell.getStringCellValue();
+                String value = getCellStringValue(cell);
                 if (value == null || value.isEmpty()) continue;
 
                 // 计算内容宽度：中文字符算2个宽度单位，英文算1个
@@ -1025,18 +1107,17 @@ public class TiktokDocumentExportServiceImpl implements TiktokDocumentExportServ
                     contentWidth = contentWidth / mergedColSpan;
                 }
 
-                // 字体大小补偿：微软雅黑等中文字体比Excel默认字体宽约30%
-                contentWidth = contentWidth * 1.35;
+                // 字体大小补偿约15%
+                contentWidth = contentWidth * 1.15;
 
                 if (contentWidth > maxWidth) {
                     maxWidth = contentWidth;
                 }
             }
 
-            // 加2字符padding，转换为POI宽度单位（1字符=256单位）
-            int width = (int) ((maxWidth + 2) * 256);
-            // 上限防止列过宽
-            if (width > 80 * 256) width = 80 * 256;
+            // 加1字符padding，上限38字符防止列过宽导致打印超幅
+            int width = (int) ((maxWidth + 1) * 256);
+            if (width > 38 * 256) width = 38 * 256;
             sheet.setColumnWidth(col, width);
         }
     }
